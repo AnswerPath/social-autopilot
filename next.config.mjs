@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['twitter-api-v2']
-  },
+  serverExternalPackages: ['twitter-api-v2'],
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },

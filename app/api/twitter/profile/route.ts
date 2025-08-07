@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getStoredCredentials } from '@/lib/database-storage'
+import { getTwitterCredentials } from '@/lib/database-storage'
 import { TwitterApi } from 'twitter-api-v2'
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching Twitter profile...')
     
-    const credentials = await getStoredCredentials()
+    const result = await getTwitterCredentials('demo-user')
     
-    if (!credentials) {
+    if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
       return NextResponse.json({ 
         error: 'No Twitter credentials configured',
@@ -26,15 +26,16 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Try to use real Twitter API in production
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const client = new TwitterApi({
-          appKey: credentials.apiKey,
-          appSecret: credentials.apiSecret,
-          accessToken: credentials.accessToken,
-          accessSecret: credentials.accessSecret,
-        })
+    const credentials = result.credentials
+    
+    // Try to use real Twitter API
+    try {
+      const client = new TwitterApi({
+        appKey: credentials.apiKey,
+        appSecret: credentials.apiSecret,
+        accessToken: credentials.accessToken,
+        accessSecret: credentials.accessSecret,
+      })
 
         const user = await client.v2.me({
           'user.fields': ['description', 'public_metrics', 'profile_image_url']
@@ -54,9 +55,8 @@ export async function GET(request: NextRequest) {
             profile_image_url: user.data.profile_image_url || '/placeholder.svg?height=100&width=100'
           }
         })
-      } catch (apiError) {
-        console.log('⚠️ Twitter API error, falling back to enhanced mock:', apiError)
-      }
+    } catch (apiError) {
+      console.log('⚠️ Twitter API error, falling back to enhanced mock:', apiError)
     }
 
     // Enhanced mock data for development or API fallback
