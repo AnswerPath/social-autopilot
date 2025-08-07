@@ -26,6 +26,9 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [dataSource, setDataSource] = useState<'real' | 'mock' | 'demo' | 'error'>('demo')
+  const [profileIsMock, setProfileIsMock] = useState<boolean | null>(null)
+  const [tweetsAreMock, setTweetsAreMock] = useState<boolean | null>(null)
+  const [mentionsAreMock, setMentionsAreMock] = useState<boolean | null>(null)
   const [apiNotes, setApiNotes] = useState<string[]>([])
 
   useEffect(() => {
@@ -52,8 +55,12 @@ export function Dashboard() {
           setTwitterProfile(profileData.profile)
           console.log('✅ Dashboard: Profile loaded:', profileData.profile.username)
           
-          // Check if this is real data
-          if (profileData.profile.username !== 'demo_user' && profileData.profile.username !== 'your_account') {
+          // Use API-provided mock flag when available
+          setProfileIsMock(!!profileData.mock)
+          if (profileData.mock === false) {
+            hasRealData = true
+          } else if (profileData.profile.username !== 'demo_user' && profileData.profile.username !== 'your_account') {
+            // Fallback heuristic if mock flag not provided
             hasRealData = true
           }
           
@@ -78,6 +85,11 @@ export function Dashboard() {
           setRecentTweets(tweetsData.tweets || [])
           console.log('✅ Dashboard: Tweets loaded:', tweetsData.tweets?.length || 0, 'tweets')
           
+          setTweetsAreMock(!!tweetsData.mock)
+          if (tweetsData.mock === false) {
+            hasRealData = true
+          }
+
           if (tweetsData.note) {
             notes.push('Tweets: ' + tweetsData.note)
           }
@@ -99,6 +111,11 @@ export function Dashboard() {
           setMentions(mentionsData.mentions || [])
           console.log('✅ Dashboard: Mentions loaded:', mentionsData.mentions?.length || 0, 'mentions')
           
+          setMentionsAreMock(!!mentionsData.mock)
+          if (mentionsData.mock === false) {
+            hasRealData = true
+          }
+
           if (mentionsData.note) {
             notes.push('Mentions: ' + mentionsData.note)
           }
@@ -117,6 +134,10 @@ export function Dashboard() {
       } else if (hasRealData) {
         setDataSource('real')
         console.log('✅ Dashboard: Using real Twitter data')
+      } else if (profileIsMock === false || tweetsAreMock === false || mentionsAreMock === false) {
+        // Any real segment indicates partial real data
+        setDataSource('real')
+        console.log('✅ Dashboard: Using partially real Twitter data')
       } else if (twitterProfile?.username === 'your_account') {
         setDataSource('mock')
         console.log('📊 Dashboard: Using realistic mock data (real credentials)')
