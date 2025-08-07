@@ -24,7 +24,7 @@ export function Dashboard() {
   const [recentTweets, setRecentTweets] = useState<any[]>([])
   const [mentions, setMentions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [dataSource, setDataSource] = useState<'real' | 'mock' | 'demo' | 'error'>('demo')
   const [profileIsMock, setProfileIsMock] = useState<boolean | null>(null)
   const [tweetsAreMock, setTweetsAreMock] = useState<boolean | null>(null)
@@ -291,8 +291,8 @@ export function Dashboard() {
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-gray-500">
-                  Last updated: {lastRefresh.toLocaleTimeString()}
+                <span className="text-xs text-gray-500" suppressHydrationWarning>
+                  {lastRefresh ? `Last updated: ${lastRefresh.toLocaleTimeString()}` : ''}
                 </span>
               </div>
 
