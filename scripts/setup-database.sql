@@ -67,3 +67,37 @@ SELECT
 FROM information_schema.columns 
 WHERE table_name = 'user_credentials' 
 ORDER BY ordinal_position;
+
+-- ======================
+-- Scheduled posts schema
+-- ======================
+
+CREATE TABLE IF NOT EXISTS scheduled_posts (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    media_urls TEXT[],
+    scheduled_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'scheduled', -- scheduled | pending_approval | published | failed
+    posted_tweet_id TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_posts_user_time ON scheduled_posts(user_id, scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_posts_status ON scheduled_posts(status);
+
+DROP TRIGGER IF EXISTS update_scheduled_posts_updated_at ON scheduled_posts;
+CREATE TRIGGER update_scheduled_posts_updated_at 
+    BEFORE UPDATE ON scheduled_posts 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE scheduled_posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all operations for demo (scheduled_posts)" ON scheduled_posts;
+CREATE POLICY "Allow all operations for demo (scheduled_posts)" ON scheduled_posts
+    FOR ALL USING (true);
+
+GRANT ALL ON scheduled_posts TO authenticated;
+GRANT ALL ON scheduled_posts TO anon;

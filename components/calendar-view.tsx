@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,41 +12,42 @@ export function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showComposer, setShowComposer] = useState(false)
 
-  // Mock data for scheduled posts
-  const scheduledPosts = [
-    {
-      id: 1,
-      date: "2024-01-15",
-      time: "10:00",
-      content: "Excited to announce our new product features! 🚀 #innovation #tech",
-      status: "scheduled",
-      author: "Marketing Team"
-    },
-    {
-      id: 2,
-      date: "2024-01-15",
-      time: "14:00",
-      content: "Join us for our weekly tech talk at 3 PM EST today!",
-      status: "scheduled",
-      author: "Social Media Lead"
-    },
-    {
-      id: 3,
-      date: "2024-01-16",
-      time: "09:00",
-      content: "Monday motivation: Success is not final, failure is not fatal...",
-      status: "scheduled",
-      author: "Content Creator"
-    },
-    {
-      id: 4,
-      date: "2024-01-16",
-      time: "16:00",
-      content: "Behind the scenes: Our development team working on amazing features",
-      status: "pending_approval",
-      author: "Content Creator"
+  const [scheduledPosts, setScheduledPosts] = useState<any[]>([])
+  const [tweets, setTweets] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const visibleMonth = useMemo(() => {
+    const y = currentDate.getFullYear()
+    const m = (currentDate.getMonth() + 1).toString().padStart(2, '0')
+    return `${y}-${m}`
+  }, [currentDate])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true)
+      try {
+        const postsRes = await fetch(`/api/scheduled-posts?month=${visibleMonth}`)
+        if (postsRes.ok) {
+          const { posts } = await postsRes.json()
+          setScheduledPosts(posts || [])
+        }
+        // Fetch tweets for the visible month
+        const [y, m] = visibleMonth.split('-').map(Number)
+        const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0)).toISOString()
+        const end = new Date(Date.UTC(y, m, 0, 23, 59, 59)).toISOString()
+        const tweetsRes = await fetch(`/api/twitter/tweets?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+        if (tweetsRes.ok) {
+          const data = await tweetsRes.json()
+          setTweets(data.tweets || [])
+        }
+      } catch (e) {
+        console.error('Calendar fetch error', e)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  ]
+    fetchData()
+  }, [visibleMonth])
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -73,8 +74,30 @@ export function CalendarView() {
 
   const getPostsForDate = (day: number) => {
     if (!day) return []
-    const dateStr = `2024-01-${day.toString().padStart(2, '0')}`
-    return scheduledPosts.filter(post => post.date === dateStr)
+    const y = currentDate.getFullYear()
+    const m = (currentDate.getMonth() + 1).toString().padStart(2, '0')
+    const dateStr = `${y}-${m}-${day.toString().padStart(2, '0')}`
+    // Scheduled posts (future)
+    const scheduled = scheduledPosts
+      .filter(p => p.scheduled_at?.slice(0, 10) === dateStr)
+      .map(p => ({
+        id: p.id,
+        time: new Date(p.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        content: p.content,
+        status: p.status || 'scheduled',
+        author: 'You'
+      }))
+    // Published tweets (past)
+    const published = tweets
+      .filter(t => t.created_at?.slice(0, 10) === dateStr)
+      .map(t => ({
+        id: t.id,
+        time: new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        content: t.text,
+        status: 'published',
+        author: 'Twitter'
+      }))
+    return [...scheduled, ...published]
   }
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -130,7 +153,7 @@ export function CalendarView() {
               </div>
             ))}
             
-            {/* Calendar days */}
+             {/* Calendar days */}
             {getDaysInMonth(currentDate).map((day, index) => {
               const posts = getPostsForDate(day)
               const isToday = day === new Date().getDate() && 
@@ -150,7 +173,7 @@ export function CalendarView() {
                         {day}
                       </div>
                       <div className="space-y-1">
-                        {posts.map(post => (
+                         {posts.map(post => (
                           <div
                             key={post.id}
                             className="text-xs p-2 rounded bg-blue-50 border-l-2 border-blue-400 cursor-pointer hover:bg-blue-100"
@@ -161,7 +184,7 @@ export function CalendarView() {
                                 variant={post.status === "scheduled" ? "default" : "secondary"}
                                 className="text-xs"
                               >
-                                {post.status === "pending_approval" ? "Pending" : "Scheduled"}
+                                {post.status === "pending_approval" ? "Pending" : post.status === 'published' ? 'Published' : 'Scheduled'}
                               </Badge>
                             </div>
                             <p className="line-clamp-2 text-gray-700">{post.content}</p>

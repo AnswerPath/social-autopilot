@@ -31,26 +31,41 @@ export async function GET(request: NextRequest) {
       })
 
         const me = await client.v2.me()
+        const { searchParams } = new URL(request.url)
+        const maxResults = 50
         const tweets = await client.v2.userTimeline(me.data.id, {
-          max_results: 10,
+          max_results: maxResults,
           'tweet.fields': ['created_at', 'public_metrics', 'context_annotations']
         })
 
         console.log('✅ Real tweets fetched')
+        const items = tweets.data.data?.map(tweet => ({
+          id: tweet.id,
+          text: tweet.text,
+          created_at: tweet.created_at,
+          public_metrics: {
+            retweet_count: tweet.public_metrics?.retweet_count || 0,
+            like_count: tweet.public_metrics?.like_count || 0,
+            reply_count: tweet.public_metrics?.reply_count || 0,
+            impression_count: tweet.public_metrics?.impression_count || 0,
+          }
+        })) || []
+
+        // Optional client-side window filter by start/end
+        const start = searchParams.get('start')
+        const end = searchParams.get('end')
+        const filtered = items.filter(t => {
+          if (!t.created_at) return false
+          const ts = Date.parse(t.created_at)
+          if (start && ts < Date.parse(start)) return false
+          if (end && ts > Date.parse(end)) return false
+          return true
+        })
+
         return NextResponse.json({
           success: true,
           mock: false,
-          tweets: tweets.data.data?.map(tweet => ({
-            id: tweet.id,
-            text: tweet.text,
-            created_at: tweet.created_at,
-            public_metrics: {
-              retweet_count: tweet.public_metrics?.retweet_count || 0,
-              like_count: tweet.public_metrics?.like_count || 0,
-              reply_count: tweet.public_metrics?.reply_count || 0,
-              impression_count: tweet.public_metrics?.impression_count || 0,
-            }
-          })) || []
+          tweets: filtered
         })
     } catch (apiError) {
       console.log('⚠️ Twitter API error, falling back to enhanced mock:', apiError)
