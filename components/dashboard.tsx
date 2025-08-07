@@ -296,44 +296,6 @@ export function Dashboard() {
                 </span>
               </div>
 
-              {/* Runtime Environment Alert */}
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <div className="space-y-2">
-                    <p><strong>Current Environment: Edge Runtime (v0 Preview)</strong></p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                      <div>
-                        <p className="font-medium text-green-700">✅ What Works Now:</p>
-                        <ul className="list-disc list-inside text-sm space-y-1">
-                          <li>Secure credential storage & encryption</li>
-                          <li>Database operations</li>
-                          <li>Enhanced mock data based on your credentials</li>
-                          <li>Bearer token validation (limited)</li>
-                          <li>Full UI/UX experience</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="font-medium text-blue-700">🚀 Available in Production:</p>
-                        <ul className="list-disc list-inside text-sm space-y-1">
-                          <li>Real Twitter API calls (OAuth 1.0a)</li>
-                          <li>Live tweet posting & scheduling</li>
-                          <li>Real-time mentions & engagement</li>
-                          <li>Media uploads</li>
-                          <li>Full Twitter integration</li>
-                        </ul>
-                      </div>
-                    </div>
-                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm">
-                        <strong>Your credentials are working!</strong> The app detects you have real Twitter credentials stored. 
-                        Deploy to a Node.js environment (Vercel, Railway, etc.) to unlock full Twitter API functionality.
-                      </p>
-                    </div>
-                  </div>
-                </AlertDescription>
-              </Alert>
-
               {/* API Notes */}
               {apiNotes.length > 0 && (
                 <Alert>
