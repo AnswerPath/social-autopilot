@@ -62,8 +62,13 @@ export async function GET(request: NextRequest) {
             profile_image_url: user.data.profile_image_url || '/placeholder.svg?height=100&width=100'
           }
         })
-    } catch (apiError) {
-      console.log('⚠️ Twitter API error, falling back to enhanced mock:', apiError)
+    } catch (apiError: any) {
+      const errorInfo = (() => {
+        try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } }
+      })()
+      console.log('⚠️ Twitter API error, falling back to enhanced mock:', errorInfo)
+      // Attach error details to fallback response below
+      ;(globalThis as any).__last_profile_error = errorInfo
     }
 
     // Enhanced mock data for development or API fallback
@@ -83,7 +88,9 @@ export async function GET(request: NextRequest) {
           tweet_count: 5680,
         },
         profile_image_url: '/placeholder.svg?height=100&width=100'
-      }
+      },
+      note: 'Twitter API call failed; returning enhanced mock data',
+      error: (globalThis as any).__last_profile_error
     })
 
   } catch (error) {

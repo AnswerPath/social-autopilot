@@ -59,8 +59,10 @@ export async function GET(request: NextRequest) {
             }
           }) || []
         })
-    } catch (apiError) {
-      console.log('⚠️ Twitter API error, falling back to enhanced mock:', apiError)
+    } catch (apiError: any) {
+      const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
+      console.log('⚠️ Twitter API error, falling back to enhanced mock:', errorInfo)
+      ;(globalThis as any).__last_mentions_error = errorInfo
     }
 
     // Enhanced mock data
@@ -69,7 +71,9 @@ export async function GET(request: NextRequest) {
       success: true,
       mock: true,
       enhanced: true,
-      mentions: generateMockMentions(true)
+      mentions: generateMockMentions(true),
+      note: 'Twitter API call failed; returning enhanced mock data',
+      error: (globalThis as any).__last_mentions_error
     })
 
   } catch (error) {
