@@ -20,8 +20,59 @@ export async function GET(request: NextRequest) {
     }
 
     const credentials = result.credentials
-    
-    // Try to use real Twitter API
+
+    // Prefer Bearer token first
+    if (credentials.bearerToken && !credentials.bearerToken.includes('demo_')) {
+      try {
+        const meResp = await fetch('https://api.twitter.com/2/users/me', {
+          headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+        })
+        if (meResp.ok) {
+          const me = await meResp.json()
+          const params = new URLSearchParams({ 'tweet.fields': 'created_at,public_metrics,author_id', 'user.fields': 'username,name,profile_image_url,public_metrics', expansions: 'author_id', 'max_results': '50' })
+          const res = await fetch(`https://api.twitter.com/2/users/${me.data.id}/mentions?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            const users = data.includes?.users || []
+            const mapped = (data.data || []).map((mention: any) => {
+              const author = users.find((u: any) => u.id === mention.author_id)
+              return {
+                id: mention.id,
+                text: mention.text,
+                created_at: mention.created_at,
+                username: author?.username || 'unknown',
+                name: author?.name || 'Twitter User',
+                profile_image_url: author?.profile_image_url || '/placeholder.svg?height=40&width=40',
+                public_metrics: {
+                  followers_count: author?.public_metrics?.followers_count || 0,
+                  following_count: author?.public_metrics?.following_count || 0,
+                }
+              }
+            })
+            console.log('✅ Real mentions fetched (Bearer)')
+            return NextResponse.json({ success: true, mock: false, mentions: mapped })
+          } else {
+            const err = await res.json().catch(() => ({}))
+            const errorInfo = { status: res.status, error: err }
+            console.log('⚠️ Bearer mentions failed, trying OAuth 1.0a:', errorInfo)
+            ;(globalThis as any).__last_mentions_error = errorInfo
+          }
+        } else {
+          const err = await meResp.json().catch(() => ({}))
+          const errorInfo = { status: meResp.status, error: err }
+          console.log('⚠️ Bearer me failed, trying OAuth 1.0a:', errorInfo)
+          ;(globalThis as any).__last_mentions_error = errorInfo
+        }
+      } catch (e: any) {
+        const errorInfo = { message: e?.message || 'Unknown bearer error' }
+        console.log('⚠️ Bearer mentions error, trying OAuth 1.0a:', errorInfo)
+        ;(globalThis as any).__last_mentions_error = errorInfo
+      }
+    }
+
+    // Fallback to OAuth 1.0a
     try {
       const client = new TwitterApi({
         appKey: credentials.apiKey,
@@ -30,35 +81,35 @@ export async function GET(request: NextRequest) {
         accessSecret: credentials.accessSecret,
       })
 
-        const me = await client.v2.me()
-        const mentions = await client.v2.userMentionTimeline(me.data.id, {
-          max_results: 10,
-          'tweet.fields': ['created_at', 'public_metrics', 'author_id'],
-          'user.fields': ['username', 'name', 'profile_image_url', 'public_metrics'],
-          expansions: ['author_id']
-        })
+      const me = await client.v2.me()
+      const mentions = await client.v2.userMentionTimeline(me.data.id, {
+        max_results: 10,
+        'tweet.fields': ['created_at', 'public_metrics', 'author_id'],
+        'user.fields': ['username', 'name', 'profile_image_url', 'public_metrics'],
+        expansions: ['author_id'],
+      })
 
-        console.log('✅ Real mentions fetched')
-        const users = mentions.includes?.users || []
-        return NextResponse.json({
-          success: true,
-          mock: false,
-          mentions: mentions.data.data?.map(mention => {
-            const author = users.find((u: any) => u.id === mention.author_id)
-            return {
-              id: mention.id,
-              text: mention.text,
-              created_at: mention.created_at,
-              username: author?.username || 'unknown',
-              name: author?.name || 'Twitter User',
-              profile_image_url: author?.profile_image_url || '/placeholder.svg?height=40&width=40',
-              public_metrics: {
-                followers_count: author?.public_metrics?.followers_count || 0,
-                following_count: author?.public_metrics?.following_count || 0,
-              }
+      console.log('✅ Real mentions fetched (OAuth 1.0a)')
+      const users = mentions.includes?.users || []
+      return NextResponse.json({
+        success: true,
+        mock: false,
+        mentions: mentions.data.data?.map(mention => {
+          const author = users.find((u: any) => u.id === mention.author_id)
+          return {
+            id: mention.id,
+            text: mention.text,
+            created_at: mention.created_at,
+            username: author?.username || 'unknown',
+            name: author?.name || 'Twitter User',
+            profile_image_url: author?.profile_image_url || '/placeholder.svg?height=40&width=40',
+            public_metrics: {
+              followers_count: author?.public_metrics?.followers_count || 0,
+              following_count: author?.public_metrics?.following_count || 0,
             }
-          }) || []
-        })
+          }
+        }) || []
+      })
     } catch (apiError: any) {
       const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
       console.log('⚠️ Twitter API error, falling back to enhanced mock:', errorInfo)
