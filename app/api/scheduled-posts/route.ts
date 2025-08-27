@@ -7,10 +7,12 @@ function getUserId(): string {
   return 'demo-user'
 }
 
+// Enhanced GET to include approval workflow data
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM
+    const status = searchParams.get('status') // Filter by approval status
     const userId = getUserId()
 
     let from: string | null = null
@@ -25,12 +27,26 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('scheduled_posts')
-      .select('*')
+      .select(`
+        *,
+        approval_comments (
+          id,
+          comment,
+          comment_type,
+          user_id,
+          created_at,
+          is_resolved
+        )
+      `)
       .eq('user_id', userId)
       .order('scheduled_at', { ascending: true })
 
     if (from && to) {
       query = query.gte('scheduled_at', from).lte('scheduled_at', to)
+    }
+
+    if (status) {
+      query = query.eq('status', status)
     }
 
     const { data, error } = await query
@@ -44,14 +60,31 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Enhanced POST to check approval requirements
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { content, mediaUrls, scheduledAt, status } = body
+    const { content, mediaUrls, scheduledAt, status, submitForApproval } = body
     if (!content || !scheduledAt) {
       return NextResponse.json({ error: 'content and scheduledAt are required' }, { status: 400 })
     }
     const userId = getUserId()
+
+    // Determine initial status based on approval requirements
+    let initialStatus = status || 'draft'
+    let requiresApproval = false
+
+    // Check if approval is required (basic logic - can be enhanced)
+    if (submitForApproval) {
+      initialStatus = 'pending_approval'
+      requiresApproval = true
+    } else if (content.length > 200 || 
+               content.toLowerCase().includes('sale') || 
+               content.toLowerCase().includes('discount') ||
+               (mediaUrls && mediaUrls.length > 0)) {
+      initialStatus = 'pending_approval'
+      requiresApproval = true
+    }
 
     const { data, error } = await supabaseAdmin
       .from('scheduled_posts')
@@ -60,7 +93,9 @@ export async function POST(request: NextRequest) {
         content: content.trim(),
         media_urls: Array.isArray(mediaUrls) ? mediaUrls : null,
         scheduled_at: new Date(scheduledAt).toISOString(),
-        status: status || 'scheduled',
+        status: initialStatus,
+        requires_approval: requiresApproval,
+        submitted_for_approval_at: initialStatus === 'pending_approval' ? new Date().toISOString() : null
       })
       .select('*')
       .single()
@@ -69,10 +104,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, post: data })
+    return NextResponse.json({ 
+      success: true, 
+      post: data,
+      requiresApproval,
+      message: requiresApproval ? 'Post submitted for approval' : 'Post created successfully'
+    })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Failed to create scheduled post' }, { status: 500 })
   }
 }
-
-

@@ -1,0 +1,306 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Initialize Project Repository & Tooling",
+        "description": "Set up the project repository with version control, code style, and CI/CD pipeline.",
+        "details": "Use GitHub for repository management. Configure Prettier and ESLint for code style. Set up GitHub Actions for CI/CD. Use Node.js (v20+) for backend, React (v18+) for frontend, and Docker for containerization. Prepare .env files for secrets.",
+        "testStrategy": "Verify repository setup by running lint, format, and CI checks. Ensure Docker containers build and run locally.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Design Database Schema & Security Model",
+        "description": "Model data for posts, users, roles, analytics, and automation rules. Ensure compliance and encryption.",
+        "details": "Use PostgreSQL 15+ for relational data. Define tables for users, posts, roles, analytics, and automation rules. Encrypt sensitive fields (e.g., OAuth tokens) using AES-256. Implement GDPR/CCPA-compliant data retention policies.",
+        "testStrategy": "Run schema migration tests. Validate encryption/decryption of sensitive fields. Check compliance with privacy requirements.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Implement X (Twitter) OAuth Integration",
+        "description": "Enable secure connection to X accounts using OAuth 2.0.",
+        "details": "Use Twitter API v2 with OAuth 2.0. Store only access tokens, never credentials. Handle token refresh and revocation. Use passport.js (v0.6+) for authentication flow.",
+        "testStrategy": "Test OAuth flow with test X accounts. Validate token storage and refresh. Simulate revoked permissions and verify re-authentication prompts.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Develop User Management & Role-Based Access Control",
+        "description": "Create user registration, login, and granular permissions for admin, editor, viewer.",
+        "details": "Implement user registration and login with JWT (jsonwebtoken v9+). Use bcrypt (v5+) for password hashing. Assign roles and permissions at user creation. Enforce access control in backend endpoints.",
+        "testStrategy": "Unit test registration, login, and role assignment. Attempt unauthorized actions and verify access is denied.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Build Post Composer with Media Attachments",
+        "description": "Allow users to create, edit, and format X posts with media uploads.",
+        "details": "Use React with Draft.js or Slate.js for rich text editing. Integrate file uploads via AWS S3 or Google Cloud Storage. Validate X character limits and media types in real-time.",
+        "testStrategy": "Create posts with text and media. Validate character count and media type restrictions. Confirm uploads are stored securely.",
+        "priority": "high",
+        "dependencies": [
+          4,
+          3
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement Bulk Scheduling & CSV Upload",
+        "description": "Enable users to schedule multiple posts at once via calendar or CSV.",
+        "details": "Use react-big-calendar for calendar UI. Parse CSV uploads with PapaParse. Validate post data before scheduling. Store scheduled posts in database with status tracking.",
+        "testStrategy": "Upload sample CSVs and schedule posts. Check for validation errors and correct scheduling. Verify calendar displays scheduled posts.",
+        "priority": "high",
+        "dependencies": [
+          5
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Create Approval Workflow for Posts",
+        "description": "Route posts for review and approval before publishing, with notifications.",
+        "details": "Implement approval status (draft, pending, approved, rejected) in database. Use Socket.io for real-time notifications. Allow managers to comment, approve, or request changes.",
+        "testStrategy": "Submit posts for approval. Verify notification delivery and status changes. Test comment and revision flow.",
+        "priority": "high",
+        "dependencies": [
+          6,
+          4
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Update Database Schema for Approval Workflow",
+            "description": "Extend the post schema to include approval status fields (draft, pending, approved, rejected), reviewer information, and revision history.",
+            "dependencies": [],
+            "details": "Modify the MongoDB schema for posts to add fields: status (enum: draft, pending, approved, rejected), reviewerId, reviewDate, revisionHistory (array of previous versions), and comments (array of comment objects). Create indexes for efficient querying by status.",
+            "status": "done",
+            "testStrategy": "Write unit tests to verify schema validation. Test CRUD operations with different status values."
+          },
+          {
+            "id": 2,
+            "title": "Implement Backend API Endpoints for Approval Flow",
+            "description": "Create REST endpoints to handle status changes, submission for review, approval/rejection actions, and comments.",
+            "dependencies": [
+              "7.1"
+            ],
+            "details": "Develop Express routes for: POST /posts/:id/submit (change status to pending), POST /posts/:id/approve, POST /posts/:id/reject, POST /posts/:id/comment. Implement middleware to verify user permissions based on roles from Task 4. Return appropriate status codes and error messages.",
+            "status": "done",
+            "testStrategy": "Test each endpoint with valid and invalid requests. Verify role-based access control works correctly."
+          },
+          {
+            "id": 3,
+            "title": "Develop Frontend Components for Post Status Management",
+            "description": "Create UI components to display post status, submit for review, and handle the approval workflow.",
+            "dependencies": [
+              "7.1",
+              "7.2"
+            ],
+            "details": "Build React components: StatusBadge (visual indicator of current status), ApprovalActions (buttons for submit/approve/reject based on user role), RevisionHistory (timeline of changes). Implement form validation before submission.",
+            "status": "pending",
+            "testStrategy": "Test components in isolation with different status values and user roles. Verify correct rendering and action availability."
+          },
+          {
+            "id": 4,
+            "title": "Implement Socket.io for Real-time Notifications",
+            "description": "Set up Socket.io to deliver real-time notifications when posts change status or receive comments.",
+            "dependencies": [
+              "7.2"
+            ],
+            "details": "Configure Socket.io server in Node.js backend. Implement event emitters for status changes (postStatusChanged) and new comments (postCommentAdded). Create authentication middleware for secure socket connections. Emit events with relevant payload data including post ID, user info, and timestamp.",
+            "status": "pending",
+            "testStrategy": "Test socket connections with multiple clients. Verify events are received by appropriate users only."
+          },
+          {
+            "id": 5,
+            "title": "Create Comment System for Review Feedback",
+            "description": "Implement a threaded comment system allowing reviewers to provide feedback on specific parts of posts.",
+            "dependencies": [
+              "7.1",
+              "7.2",
+              "7.4"
+            ],
+            "details": "Develop comment data model with fields: id, postId, userId, content, timestamp, parentCommentId (for threading). Create API endpoints for adding, editing, and deleting comments. Integrate with Socket.io to notify users of new comments in real-time.",
+            "status": "pending",
+            "testStrategy": "Test comment creation, threading, and notifications. Verify comments persist and load correctly with posts."
+          },
+          {
+            "id": 6,
+            "title": "Implement Revision Tracking and Comparison",
+            "description": "Track post revisions and provide a way to compare changes between versions.",
+            "dependencies": [
+              "7.1",
+              "7.2"
+            ],
+            "details": "Store each version of a post when changes are made. Implement a diff algorithm to highlight changes between versions. Create an API endpoint to retrieve revision history and specific versions. Build a UI component to visualize differences between revisions.",
+            "status": "pending",
+            "testStrategy": "Create posts with multiple revisions and verify history is maintained. Test diff visualization with various content changes."
+          },
+          {
+            "id": 7,
+            "title": "Develop Dashboard for Pending Approvals",
+            "description": "Create a dashboard view for managers to see all posts awaiting approval with filtering and sorting options.",
+            "dependencies": [
+              "7.3",
+              "7.5"
+            ],
+            "details": "Build a React dashboard component that fetches pending posts from the API. Implement filters by date, author, and content type. Add sorting options and pagination for large numbers of posts. Include preview functionality and quick approve/reject actions.",
+            "status": "pending",
+            "testStrategy": "Test dashboard with various filter combinations. Verify sorting and pagination work correctly. Test approval actions from the dashboard view."
+          },
+          {
+            "id": 8,
+            "title": "Integrate with Notification Settings",
+            "description": "Connect the approval workflow with the notification system to respect user preferences.",
+            "dependencies": [
+              "7.4",
+              "7.7"
+            ],
+            "details": "Extend Socket.io implementation to check user notification preferences before sending alerts. Implement notification grouping to prevent overwhelming users. Create notification center UI component to display all approval-related notifications with read/unread status.",
+            "status": "pending",
+            "testStrategy": "Change notification settings and verify delivery behavior changes accordingly. Test notification persistence and read/unread status tracking."
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Develop Calendar View & Drag-and-Drop Scheduling",
+        "description": "Visualize scheduled, drafted, and published posts; enable drag-and-drop rescheduling.",
+        "details": "Extend react-big-calendar to show post statuses. Implement drag-and-drop with react-dnd. Update post schedule on drop and sync with backend.",
+        "testStrategy": "Drag posts to new dates/times. Confirm backend updates and UI reflects changes. Test status indicators for all post types.",
+        "priority": "medium",
+        "dependencies": [
+          6
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Integrate Engagement Automation (Auto-Reply Rules)",
+        "description": "Allow users to set up automated replies to common questions or keywords.",
+        "details": "Store auto-reply rules in database. Use Node.js worker (BullMQ) to monitor mentions and trigger replies via X API. Allow regex/keyword matching for triggers.",
+        "testStrategy": "Create auto-reply rules and simulate matching mentions. Verify automated replies are sent and logged. Test edge cases for rule conflicts.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          4
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement Mention Monitoring & Sentiment Analysis",
+        "description": "Track brand mentions in real time and flag sentiment for follow-up.",
+        "details": "Use Twitter API v2 filtered stream for mentions. Integrate sentiment analysis with HuggingFace Transformers (distilbert-base-uncased-finetuned-sst-2-english). Flag negative/positive mentions and notify users.",
+        "testStrategy": "Simulate mentions and verify detection. Test sentiment analysis accuracy. Confirm flagged mentions trigger notifications.",
+        "priority": "high",
+        "dependencies": [
+          3,
+          9
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Build Analytics Dashboard & Post-Level Insights",
+        "description": "Provide metrics on engagement, reach, follower growth, and post performance.",
+        "details": "Aggregate data from X API and internal logs. Use Chart.js or Recharts for visualization. Store analytics snapshots for historical comparison. Implement drill-down for individual posts.",
+        "testStrategy": "Verify dashboard displays correct metrics. Test drill-down for post analytics. Validate data export matches dashboard data.",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          5,
+          10
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Develop AI-Driven Content Recommendations",
+        "description": "Suggest optimal posting times and content types using machine learning.",
+        "details": "Train a lightweight ML model (scikit-learn or TensorFlow.js) on engagement data. Use cron jobs to update recommendations. Display suggestions in composer and dashboard.",
+        "testStrategy": "Compare recommendations to historical engagement. A/B test suggested times/types vs. manual choices.",
+        "priority": "medium",
+        "dependencies": [
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Enable Collaboration: Commenting & Activity Log",
+        "description": "Allow internal comments on drafts/scheduled posts and track all changes/approvals.",
+        "details": "Implement comment threads on posts using MongoDB for scalability. Log all actions (create, edit, approve) with timestamps and user IDs. Display activity log in UI.",
+        "testStrategy": "Add comments and verify persistence. Check activity log for completeness and accuracy. Test auditability for compliance.",
+        "priority": "medium",
+        "dependencies": [
+          7,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Configure Notification Settings & Delivery",
+        "description": "Allow users to customize alerts for approvals, mentions, and analytics.",
+        "details": "Store notification preferences per user. Use NodeMailer for email and Twilio for SMS (optional). Integrate with Socket.io for in-app alerts.",
+        "testStrategy": "Change notification settings and trigger events. Verify delivery via email, SMS, and in-app. Test opt-in/opt-out flows.",
+        "priority": "low",
+        "dependencies": [
+          7,
+          10
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Implement Data Export & Compliance Features",
+        "description": "Enable users to download analytics and post history as CSV; ensure GDPR/CCPA compliance.",
+        "details": "Use json2csv for export functionality. Validate exported data matches dashboard. Implement data deletion and access requests per GDPR/CCPA.",
+        "testStrategy": "Export sample data and verify format. Test data deletion/access requests for compliance. Audit logs for export actions.",
+        "priority": "low",
+        "dependencies": [
+          11,
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-08-27T00:52:53.436Z",
+      "updated": "2025-08-27T17:57:14.641Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
