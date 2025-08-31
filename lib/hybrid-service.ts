@@ -2,6 +2,7 @@ import { createApifyService, ApifyCredentials } from './apify-service';
 import { createXApiService, XApiCredentials } from './x-api-service';
 import { getApifyCredentials } from './apify-storage';
 import { getXApiCredentials } from './x-api-storage';
+import { createTokenManagementService } from './token-management';
 
 export interface HybridPostResult {
   success: boolean;
@@ -86,6 +87,19 @@ export class HybridService {
    */
   async postContent(content: string, mediaUrls?: string[]): Promise<HybridPostResult> {
     try {
+      // Validate tokens before posting
+      const tokenService = createTokenManagementService(this.userId);
+      const canPost = await tokenService.canPost();
+      
+      if (!canPost) {
+        return {
+          success: false,
+          error: 'No valid posting credentials available. Please configure X API credentials.',
+          timestamp: new Date().toISOString(),
+          source: 'x-api',
+        };
+      }
+
       // Try X API first (preferred for posting)
       if (this.xApiService) {
         const result = await this.xApiService.postContent(content, mediaUrls);
@@ -154,6 +168,19 @@ export class HybridService {
    */
   async getMentions(username: string, limit: number = 50): Promise<HybridMentionsResult> {
     try {
+      // Validate tokens before scraping
+      const tokenService = createTokenManagementService(this.userId);
+      const canScrape = await tokenService.canScrape();
+      
+      if (!canScrape) {
+        return {
+          success: false,
+          mentions: [],
+          error: 'No valid scraping credentials available. Please configure Apify API key.',
+          source: 'apify',
+        };
+      }
+
       if (!this.apifyService) {
         return {
           success: false,
