@@ -1,4 +1,4 @@
-import { ApifyApi } from 'apify-client';
+import { ApifyClient } from 'apify-client';
 
 export interface ApifyCredentials {
   apiKey: string;
@@ -45,12 +45,12 @@ export interface ApifyAnalyticsResult {
 }
 
 export class ApifyService {
-  private client: ApifyApi;
+  private client: ApifyClient;
   private credentials: ApifyCredentials;
 
   constructor(credentials: ApifyCredentials) {
     this.credentials = credentials;
-    this.client = new ApifyApi({
+    this.client = new ApifyClient({
       token: credentials.apiKey,
     });
   }
@@ -69,9 +69,13 @@ export class ApifyService {
         // Add other parameters as needed for the specific actor
       });
 
-      if (run.status === 'SUCCEEDED' && run.output) {
+      if (run.status === 'SUCCEEDED') {
+        // Get the dataset items from the run
+        const dataset = this.client.run(run.id).dataset();
+        const items = await dataset.listItems();
+        
         // Transform the output to match our interface
-        const mentions = Array.isArray(run.output) ? run.output : [];
+        const mentions = Array.isArray(items.items) ? items.items : [];
         return {
           success: true,
           mentions: mentions.map((mention: any) => ({
@@ -113,9 +117,13 @@ export class ApifyService {
         // Add other parameters as needed for the specific actor
       });
 
-      if (run.status === 'SUCCEEDED' && run.output) {
+      if (run.status === 'SUCCEEDED') {
+        // Get the dataset items from the run
+        const dataset = this.client.run(run.id).dataset();
+        const items = await dataset.listItems();
+        
         // Transform the output to match our interface
-        const mentions = Array.isArray(run.output) ? run.output : [];
+        const mentions = Array.isArray(items.items) ? items.items : [];
         return {
           success: true,
           mentions: mentions.map((mention: any) => ({
@@ -157,16 +165,20 @@ export class ApifyService {
         // Add other required parameters based on the specific actor
       });
 
-      if (run.status === 'SUCCEEDED' && run.output) {
-        const output = run.output;
+      if (run.status === 'SUCCEEDED') {
+        // Get the dataset items from the run
+        const dataset = this.client.run(run.id).dataset();
+        const items = await dataset.listItems();
+        
+        const output = items.items && items.items.length > 0 ? items.items[0] : {};
         return {
           success: true,
           analytics: {
-            followers: output.followers || output.followersCount || 0,
-            following: output.following || output.followingCount || 0,
-            tweets: output.tweets || output.tweetsCount || output.statusesCount || 0,
-            engagement: output.engagement || output.engagementRate || 0,
-            reach: output.reach || output.reachCount || 0,
+            followers: (output as any).followers || (output as any).followersCount || 0,
+            following: (output as any).following || (output as any).followingCount || 0,
+            tweets: (output as any).tweets || (output as any).tweetsCount || (output as any).statusesCount || 0,
+            engagement: (output as any).engagement || (output as any).engagementRate || 0,
+            reach: (output as any).reach || (output as any).reachCount || 0,
           },
         };
       } else {
@@ -211,10 +223,14 @@ export class ApifyService {
         // Add other required parameters based on the specific actor
       });
 
-      if (run.status === 'SUCCEEDED' && run.output) {
+      if (run.status === 'SUCCEEDED') {
+        // Get the dataset items from the run
+        const dataset = this.client.run(run.id).dataset();
+        const items = await dataset.listItems();
+        
         return {
           success: true,
-          profile: run.output,
+          profile: items.items && items.items.length > 0 ? items.items[0] : {},
         };
       } else {
         return {
@@ -253,7 +269,8 @@ export class ApifyService {
    */
   async getAvailableActors(): Promise<any[]> {
     try {
-      const actors = await this.client.user().listActors();
+      // Use the actors collection to list available actors
+      const actors = await this.client.actors().list();
       return actors.items || [];
     } catch (error) {
       console.error('Failed to get available actors:', error);

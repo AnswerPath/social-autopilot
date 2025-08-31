@@ -1,11 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
 import { encrypt, decrypt } from './encryption';
+import { getSupabaseClient } from './build-utils';
 import { XApiCredentials } from './x-api-service';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = getSupabaseClient();
 
 export interface StoredXApiCredentials extends XApiCredentials {
   id: string;

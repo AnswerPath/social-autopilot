@@ -2,296 +2,197 @@
   "master": {
     "tasks": [
       {
-        "id": 1,
-        "title": "Initialize Project Repository & Tooling",
-        "description": "Set up the project repository with version control, code style, and CI/CD pipeline.",
-        "details": "Use GitHub for repository management. Configure Prettier and ESLint for code style. Set up GitHub Actions for CI/CD. Use Node.js (v20+) for backend, React (v18+) for frontend, and Docker for containerization. Prepare .env files for secrets.",
-        "testStrategy": "Verify repository setup by running lint, format, and CI checks. Ensure Docker containers build and run locally.",
+        "id": 16,
+        "title": "X API Integration and OAuth Setup",
+        "description": "Implement secure OAuth connection to X accounts and establish core API integration for posting, mentions, and analytics",
+        "details": "Create a service layer for X API integration using OAuth 2.0 flow. Implement token management with secure storage and refresh mechanisms. Handle API rate limits with exponential backoff strategy. Set up error handling for API downtime. Create interfaces for core X API operations: post creation, scheduling, mentions retrieval, and analytics data fetching. Ensure GDPR and CCPA compliance by not storing X credentials directly.",
+        "testStrategy": "Unit tests for API service methods with mocked responses. Integration tests with X API sandbox environment. Security audit of OAuth implementation. Test token refresh flow and error handling scenarios. Verify rate limit handling under load conditions.",
         "priority": "high",
         "dependencies": [],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 2,
-        "title": "Design Database Schema & Security Model",
-        "description": "Model data for posts, users, roles, analytics, and automation rules. Ensure compliance and encryption.",
-        "details": "Use PostgreSQL 15+ for relational data. Define tables for users, posts, roles, analytics, and automation rules. Encrypt sensitive fields (e.g., OAuth tokens) using AES-256. Implement GDPR/CCPA-compliant data retention policies.",
-        "testStrategy": "Run schema migration tests. Validate encryption/decryption of sensitive fields. Check compliance with privacy requirements.",
-        "priority": "high",
-        "dependencies": [
-          1
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 3,
-        "title": "Implement X (Twitter) OAuth Integration",
-        "description": "Enable secure connection to X accounts using OAuth 2.0.",
-        "details": "Use Twitter API v2 with OAuth 2.0. Store only access tokens, never credentials. Handle token refresh and revocation. Use passport.js (v0.6+) for authentication flow.",
-        "testStrategy": "Test OAuth flow with test X accounts. Validate token storage and refresh. Simulate revoked permissions and verify re-authentication prompts.",
-        "priority": "high",
-        "dependencies": [
-          2
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 4,
-        "title": "Develop User Management & Role-Based Access Control",
-        "description": "Create user registration, login, and granular permissions for admin, editor, viewer.",
-        "details": "Implement user registration and login with JWT (jsonwebtoken v9+). Use bcrypt (v5+) for password hashing. Assign roles and permissions at user creation. Enforce access control in backend endpoints.",
-        "testStrategy": "Unit test registration, login, and role assignment. Attempt unauthorized actions and verify access is denied.",
-        "priority": "high",
-        "dependencies": [
-          2
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 5,
-        "title": "Build Post Composer with Media Attachments",
-        "description": "Allow users to create, edit, and format X posts with media uploads.",
-        "details": "Use React with Draft.js or Slate.js for rich text editing. Integrate file uploads via AWS S3 or Google Cloud Storage. Validate X character limits and media types in real-time.",
-        "testStrategy": "Create posts with text and media. Validate character count and media type restrictions. Confirm uploads are stored securely.",
-        "priority": "high",
-        "dependencies": [
-          4,
-          3
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 6,
-        "title": "Implement Bulk Scheduling & CSV Upload",
-        "description": "Enable users to schedule multiple posts at once via calendar or CSV.",
-        "details": "Use react-big-calendar for calendar UI. Parse CSV uploads with PapaParse. Validate post data before scheduling. Store scheduled posts in database with status tracking.",
-        "testStrategy": "Upload sample CSVs and schedule posts. Check for validation errors and correct scheduling. Verify calendar displays scheduled posts.",
-        "priority": "high",
-        "dependencies": [
-          5
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 7,
-        "title": "Create Approval Workflow for Posts",
-        "description": "Route posts for review and approval before publishing, with notifications.",
-        "details": "Implement approval status (draft, pending, approved, rejected) in database. Use Socket.io for real-time notifications. Allow managers to comment, approve, or request changes.",
-        "testStrategy": "Submit posts for approval. Verify notification delivery and status changes. Test comment and revision flow.",
-        "priority": "high",
-        "dependencies": [
-          6,
-          4
-        ],
-        "status": "pending",
+        "status": "in-progress",
         "subtasks": [
           {
             "id": 1,
-            "title": "Update Database Schema for Approval Workflow",
-            "description": "Extend the post schema to include approval status fields (draft, pending, approved, rejected), reviewer information, and revision history.",
+            "title": "Implement OAuth 2.0 Authentication Flow",
+            "description": "Create the OAuth 2.0 flow to authenticate with X API, including authorization request, callback handling, and token acquisition.",
             "dependencies": [],
-            "details": "Modify the MongoDB schema for posts to add fields: status (enum: draft, pending, approved, rejected), reviewerId, reviewDate, revisionHistory (array of previous versions), and comments (array of comment objects). Create indexes for efficient querying by status.",
+            "details": "Create an OAuth service that handles the authentication flow with X API. Implement the authorization URL generation with required scopes for posting, reading mentions, and analytics. Create a callback endpoint to receive the authorization code. Exchange the authorization code for access and refresh tokens. Store tokens securely in an encrypted database field, not storing X credentials directly. Implement proper error handling for authentication failures.\n<info added on 2025-08-28T23:35:33.127Z>\nCreate an Apify-based integration service that replaces the X API OAuth flow. Implement authentication using Apify API keys instead of OAuth tokens. Configure and utilize Apify actors for core X functionality including posting content, retrieving mentions, and collecting analytics data. Store the Apify API key securely in an encrypted database field. Implement proper error handling for Apify actor execution failures and API limitations. Create wrapper functions that abstract the Apify actor calls to maintain consistent interfaces with the rest of the application.\n</info added on 2025-08-28T23:35:33.127Z>\n<info added on 2025-08-28T23:44:09.293Z>\nImplementation completed for the Apify integration service. The ApifyService class has been created with comprehensive methods for social media operations including posting, mentions retrieval, analytics collection, and profile management. A dedicated Apify storage module handles secure credential management with encryption. API routes have been implemented for credential CRUD operations and connection testing functionality. The frontend includes a React component for Apify settings management with user-friendly configuration options. Comprehensive documentation has been created covering the integration architecture, usage examples, and troubleshooting guides. This implementation successfully replaces the originally planned OAuth 2.0 authentication flow with a simpler Apify API key authentication system while maintaining all required functionality through Apify actors.\n</info added on 2025-08-28T23:44:09.293Z>\n<info added on 2025-08-31T20:49:23.917Z>\nImplement a hybrid integration approach combining Apify for scraping/reading operations and the official X API for posting functionality. Configure the system to use the specialized Apify actor 'watcher.data/search-x-by-keywords' for all X data scraping operations. Extend the existing ApifyService class to support this hybrid model, maintaining the Apify integration for data retrieval while adding official X API client functionality for posting operations. Modify the credential management system to securely store both Apify API keys and X API credentials (API key, API key secret, access token, and access token secret) in encrypted database fields. Update the settings management interface to include input fields for both Apify and X API credentials with appropriate validation. Implement proper error handling to gracefully manage failures from either integration path and provide clear feedback to users about which system encountered issues.\n</info added on 2025-08-31T20:49:23.917Z>",
             "status": "done",
-            "testStrategy": "Write unit tests to verify schema validation. Test CRUD operations with different status values."
+            "testStrategy": "Unit test the OAuth flow with mocked responses. Create integration tests using X API sandbox environment. Perform security audit of the OAuth implementation focusing on token handling."
           },
           {
             "id": 2,
-            "title": "Implement Backend API Endpoints for Approval Flow",
-            "description": "Create REST endpoints to handle status changes, submission for review, approval/rejection actions, and comments.",
+            "title": "Develop Token Management System",
+            "description": "Implement secure storage and refresh mechanisms for OAuth tokens with proper encryption and automatic refresh handling.",
             "dependencies": [
-              "7.1"
+              "16.1"
             ],
-            "details": "Develop Express routes for: POST /posts/:id/submit (change status to pending), POST /posts/:id/approve, POST /posts/:id/reject, POST /posts/:id/comment. Implement middleware to verify user permissions based on roles from Task 4. Return appropriate status codes and error messages.",
-            "status": "done",
-            "testStrategy": "Test each endpoint with valid and invalid requests. Verify role-based access control works correctly."
+            "details": "Create a token management service that securely stores access and refresh tokens using encryption. Implement token validation to check expiration before API calls. Create automatic token refresh mechanism when access tokens expire. Handle edge cases like invalid refresh tokens. Implement token revocation when users disconnect their X account. Ensure compliance with GDPR and CCPA by implementing proper data handling policies.",
+            "status": "pending",
+            "testStrategy": "Unit test token refresh logic with mocked API responses. Test token encryption/decryption. Create integration tests for the complete token lifecycle. Test error scenarios like expired refresh tokens."
           },
           {
             "id": 3,
-            "title": "Develop Frontend Components for Post Status Management",
-            "description": "Create UI components to display post status, submit for review, and handle the approval workflow.",
+            "title": "Implement Core X API Service Layer",
+            "description": "Create service methods for core X API operations including posting, scheduling, mentions retrieval, and analytics data fetching.",
             "dependencies": [
-              "7.1",
-              "7.2"
+              "16.2"
             ],
-            "details": "Build React components: StatusBadge (visual indicator of current status), ApprovalActions (buttons for submit/approve/reject based on user role), RevisionHistory (timeline of changes). Implement form validation before submission.",
+            "details": "Develop a comprehensive X API service with methods for: creating and scheduling posts, retrieving user mentions, fetching analytics data, and managing user profile information. Implement proper request formatting according to X API documentation. Create strongly-typed interfaces for all API responses. Implement proper serialization/deserialization of API data. Structure the service to be easily extensible for future API endpoints.",
             "status": "pending",
-            "testStrategy": "Test components in isolation with different status values and user roles. Verify correct rendering and action availability."
+            "testStrategy": "Unit test each API method with mocked responses. Create integration tests against X API sandbox. Test edge cases like malformed responses and API errors."
           },
           {
             "id": 4,
-            "title": "Implement Socket.io for Real-time Notifications",
-            "description": "Set up Socket.io to deliver real-time notifications when posts change status or receive comments.",
+            "title": "Implement Rate Limiting and Error Handling",
+            "description": "Create a robust system to handle X API rate limits with exponential backoff strategy and comprehensive error handling for API downtime.",
             "dependencies": [
-              "7.2"
+              "16.3"
             ],
-            "details": "Configure Socket.io server in Node.js backend. Implement event emitters for status changes (postStatusChanged) and new comments (postCommentAdded). Create authentication middleware for secure socket connections. Emit events with relevant payload data including post ID, user info, and timestamp.",
+            "details": "Implement rate limit tracking based on X API response headers. Create an exponential backoff strategy for retrying failed requests. Develop a queuing system for requests during rate limit periods. Implement comprehensive error handling for different API error codes. Create a logging system for API errors with appropriate severity levels. Implement circuit breaker pattern to handle API downtime gracefully.",
             "status": "pending",
-            "testStrategy": "Test socket connections with multiple clients. Verify events are received by appropriate users only."
+            "testStrategy": "Unit test backoff algorithm and rate limit detection. Create stress tests to verify behavior under rate limiting conditions. Test system recovery after simulated API downtime."
           },
           {
             "id": 5,
-            "title": "Create Comment System for Review Feedback",
-            "description": "Implement a threaded comment system allowing reviewers to provide feedback on specific parts of posts.",
+            "title": "Create API Integration Tests and Documentation",
+            "description": "Develop comprehensive integration tests for the X API integration and create documentation for the service layer.",
             "dependencies": [
-              "7.1",
-              "7.2",
-              "7.4"
+              "16.3",
+              "16.4"
             ],
-            "details": "Develop comment data model with fields: id, postId, userId, content, timestamp, parentCommentId (for threading). Create API endpoints for adding, editing, and deleting comments. Integrate with Socket.io to notify users of new comments in real-time.",
+            "details": "Create end-to-end integration tests covering the complete OAuth flow and API operations. Implement test fixtures and mocks for consistent testing. Develop documentation for the X API service layer including authentication requirements, available methods, parameter details, and response formats. Create usage examples for common scenarios. Document rate limiting behavior and error handling strategies for developers.",
             "status": "pending",
-            "testStrategy": "Test comment creation, threading, and notifications. Verify comments persist and load correctly with posts."
-          },
-          {
-            "id": 6,
-            "title": "Implement Revision Tracking and Comparison",
-            "description": "Track post revisions and provide a way to compare changes between versions.",
-            "dependencies": [
-              "7.1",
-              "7.2"
-            ],
-            "details": "Store each version of a post when changes are made. Implement a diff algorithm to highlight changes between versions. Create an API endpoint to retrieve revision history and specific versions. Build a UI component to visualize differences between revisions.",
-            "status": "pending",
-            "testStrategy": "Create posts with multiple revisions and verify history is maintained. Test diff visualization with various content changes."
-          },
-          {
-            "id": 7,
-            "title": "Develop Dashboard for Pending Approvals",
-            "description": "Create a dashboard view for managers to see all posts awaiting approval with filtering and sorting options.",
-            "dependencies": [
-              "7.3",
-              "7.5"
-            ],
-            "details": "Build a React dashboard component that fetches pending posts from the API. Implement filters by date, author, and content type. Add sorting options and pagination for large numbers of posts. Include preview functionality and quick approve/reject actions.",
-            "status": "pending",
-            "testStrategy": "Test dashboard with various filter combinations. Verify sorting and pagination work correctly. Test approval actions from the dashboard view."
-          },
-          {
-            "id": 8,
-            "title": "Integrate with Notification Settings",
-            "description": "Connect the approval workflow with the notification system to respect user preferences.",
-            "dependencies": [
-              "7.4",
-              "7.7"
-            ],
-            "details": "Extend Socket.io implementation to check user notification preferences before sending alerts. Implement notification grouping to prevent overwhelming users. Create notification center UI component to display all approval-related notifications with read/unread status.",
-            "status": "pending",
-            "testStrategy": "Change notification settings and verify delivery behavior changes accordingly. Test notification persistence and read/unread status tracking."
+            "testStrategy": "Execute integration tests against X API sandbox environment. Perform manual verification of documentation accuracy. Conduct peer review of both tests and documentation."
           }
         ]
       },
       {
-        "id": 8,
-        "title": "Develop Calendar View & Drag-and-Drop Scheduling",
-        "description": "Visualize scheduled, drafted, and published posts; enable drag-and-drop rescheduling.",
-        "details": "Extend react-big-calendar to show post statuses. Implement drag-and-drop with react-dnd. Update post schedule on drop and sync with backend.",
-        "testStrategy": "Drag posts to new dates/times. Confirm backend updates and UI reflects changes. Test status indicators for all post types.",
-        "priority": "medium",
-        "dependencies": [
-          6
-        ],
-        "status": "done",
+        "id": 17,
+        "title": "User Authentication and Role Management",
+        "description": "Implement user authentication system with role-based access control (admin, editor, viewer) and permission management",
+        "details": "Set up authentication system with secure password hashing and session management. Implement role-based access control with three primary roles: admin, editor, and viewer. Create permission management system with granular controls for post creation, scheduling, approval, and analytics access. Implement user profile management with account settings. Create activity logging system to track user actions for auditability. Design and implement team collaboration features with user assignment and visibility controls.",
+        "testStrategy": "Unit tests for authentication logic and permission checks. Integration tests for role-based access scenarios. Security testing for authentication flows including password reset. User acceptance testing for role management interfaces. Audit log verification tests.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
         "subtasks": []
       },
       {
-        "id": 9,
-        "title": "Integrate Engagement Automation (Auto-Reply Rules)",
-        "description": "Allow users to set up automated replies to common questions or keywords.",
-        "details": "Store auto-reply rules in database. Use Node.js worker (BullMQ) to monitor mentions and trigger replies via X API. Allow regex/keyword matching for triggers.",
-        "testStrategy": "Create auto-reply rules and simulate matching mentions. Verify automated replies are sent and logged. Test edge cases for rule conflicts.",
+        "id": 18,
+        "title": "Post Composer and Media Management",
+        "description": "Build post creation interface with text formatting, media attachments, and character count validation",
+        "details": "Develop rich text editor for post composition with X-specific formatting. Implement media upload functionality supporting images and videos with proper validation. Create character counter with X's limits and real-time validation. Implement draft saving functionality with auto-save. Add preview functionality to show how posts will appear on X. Implement emoji picker and hashtag suggestions. Create responsive design that works on both desktop and mobile interfaces.",
+        "testStrategy": "Unit tests for text validation and character counting. Integration tests for media upload and processing. Cross-browser compatibility testing. Mobile responsiveness testing. Accessibility testing for screen readers and keyboard navigation. Performance testing for large media files.",
         "priority": "high",
         "dependencies": [
-          3,
-          4
+          16
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": []
       },
       {
-        "id": 10,
-        "title": "Implement Mention Monitoring & Sentiment Analysis",
-        "description": "Track brand mentions in real time and flag sentiment for follow-up.",
-        "details": "Use Twitter API v2 filtered stream for mentions. Integrate sentiment analysis with HuggingFace Transformers (distilbert-base-uncased-finetuned-sst-2-english). Flag negative/positive mentions and notify users.",
-        "testStrategy": "Simulate mentions and verify detection. Test sentiment analysis accuracy. Confirm flagged mentions trigger notifications.",
+        "id": 19,
+        "title": "Post Scheduling and Calendar View",
+        "description": "Implement post scheduling system with calendar visualization, bulk scheduling, and CSV upload functionality",
+        "details": "Create scheduling system with timezone support and conflict detection. Develop interactive calendar view with drag-and-drop functionality for rescheduling. Implement bulk scheduling interface for multiple posts. Create CSV template and import functionality for power users. Implement scheduling queue with job processing for reliable posting. Add visual indicators for draft, scheduled, published, and failed posts. Implement rescheduling and cancellation functionality.",
+        "testStrategy": "Unit tests for scheduling logic and timezone handling. Integration tests for calendar interactions and bulk operations. Performance testing with large numbers of scheduled posts. CSV import validation testing with various file formats. End-to-end testing of the scheduling and publishing flow.",
         "priority": "high",
         "dependencies": [
-          3,
-          9
+          16,
+          18
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 11,
-        "title": "Build Analytics Dashboard & Post-Level Insights",
-        "description": "Provide metrics on engagement, reach, follower growth, and post performance.",
-        "details": "Aggregate data from X API and internal logs. Use Chart.js or Recharts for visualization. Store analytics snapshots for historical comparison. Implement drill-down for individual posts.",
-        "testStrategy": "Verify dashboard displays correct metrics. Test drill-down for post analytics. Validate data export matches dashboard data.",
+        "id": 20,
+        "title": "Approval Workflow System",
+        "description": "Create approval workflow for posts with notification system, commenting, and revision tracking",
+        "details": "Implement multi-step approval workflow with configurable approval chains. Create notification system for pending approvals via in-app and email/SMS. Develop commenting functionality for feedback on drafts. Implement version history to track post revisions. Create approval dashboard for managers to review pending content. Add bulk approval capabilities for efficient workflow. Implement status tracking for posts throughout the approval process.",
+        "testStrategy": "Unit tests for workflow state transitions. Integration tests for approval flows with multiple users. Notification delivery testing across channels. User acceptance testing of approval interfaces. Performance testing of approval system under load.",
         "priority": "medium",
         "dependencies": [
-          3,
-          5,
-          10
-        ],
-        "status": "done",
-        "subtasks": []
-      },
-      {
-        "id": 12,
-        "title": "Develop AI-Driven Content Recommendations",
-        "description": "Suggest optimal posting times and content types using machine learning.",
-        "details": "Train a lightweight ML model (scikit-learn or TensorFlow.js) on engagement data. Use cron jobs to update recommendations. Display suggestions in composer and dashboard.",
-        "testStrategy": "Compare recommendations to historical engagement. A/B test suggested times/types vs. manual choices.",
-        "priority": "medium",
-        "dependencies": [
-          11
+          17,
+          18,
+          19
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 13,
-        "title": "Enable Collaboration: Commenting & Activity Log",
-        "description": "Allow internal comments on drafts/scheduled posts and track all changes/approvals.",
-        "details": "Implement comment threads on posts using MongoDB for scalability. Log all actions (create, edit, approve) with timestamps and user IDs. Display activity log in UI.",
-        "testStrategy": "Add comments and verify persistence. Check activity log for completeness and accuracy. Test auditability for compliance.",
+        "id": 21,
+        "title": "Engagement Automation and Auto-Reply System",
+        "description": "Build automated response system with keyword triggers, sentiment analysis, and mention monitoring",
+        "details": "Implement real-time mention monitoring using X's streaming API. Create rule-based auto-reply system with keyword and phrase matching. Integrate sentiment analysis to categorize mentions as positive, neutral, or negative. Develop priority flagging for urgent mentions requiring human attention. Create interface for managing auto-reply rules with testing capabilities. Implement throttling to prevent spam-like behavior. Add analytics for auto-reply effectiveness.",
+        "testStrategy": "Unit tests for rule matching and response generation. Integration tests with X API for mention detection. Performance testing of streaming connection stability. User acceptance testing of rule creation interface. A/B testing of auto-reply effectiveness with sample scenarios.",
         "priority": "medium",
         "dependencies": [
-          7,
-          4
+          16,
+          17
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 14,
-        "title": "Configure Notification Settings & Delivery",
-        "description": "Allow users to customize alerts for approvals, mentions, and analytics.",
-        "details": "Store notification preferences per user. Use NodeMailer for email and Twilio for SMS (optional). Integrate with Socket.io for in-app alerts.",
-        "testStrategy": "Change notification settings and trigger events. Verify delivery via email, SMS, and in-app. Test opt-in/opt-out flows.",
+        "id": 22,
+        "title": "Analytics Dashboard and Reporting",
+        "description": "Develop analytics dashboard with engagement metrics, post performance, and audience growth visualization",
+        "details": "Create analytics data processing pipeline from X API data. Implement dashboard with key metrics: engagement rate, reach, follower growth. Develop post-level analytics with detailed performance breakdowns. Create data visualization components for trends and comparisons. Implement report generation and export to CSV. Add AI-driven recommendations for optimal posting times based on historical data. Create custom date range selection for flexible reporting.",
+        "testStrategy": "Unit tests for analytics calculations and data processing. Integration tests for X API data retrieval. Visual regression testing for dashboard components. Export functionality testing with various data sizes. User acceptance testing of reporting interfaces.",
+        "priority": "medium",
+        "dependencies": [
+          16,
+          19
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 23,
+        "title": "Onboarding Flow and User Tutorial",
+        "description": "Design and implement first-time user experience with guided onboarding and interactive tutorial",
+        "details": "Create multi-step onboarding flow for new users. Implement X account connection via OAuth with clear instructions. Develop interactive tutorial highlighting key features: scheduling, automation, analytics. Create tooltips and contextual help throughout the application. Implement progress tracking for onboarding completion. Design welcome emails and follow-up sequences. Create help documentation and FAQ section.",
+        "testStrategy": "User flow testing with various personas. A/B testing of onboarding variations. Completion rate tracking and funnel analysis. Cross-browser and device testing of tutorial elements. User acceptance testing with new users unfamiliar with the system.",
+        "priority": "medium",
+        "dependencies": [
+          16,
+          17,
+          18,
+          19,
+          21,
+          22
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 24,
+        "title": "Notification System and User Preferences",
+        "description": "Implement notification system for approvals, mentions, and analytics with customizable user preferences",
+        "details": "Create notification service supporting in-app, email, and SMS channels. Implement notification preference management per user. Develop notification center UI with read/unread status. Create notification templates for different event types. Implement batching and digests for high-volume notifications. Add real-time notifications for urgent items. Create notification testing tools for administrators.",
+        "testStrategy": "Unit tests for notification generation and delivery. Integration tests across notification channels. User preference persistence testing. Performance testing under high notification volume. User acceptance testing of notification interfaces and preferences.",
         "priority": "low",
         "dependencies": [
-          7,
-          10
+          17,
+          20,
+          21
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": []
       },
       {
-        "id": 15,
-        "title": "Implement Data Export & Compliance Features",
-        "description": "Enable users to download analytics and post history as CSV; ensure GDPR/CCPA compliance.",
-        "details": "Use json2csv for export functionality. Validate exported data matches dashboard. Implement data deletion and access requests per GDPR/CCPA.",
-        "testStrategy": "Export sample data and verify format. Test data deletion/access requests for compliance. Audit logs for export actions.",
-        "priority": "low",
+        "id": 25,
+        "title": "System Monitoring and Error Handling",
+        "description": "Implement comprehensive monitoring, logging, and error handling for production reliability",
+        "details": "Set up application monitoring for performance and errors. Implement structured logging throughout the application. Create error handling strategy with user-friendly messages. Develop retry mechanisms for transient failures, especially with X API. Implement alerting for critical system issues. Create admin dashboard for system health monitoring. Develop automated recovery procedures where possible. Implement feature flags for gradual rollout and quick disabling if needed.",
+        "testStrategy": "Chaos testing with simulated failures. Log analysis verification. Alert triggering validation. Recovery procedure testing. Performance monitoring under various load conditions. User experience testing during error scenarios.",
+        "priority": "medium",
         "dependencies": [
-          11,
-          2
+          16,
+          19,
+          21,
+          22
         ],
         "status": "pending",
         "subtasks": []
@@ -299,7 +200,7 @@
     ],
     "metadata": {
       "created": "2025-08-27T00:52:53.436Z",
-      "updated": "2025-08-27T17:57:14.641Z",
+      "updated": "2025-08-31T20:52:24.224Z",
       "description": "Tasks for master context"
     }
   }

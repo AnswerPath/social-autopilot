@@ -1,11 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
 import { encrypt, decrypt } from './encryption';
+import { getSupabaseClient } from './build-utils';
 import { ApifyCredentials } from './apify-service';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = getSupabaseClient();
 
 export interface StoredApifyCredentials extends ApifyCredentials {
   id: string;
