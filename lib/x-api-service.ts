@@ -1,4 +1,5 @@
 import { TwitterApi } from 'twitter-api-v2';
+import { ApiErrorHandler, ErrorType, CircuitBreaker } from './error-handling';
 
 export interface XApiCredentials {
   apiKey: string;
@@ -18,6 +19,7 @@ export interface XPostResult {
 export class XApiService {
   private client: TwitterApi;
   private credentials: XApiCredentials;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(credentials: XApiCredentials) {
     this.credentials = credentials;
@@ -27,52 +29,60 @@ export class XApiService {
       accessToken: credentials.accessToken,
       accessSecret: credentials.accessTokenSecret,
     });
+    this.circuitBreaker = new CircuitBreaker();
   }
 
   /**
    * Post content using the official X API
    */
   async postContent(content: string, mediaUrls?: string[]): Promise<XPostResult> {
-    try {
-      let mediaIds: string[] = [];
-
-      // Upload media if provided
-      if (mediaUrls && mediaUrls.length > 0) {
-        for (const mediaUrl of mediaUrls) {
+    return this.circuitBreaker.execute(async () => {
+      return ApiErrorHandler.executeWithRetry(
+        async () => {
           try {
-            // Download the media and upload to Twitter
-            const mediaResponse = await fetch(mediaUrl);
-            const mediaBuffer = await mediaResponse.arrayBuffer();
-            const mediaId = await this.client.v1.uploadMedia(Buffer.from(mediaBuffer), {
-              mimeType: this.getMimeType(mediaUrl),
+            let mediaIds: string[] = [];
+
+            // Upload media if provided
+            if (mediaUrls && mediaUrls.length > 0) {
+              for (const mediaUrl of mediaUrls) {
+                try {
+                  // Download the media and upload to Twitter
+                  const mediaResponse = await fetch(mediaUrl);
+                  const mediaBuffer = await mediaResponse.arrayBuffer();
+                  const mediaId = await this.client.v1.uploadMedia(Buffer.from(mediaBuffer), {
+                    mimeType: this.getMimeType(mediaUrl),
+                  });
+                  mediaIds.push(mediaId);
+                } catch (error) {
+                  console.error('Failed to upload media:', error);
+                  // Continue without this media
+                }
+              }
+            }
+
+            // Post the tweet
+            const tweet = await this.client.v2.tweet({
+              text: content,
+              ...(mediaIds.length > 0 && { media: { media_ids: mediaIds as any } }),
             });
-            mediaIds.push(mediaId);
+
+            return {
+              success: true,
+              postId: tweet.data.id,
+              timestamp: new Date().toISOString(),
+            };
           } catch (error) {
-            console.error('Failed to upload media:', error);
-            // Continue without this media
+            throw ApiErrorHandler.normalizeError(error, 'x-api', {
+              endpoint: 'tweet',
+              userId: this.credentials.userId,
+            });
           }
-        }
-      }
-
-      // Post the tweet
-      const tweet = await this.client.v2.tweet({
-        text: content,
-        ...(mediaIds.length > 0 && { media: { media_ids: mediaIds } }),
-      });
-
-      return {
-        success: true,
-        postId: tweet.data.id,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      console.error('X API post content error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-        timestamp: new Date().toISOString(),
-      };
-    }
+        },
+        'x-api',
+        undefined,
+        { endpoint: 'tweet', userId: this.credentials.userId }
+      );
+    });
   }
 
   /**

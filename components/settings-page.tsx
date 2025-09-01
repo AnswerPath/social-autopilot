@@ -9,6 +9,7 @@ import { NotificationSettings } from "./notification-settings"
 import { SecuritySettings } from "./security-settings"
 import { HybridSettings } from "./hybrid-settings"
 import { TokenManagement } from "./token-management"
+import { ErrorMonitoring } from "./error-monitoring"
 import { Settings, Twitter, Bell, Shield, User, Bot } from 'lucide-react'
 
 export function SettingsPage() {
@@ -66,6 +67,7 @@ export function SettingsPage() {
           <div className="space-y-6">
             <SecuritySettings />
             <TokenManagement userId="demo-user" />
+            <ErrorMonitoring />
           </div>
         </TabsContent>
       </Tabs>
