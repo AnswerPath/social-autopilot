@@ -10,6 +10,7 @@ import { SecuritySettings } from "./security-settings"
 import { HybridSettings } from "./hybrid-settings"
 import { TokenManagement } from "./token-management"
 import { ErrorMonitoring } from "./error-monitoring"
+import { ComplianceManagement } from "./compliance-management"
 import { Settings, Twitter, Bell, Shield, User, Bot } from 'lucide-react'
 
 export function SettingsPage() {
@@ -68,6 +69,7 @@ export function SettingsPage() {
             <SecuritySettings />
             <TokenManagement userId="demo-user" />
             <ErrorMonitoring />
+            <ComplianceManagement userId="demo-user" />
           </div>
         </TabsContent>
       </Tabs>
