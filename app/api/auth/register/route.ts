@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { 
   RegisterRequest, 
   AuthError, 
@@ -7,11 +7,12 @@ import {
   UserRole 
 } from '@/lib/auth-types'
 import { 
-  setAuthCookies, 
+  setAuthCookiesResponse, 
   createUserProfile, 
   assignUserRole, 
   logAuditEvent,
-  createAuthError 
+  createAuthError,
+  createUserSession
 } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const { data: existingUsers } = await getSupabaseAdmin().auth.admin.listUsers()
     const existingUser = existingUsers.users.find(user => user.email === email)
     if (existingUser) {
       return NextResponse.json(
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new user with Supabase Auth
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    const { data, error } = await getSupabaseAdmin().auth.admin.createUser({
       email,
       password,
       email_confirm: true // Auto-confirm email for now (can be changed later)
@@ -67,17 +68,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user profile
-    const profile = await createUserProfile(data.user.id, {
-      first_name,
-      last_name,
-      display_name: display_name || `${first_name} ${last_name}`.trim()
-    })
+    let profile
+    try {
+      profile = await createUserProfile(data.user.id, {
+        first_name,
+        last_name,
+        display_name: display_name || `${first_name} ${last_name}`.trim()
+      })
+      console.log('✅ Profile created successfully')
+    } catch (profileError) {
+      console.error('❌ Profile creation failed:', profileError)
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, `Failed to create profile: ${profileError instanceof Error ? profileError.message : 'Unknown error'}`) },
+        { status: 500 }
+      )
+    }
 
     // Assign default role (VIEWER)
-    await assignUserRole(data.user.id, UserRole.VIEWER)
+    try {
+      await assignUserRole(data.user.id, UserRole.VIEWER)
+      console.log('✅ Role assigned successfully')
+    } catch (roleError) {
+      console.error('❌ Role assignment failed:', roleError)
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, `Failed to assign role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`) },
+        { status: 500 }
+      )
+    }
 
     // Sign in the user to get a session
-    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+    const { data: signInData, error: signInError } = await getSupabaseAdmin().auth.signInWithPassword({
       email,
       password
     })
@@ -95,8 +115,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Set authentication cookies
-    await setAuthCookies(signInData.session)
+    // Create session in database
+    const sessionId = await createUserSession(data.user.id, signInData.session, request)
 
     // Log successful registration
     await logAuditEvent(
@@ -108,8 +128,8 @@ export async function POST(request: NextRequest) {
       request
     )
 
-    // Return user data
-    return NextResponse.json({
+    // Create response with cookies set
+    const response = NextResponse.json({
       user: {
         id: data.user.id,
         email: data.user.email,
@@ -120,6 +140,33 @@ export async function POST(request: NextRequest) {
         expires_at: signInData.session.expires_at
       }
     })
+    
+    // Set cookies
+    response.cookies.set('sb-auth-token', signInData.session.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 // 1 hour
+    })
+    
+    response.cookies.set('sb-refresh-token', signInData.session.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 // 7 days
+    })
+    
+    response.cookies.set('sb-session-id', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 // 30 days
+    })
+
+    return response
 
   } catch (error) {
     console.error('Registration error:', error)

@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { 
-  AuthError, 
-  AuthErrorType 
-} from '@/lib/auth-types'
-import { 
-  clearAuthCookies, 
   logAuditEvent,
   createAuthError,
-  getCurrentUser
+  AuthErrorType,
+  clearAuthCookies
 } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {

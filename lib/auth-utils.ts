@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { 
   AuthUser, 
   UserRole, 
@@ -65,7 +65,7 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
     }
 
     // Verify the token with Supabase
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token)
     
     if (error || !user) {
       // Token is invalid, clear cookies
@@ -74,7 +74,7 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
     }
 
     // Check if session is still valid in our database
-    const { data: sessionInfo } = await supabaseAdmin
+    const { data: sessionInfo } = await getSupabaseAdmin()
       .from('user_sessions')
       .select('*')
       .eq('session_id', sessionId)
@@ -100,14 +100,14 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
     await updateSessionActivity(sessionId)
 
     // Get user profile and role from database
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await getSupabaseAdmin()
       .from('user_profiles')
       .select('*')
       .eq('user_id', user.id)
       .single()
 
     // Get user role from database (default to VIEWER if not set)
-    const { data: roleData } = await supabaseAdmin
+    const { data: roleData } = await getSupabaseAdmin()
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -141,7 +141,7 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
     }
 
     // Refresh the token with Supabase
-    const { data, error } = await supabaseAdmin.auth.refreshSession({
+    const { data, error } = await getSupabaseAdmin().auth.refreshSession({
       refresh_token: refreshToken
     })
 
@@ -185,7 +185,7 @@ export async function createUserSession(
     expires_at: expiresAt.toISOString()
   }
 
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('user_sessions')
     .insert(sessionInfo)
 
@@ -196,7 +196,7 @@ export async function createUserSession(
  * Update session activity timestamp
  */
 async function updateSessionActivity(sessionId: string): Promise<void> {
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('user_sessions')
     .update({ 
       last_activity: new Date().toISOString() 
@@ -212,7 +212,7 @@ async function updateSessionTokens(
   accessToken: string, 
   refreshToken: string
 ): Promise<void> {
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('user_sessions')
     .update({ 
       last_activity: new Date().toISOString() 
@@ -224,7 +224,7 @@ async function updateSessionTokens(
  * Deactivate a session
  */
 async function deactivateSession(sessionId: string): Promise<void> {
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('session_id', sessionId)
@@ -234,7 +234,7 @@ async function deactivateSession(sessionId: string): Promise<void> {
  * Deactivate all sessions for a user (except current one)
  */
 export async function deactivateOtherSessions(userId: string, currentSessionId: string): Promise<void> {
-  await supabaseAdmin
+  await getSupabaseAdmin()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('user_id', userId)
@@ -245,7 +245,7 @@ export async function deactivateOtherSessions(userId: string, currentSessionId: 
  * Get all active sessions for a user
  */
 export async function getUserSessions(userId: string): Promise<SessionInfo[]> {
-  const { data } = await supabaseAdmin
+  const { data } = await getSupabaseAdmin()
     .from('user_sessions')
     .select('*')
     .eq('user_id', userId)
@@ -256,7 +256,36 @@ export async function getUserSessions(userId: string): Promise<SessionInfo[]> {
 }
 
 /**
- * Set authentication cookies with session ID
+ * Set authentication cookies using NextResponse (for API routes)
+ */
+export function setAuthCookiesResponse(session: any, sessionId?: string): NextResponse {
+  const response = NextResponse.json({ success: true })
+  
+  // Set access token cookie
+  response.cookies.set(AUTH_COOKIE_NAME, session.access_token, {
+    ...SESSION_CONFIG.cookieOptions,
+    maxAge: SESSION_CONFIG.accessTokenExpiry
+  })
+
+  // Set refresh token cookie
+  response.cookies.set(REFRESH_COOKIE_NAME, session.refresh_token, {
+    ...SESSION_CONFIG.cookieOptions,
+    maxAge: SESSION_CONFIG.refreshTokenExpiry
+  })
+
+  // Set session ID cookie if provided
+  if (sessionId) {
+    response.cookies.set(SESSION_ID_COOKIE_NAME, sessionId, {
+      ...SESSION_CONFIG.cookieOptions,
+      maxAge: SESSION_CONFIG.sessionIdExpiry
+    })
+  }
+
+  return response
+}
+
+/**
+ * Set authentication cookies (for server actions)
  */
 export async function setAuthCookies(session: any, sessionId?: string) {
   const cookieStore = await cookies()
@@ -335,7 +364,7 @@ export function isAdmin(user: AuthUser | null): boolean {
  * Create a new user profile
  */
 export async function createUserProfile(userId: string, profile: Partial<UserProfile>): Promise<UserProfile> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('user_profiles')
     .insert({
       user_id: userId,
@@ -361,12 +390,14 @@ export async function createUserProfile(userId: string, profile: Partial<UserPro
  * Assign a role to a user
  */
 export async function assignUserRole(userId: string, role: UserRole): Promise<void> {
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('user_roles')
     .upsert({
       user_id: userId,
       role,
       updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'user_id'
     })
 
   if (error) {
@@ -396,7 +427,7 @@ export async function logAuditEvent(
       user_agent: request?.headers.get('user-agent') || 'unknown'
     }
 
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from('audit_logs')
       .insert(auditEntry)
   } catch (error) {
@@ -657,7 +688,7 @@ async function logPermissionCheck(
       user_agent: context?.userAgent,
     }
 
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from('permission_audit_logs')
       .insert(auditEntry)
   } catch (error) {

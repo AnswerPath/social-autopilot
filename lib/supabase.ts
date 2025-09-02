@@ -5,6 +5,21 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
+// Check if we're using placeholder values
+const isUsingPlaceholders = supabaseUrl === 'https://placeholder.supabase.co' || 
+                           supabaseServiceKey === 'placeholder-service-key' || 
+                           supabaseAnonKey === 'placeholder-anon-key'
+
+// Function to get Supabase admin client (for server-side operations)
+export function getSupabaseAdmin() {
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
+}
+
 // Server-side client with service role key for admin operations
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -15,6 +30,42 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 
 // Client-side client for user operations
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Mock client for testing when Supabase is not configured
+export const createMockSupabaseClient = () => {
+  return {
+    auth: {
+      signUp: async () => ({ data: { user: { id: 'mock-user-id', email: 'test@example.com' } }, error: null }),
+      signInWithPassword: async () => ({ 
+        data: { 
+          user: { id: 'mock-user-id', email: 'test@example.com' },
+          session: { access_token: 'mock-token', expires_at: Date.now() + 3600000 }
+        }, 
+        error: null 
+      }),
+      signOut: async () => ({ error: null }),
+      admin: {
+        createUser: async () => ({ data: { user: { id: 'mock-user-id', email: 'test@example.com' } }, error: null }),
+        listUsers: async () => ({ users: [] }),
+        updateUserById: async () => ({ error: null }),
+        deleteUser: async () => ({ error: null })
+      }
+    },
+    from: () => ({
+      select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }),
+      insert: () => ({ select: async () => ({ data: null, error: null }) }),
+      update: () => ({ eq: () => ({ select: async () => ({ data: null, error: null }) }) }),
+      delete: () => ({ eq: async () => ({ error: null }) }),
+      upsert: () => ({ select: async () => ({ data: null, error: null }) })
+    }),
+    storage: {
+      from: () => ({
+        createSignedUploadUrl: async () => ({ data: { signedUrl: 'mock-url', token: 'mock-token' }, error: null }),
+        remove: async () => ({ error: null })
+      })
+    }
+  }
+}
 
 export interface DatabaseCredential {
   id: string

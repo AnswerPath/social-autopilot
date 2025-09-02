@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { 
   LoginRequest, 
   AuthError, 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Attempt to sign in with Supabase
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    const { data, error } = await getSupabaseAdmin().auth.signInWithPassword({
       email,
       password
     })
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const sessionId = await createUserSession(data.user.id, data.session, request)
 
     // Get user role from database (default to VIEWER if not set)
-    const { data: roleData } = await supabaseAdmin
+    const { data: roleData } = await getSupabaseAdmin()
       .from('user_roles')
       .select('role')
       .eq('user_id', data.user.id)
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     const permissions = ROLE_PERMISSIONS[role]
 
     // Get user profile
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await getSupabaseAdmin()
       .from('user_profiles')
       .select('*')
       .eq('user_id', data.user.id)

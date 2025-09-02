@@ -2,9 +2,9 @@ import { User } from '@supabase/supabase-js'
 
 // User roles for role-based access control
 export enum UserRole {
-  ADMIN = 'admin',
-  EDITOR = 'editor',
-  VIEWER = 'viewer'
+  ADMIN = 'ADMIN',
+  EDITOR = 'EDITOR',
+  VIEWER = 'VIEWER'
 }
 
 // Permissions for granular access control
