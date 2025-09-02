@@ -84,17 +84,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Assign default role (VIEWER)
-    try {
-      await assignUserRole(data.user.id, UserRole.VIEWER)
-      console.log('✅ Role assigned successfully')
-    } catch (roleError) {
-      console.error('❌ Role assignment failed:', roleError)
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, `Failed to assign role: ${roleError instanceof Error ? roleError.message : 'Unknown error'}`) },
-        { status: 500 }
-      )
-    }
+    // Role is automatically assigned by trigger when profile is created
+    console.log('✅ Role automatically assigned by trigger')
 
     // Sign in the user to get a session
     const { data: signInData, error: signInError } = await getSupabaseAdmin().auth.signInWithPassword({
