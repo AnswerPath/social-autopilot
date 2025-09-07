@@ -9,7 +9,6 @@ import {
 import { 
   setAuthCookiesResponse, 
   createUserProfile, 
-  assignUserRole, 
   logAuditEvent,
   createAuthError,
   createUserSession
