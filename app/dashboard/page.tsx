@@ -48,24 +48,9 @@ function DashboardContent() {
           {/* User Info Card */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <User className="mr-2 h-5 w-5" />
-                  User Information
-                </div>
-                <div className="flex gap-2">
-                  <Link href="/profile">
-                    <Button variant="outline" size="sm">
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit Profile
-                    </Button>
-                  </Link>
-                  <Link href="/account-settings">
-                    <Button variant="outline" size="sm">
-                      Settings
-                    </Button>
-                  </Link>
-                </div>
+              <CardTitle className="flex items-center">
+                <User className="mr-2 h-5 w-5" />
+                User Information
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -82,6 +67,21 @@ function DashboardContent() {
                 <Badge variant="secondary" className="capitalize">
                   {user?.role}
                 </Badge>
+              </div>
+              
+              {/* Action Buttons - Centered within the card content */}
+              <div className="flex justify-center gap-2 pt-4 border-t">
+                <Link href="/profile">
+                  <Button variant="outline" size="sm">
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit Profile
+                  </Button>
+                </Link>
+                <Link href="/account-settings">
+                  <Button variant="outline" size="sm">
+                    Settings
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>
@@ -134,10 +134,12 @@ function DashboardContent() {
               </CanDeletePost>
               
               <CanViewAnalytics>
-                <Button variant="outline" className="w-full justify-start">
-                  <BarChart3 className="mr-2 h-4 w-4" />
-                  View Analytics
-                </Button>
+                <Link href="/analytics">
+                  <Button variant="outline" className="w-full justify-start">
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    View Analytics
+                  </Button>
+                </Link>
               </CanViewAnalytics>
               
               <CanManageUsers>
