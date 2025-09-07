@@ -8,11 +8,12 @@ import {
   ROLE_PERMISSIONS 
 } from '@/lib/auth-types'
 import { 
-  setAuthCookies, 
+  setAuthCookiesResponse, 
   createUserProfile, 
   assignUserRole, 
   logAuditEvent,
-  createAuthError 
+  createAuthError,
+  createUserSession
 } from '@/lib/auth-utils'
 
 export async function POST(request: NextRequest) {
@@ -78,9 +79,6 @@ export async function POST(request: NextRequest) {
       .eq('user_id', data.user.id)
       .single()
 
-    // Set authentication cookies
-    await setAuthCookies(data.session, sessionId)
-
     // Log successful login
     await logAuditEvent(
       data.user.id,
@@ -91,8 +89,8 @@ export async function POST(request: NextRequest) {
       request
     )
 
-    // Return user data (without sensitive information)
-    return NextResponse.json({
+    // Create response with cookies set
+    const response = NextResponse.json({
       user: {
         id: data.user.id,
         email: data.user.email,
@@ -104,6 +102,33 @@ export async function POST(request: NextRequest) {
         expires_at: data.session.expires_at
       }
     })
+
+    // Set cookies
+    response.cookies.set('sb-auth-token', data.session.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 // 1 hour
+    })
+
+    response.cookies.set('sb-refresh-token', data.session.refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 // 7 days
+    })
+
+    response.cookies.set('sb-session-id', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 // 30 days
+    })
+
+    return response
 
   } catch (error) {
     console.error('Login error:', error)
