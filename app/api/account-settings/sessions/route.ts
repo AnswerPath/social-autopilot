@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-utils';
 import { logAuditEvent } from '@/lib/auth-utils';
 import { AuthErrorType } from '@/lib/auth-types';
 import { createAuthError } from '@/lib/auth-utils';
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-}
 
 const RevokeSessionSchema = z.object({
   session_id: z.string().min(1, 'Session ID is required'),
