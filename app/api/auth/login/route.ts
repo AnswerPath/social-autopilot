@@ -15,42 +15,44 @@ import {
   createAuthError,
   createUserSession
 } from '@/lib/auth-utils'
+import { withRateLimit, clearRateLimit } from '@/lib/rate-limiting'
 
 export async function POST(request: NextRequest) {
-  try {
-    const body: LoginRequest = await request.json()
-    const { email, password } = body
+  return withRateLimit('loginAttempts')(request, async (req) => {
+    try {
+      const body: LoginRequest = await req.json()
+      const { email, password } = body
 
-    // Validate input
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Email and password are required') },
-        { status: 400 }
-      )
-    }
+      // Validate input
+      if (!email || !password) {
+        return NextResponse.json(
+          { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Email and password are required') },
+          { status: 400 }
+        )
+      }
 
-    // Attempt to sign in with Supabase
-    const { data, error } = await getSupabaseAdmin().auth.signInWithPassword({
-      email,
-      password
-    })
+      // Attempt to sign in with Supabase
+      const { data, error } = await getSupabaseAdmin().auth.signInWithPassword({
+        email,
+        password
+      })
 
-    if (error) {
-      // Log failed login attempt
-      await logAuditEvent(
-        'anonymous',
-        'login_failed',
-        'auth',
-        undefined,
-        { email, error: error.message },
-        request
-      )
+      if (error) {
+        // Log failed login attempt
+        await logAuditEvent(
+          'anonymous',
+          'login_failed',
+          'auth',
+          undefined,
+          { email, error: error.message },
+          req
+        )
 
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Invalid email or password') },
-        { status: 401 }
-      )
-    }
+        return NextResponse.json(
+          { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Invalid email or password') },
+          { status: 401 }
+        )
+      }
 
     if (!data.user || !data.session) {
       return NextResponse.json(
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
       .eq('user_id', data.user.id)
       .single()
 
-    const role = roleData?.role || UserRole.VIEWER
+    const role = (roleData?.role as UserRole) || UserRole.VIEWER
     const permissions = ROLE_PERMISSIONS[role]
 
     // Get user profile
@@ -79,6 +81,9 @@ export async function POST(request: NextRequest) {
       .eq('user_id', data.user.id)
       .single()
 
+    // Clear rate limit on successful login
+    clearRateLimit(req, 'loginAttempts')
+
     // Log successful login
     await logAuditEvent(
       data.user.id,
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
       'auth',
       undefined,
       { email, role },
-      request
+      req
     )
 
     // Create response with cookies set
@@ -137,5 +142,6 @@ export async function POST(request: NextRequest) {
       { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Internal server error') },
       { status: 500 }
     )
-  }
+    }
+  });
 }

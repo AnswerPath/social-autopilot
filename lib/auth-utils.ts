@@ -96,8 +96,21 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       return null
     }
 
-    // Update last activity
-    await updateSessionActivity(sessionId)
+    // Update last activity with enhanced security checks
+    try {
+      const { updateSessionActivity } = await import('@/lib/session-management')
+      const updateResult = await updateSessionActivity(sessionId, request)
+      
+      // Check for security alerts
+      if (updateResult.securityAlert) {
+        console.warn('Security alert detected:', updateResult.securityAlert)
+        // In production, you might want to send alerts or take additional security measures
+      }
+    } catch (error) {
+      console.error('Error updating session activity:', error)
+      // Fallback to basic activity update
+      await updateSessionActivity(sessionId)
+    }
 
     // Get user profile and role from database
     const { data: profile } = await getSupabaseAdmin()
@@ -165,31 +178,41 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
 }
 
 /**
- * Create a new session for a user
+ * Create a new session for a user (enhanced with security checks)
  */
 export async function createUserSession(
   userId: string, 
   session: any, 
   request: NextRequest
 ): Promise<string> {
-  const sessionId = generateSessionId()
-  const expiresAt = new Date(Date.now() + SESSION_CONFIG.sessionIdExpiry * 1000)
+  // Import the enhanced session management
+  const { createEnhancedSession } = await import('@/lib/session-management')
+  
+  try {
+    return await createEnhancedSession(userId, request)
+  } catch (error) {
+    console.error('Error creating enhanced session, falling back to basic session:', error)
+    
+    // Fallback to basic session creation
+    const sessionId = generateSessionId()
+    const expiresAt = new Date(Date.now() + SESSION_CONFIG.sessionIdExpiry * 1000)
 
-  const sessionInfo: Omit<SessionInfo, 'created_at'> = {
-    session_id: sessionId,
-    user_id: userId,
-    last_activity: new Date().toISOString(),
-    ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-    user_agent: request.headers.get('user-agent') || 'unknown',
-    is_active: true,
-    expires_at: expiresAt.toISOString()
+    const sessionInfo: Omit<SessionInfo, 'created_at'> = {
+      session_id: sessionId,
+      user_id: userId,
+      last_activity: new Date().toISOString(),
+      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+      user_agent: request.headers.get('user-agent') || 'unknown',
+      is_active: true,
+      expires_at: expiresAt.toISOString()
+    }
+
+    await getSupabaseAdmin()
+      .from('user_sessions')
+      .insert(sessionInfo)
+
+    return sessionId
   }
-
-  await getSupabaseAdmin()
-    .from('user_sessions')
-    .insert(sessionInfo)
-
-  return sessionId
 }
 
 /**

@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 // Validation schema for login form
 const loginSchema = z.object({
@@ -122,6 +123,15 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
               'Sign in'
             )}
           </Button>
+
+          <div className="text-center text-sm">
+            <Link 
+              href="/auth/reset-password"
+              className="text-blue-600 hover:text-blue-500 font-medium"
+            >
+              Forgot your password?
+            </Link>
+          </div>
 
           <div className="text-center text-sm">
             <span className="text-muted-foreground">Don't have an account? </span>
