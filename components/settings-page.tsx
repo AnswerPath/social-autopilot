@@ -7,7 +7,11 @@ import { TwitterApiSettings } from "./twitter-api-settings"
 import { GeneralSettings } from "./general-settings"
 import { NotificationSettings } from "./notification-settings"
 import { SecuritySettings } from "./security-settings"
-import { Settings, Twitter, Bell, Shield, User } from 'lucide-react'
+import { HybridSettings } from "./hybrid-settings"
+import { TokenManagement } from "./token-management"
+import { ErrorMonitoring } from "./error-monitoring"
+import { ComplianceManagement } from "./compliance-management"
+import { Settings, Twitter, Bell, Shield, User, Bot } from 'lucide-react'
 
 export function SettingsPage() {
   return (
@@ -20,8 +24,12 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="twitter" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="integrations" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="integrations" className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            Integrations
+          </TabsTrigger>
           <TabsTrigger value="twitter" className="flex items-center gap-2">
             <Twitter className="h-4 w-4" />
             Twitter API
@@ -40,6 +48,10 @@ export function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="integrations">
+          <HybridSettings userId="demo-user" />
+        </TabsContent>
+
         <TabsContent value="twitter">
           <TwitterApiSettings />
         </TabsContent>
@@ -53,7 +65,12 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="security">
-          <SecuritySettings />
+          <div className="space-y-6">
+            <SecuritySettings />
+            <TokenManagement userId="demo-user" />
+            <ErrorMonitoring />
+            <ComplianceManagement userId="demo-user" />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
