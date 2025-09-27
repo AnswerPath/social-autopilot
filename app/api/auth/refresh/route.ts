@@ -8,10 +8,8 @@ import {
   updateSessionActivity,
   getSessionDetails
 } from '@/lib/session-management';
-import { 
-  AuthErrorType,
-  createAuthError
-} from '@/lib/auth-utils';
+import { AuthErrorType } from '@/lib/auth-types';
+import { createAuthError } from '@/lib/auth-utils';
 import { withRateLimit } from '@/lib/rate-limiting';
 
 /**

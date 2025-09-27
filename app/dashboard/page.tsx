@@ -13,6 +13,7 @@ import {
 } from '@/components/auth/permission-gate'
 import { RoleManagement } from '@/components/auth/role-management'
 import { PermissionManagement } from '@/components/auth/permission-management'
+import { GranularPermissionManagement } from '@/components/auth/granular-permission-management'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -170,6 +171,13 @@ function DashboardContent() {
         <div className="mb-8">
           <PermissionManagement />
         </div>
+
+        {/* Granular Permission Management Section */}
+        <CanManageUsers>
+          <div className="mb-8">
+            <GranularPermissionManagement />
+          </div>
+        </CanManageUsers>
 
         {/* Permission Demo Section */}
         <Card>
