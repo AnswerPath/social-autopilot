@@ -14,6 +14,8 @@ import {
 import { RoleManagement } from '@/components/auth/role-management'
 import { PermissionManagement } from '@/components/auth/permission-management'
 import { GranularPermissionManagement } from '@/components/auth/granular-permission-management'
+import { ActivityLogsDashboard } from '@/components/auth/activity-logs-dashboard'
+import { TeamDashboard } from '@/components/auth/team-dashboard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -178,6 +180,18 @@ function DashboardContent() {
             <GranularPermissionManagement />
           </div>
         </CanManageUsers>
+
+        {/* Activity Logs Dashboard Section */}
+        <CanManageUsers>
+          <div className="mb-8">
+            <ActivityLogsDashboard />
+          </div>
+        </CanManageUsers>
+
+        {/* Team Collaboration Dashboard Section */}
+        <div className="mb-8">
+          <TeamDashboard />
+        </div>
 
         {/* Permission Demo Section */}
         <Card>

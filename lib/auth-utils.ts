@@ -429,7 +429,8 @@ export async function assignUserRole(userId: string, role: UserRole): Promise<vo
 }
 
 /**
- * Log an audit event
+ * Log an audit event (legacy function - use activity logging service instead)
+ * @deprecated Use logActivity from lib/activity-logging.ts instead
  */
 export async function logAuditEvent(
   userId: string,
@@ -440,6 +441,36 @@ export async function logAuditEvent(
   request?: NextRequest
 ): Promise<void> {
   try {
+    // Import the activity logging service
+    const { logActivity, ActivityCategory, ActivityLevel } = await import('@/lib/activity-logging');
+    
+    // Determine category based on resource type and action
+    let category = ActivityCategory.SYSTEM_ADMINISTRATION;
+    if (resourceType.includes('user') || action.includes('user')) {
+      category = ActivityCategory.USER_MANAGEMENT;
+    } else if (action.includes('auth') || action.includes('login') || action.includes('logout')) {
+      category = ActivityCategory.AUTHENTICATION;
+    } else if (action.includes('permission') || action.includes('role')) {
+      category = ActivityCategory.AUTHORIZATION;
+    } else if (action.includes('security') || action.includes('breach')) {
+      category = ActivityCategory.SECURITY;
+    }
+
+    // Log using the enhanced activity logging service
+    await logActivity(
+      userId,
+      action,
+      category,
+      ActivityLevel.INFO,
+      {
+        resourceType,
+        resourceId,
+        details,
+        request
+      }
+    );
+
+    // Also log to the legacy audit_logs table for backward compatibility
     const auditEntry: Omit<AuditLogEntry, 'id' | 'created_at'> = {
       user_id: userId,
       action,
