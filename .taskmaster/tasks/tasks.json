@@ -320,7 +320,7 @@
             "description": "Implement team-based access controls, user assignment, and content visibility features.",
             "dependencies": [],
             "details": "Create team/organization data model and management interfaces. Implement team member invitation and role assignment. Develop content sharing and visibility controls between team members. Create team activity dashboards.",
-            "status": "in-progress",
+            "status": "done",
             "testStrategy": ""
           },
           {
@@ -456,7 +456,7 @@
     ],
     "metadata": {
       "created": "2025-08-27T00:52:53.436Z",
-      "updated": "2025-09-28T23:29:37.732Z",
+      "updated": "2025-09-28T23:43:22.085Z",
       "description": "Tasks for master context"
     }
   }

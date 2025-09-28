@@ -9,7 +9,7 @@ import { withActivityLogging } from '@/lib/activity-middleware';
  * GET /api/teams
  * Get user's teams
  */
-export const GET = withActivityLogging(async (request: NextRequest) => {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser(request);
     if (!user) {
@@ -60,13 +60,13 @@ export const GET = withActivityLogging(async (request: NextRequest) => {
       { status: 500 }
     );
   }
-});
+}
 
 /**
  * POST /api/teams
  * Create a new team
  */
-export const POST = withRateLimit('general')(withActivityLogging(async (request: NextRequest) => {
+export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser(request);
     if (!user) {
@@ -112,4 +112,4 @@ export const POST = withRateLimit('general')(withActivityLogging(async (request:
       { status: 500 }
     );
   }
-}));
+}

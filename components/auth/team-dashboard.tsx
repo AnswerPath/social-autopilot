@@ -45,7 +45,7 @@ import {
   FileText,
   Image,
   BarChart3,
-  Template
+  FileTemplate
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -184,7 +184,7 @@ export function TeamDashboard() {
       case ContentType.CAMPAIGN:
         return <BarChart3 className="h-4 w-4" />;
       case ContentType.TEMPLATE:
-        return <Template className="h-4 w-4" />;
+        return <FileTemplate className="h-4 w-4" />;
       case ContentType.ANALYTICS:
         return <BarChart3 className="h-4 w-4" />;
       default:
