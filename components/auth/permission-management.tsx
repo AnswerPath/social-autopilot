@@ -70,11 +70,16 @@ export function PermissionManagement() {
     return 'Other';
   };
 
-  const groupedPermissions = permissionInfo ? 
-    Object.entries(permissionInfo.permissions.allPermissions).reduce((acc, [permission, description]) => {
-      const category = getPermissionCategory(permission as Permission);
+  const getPermissionDescription = (permission: Permission): string => {
+    // Convert permission enum to human-readable description
+    return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const groupedPermissions = permissionInfo && permissionInfo.userPermissions ? 
+    permissionInfo.userPermissions.reduce((acc, permission) => {
+      const category = getPermissionCategory(permission);
       if (!acc[category]) acc[category] = [];
-      acc[category].push({ permission: permission as Permission, description });
+      acc[category].push({ permission, description: getPermissionDescription(permission) });
       return acc;
     }, {} as Record<string, Array<{ permission: Permission; description: string }>>) : {};
 
@@ -135,21 +140,21 @@ export function PermissionManagement() {
             <div>
               <h4 className="font-medium mb-2">User Details</h4>
               <div className="space-y-1 text-sm">
-                <p><strong>Email:</strong> {permissionInfo?.user.email}</p>
-                <p><strong>Role:</strong> 
+                <p><strong>Email:</strong> {user?.email}</p>
+                <div className="flex items-center"><strong>Role:</strong> 
                   <Badge variant="secondary" className="ml-2">
-                    {permissionInfo?.user.role}
+                    {permissionInfo?.userRole}
                   </Badge>
-                </p>
-                <p><strong>Permissions:</strong> {permissionInfo?.user.permissions.length} total</p>
+                </div>
+                <p><strong>Permissions:</strong> {permissionInfo?.userPermissions?.length || 0} total</p>
               </div>
             </div>
             <div>
               <h4 className="font-medium mb-2">Role Permissions</h4>
               <div className="space-y-1 text-sm">
-                <p><strong>Role:</strong> {permissionInfo?.role.current}</p>
-                <p><strong>Available Roles:</strong> {permissionInfo?.role.available.join(', ')}</p>
-                <p><strong>Role Permissions:</strong> {permissionInfo?.permissions.rolePermissions.length} total</p>
+                <p><strong>Role:</strong> {permissionInfo?.userRole}</p>
+                <p><strong>Available Roles:</strong> ADMIN, EDITOR, VIEWER</p>
+                <p><strong>Role Permissions:</strong> {permissionInfo?.userPermissions?.length || 0} total</p>
               </div>
             </div>
           </div>
@@ -178,8 +183,8 @@ export function PermissionManagement() {
               <TabsContent key={category} value={category}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {permissions.map(({ permission, description }) => {
-                    const hasPermission = permissionInfo?.user.permissions.includes(permission);
-                    const isRolePermission = permissionInfo?.permissions.rolePermissions.includes(permission);
+                    const hasPermission = permissionInfo?.userPermissions?.includes(permission);
+                    const isRolePermission = permissionInfo?.userPermissions?.includes(permission);
                     
                     return (
                       <Card key={permission} className="relative">
@@ -252,7 +257,7 @@ export function PermissionManagement() {
                 <h4 className="font-medium mb-2">Selected Permissions</h4>
                 <div className="space-y-2">
                   {selectedPermissions.map((permission) => {
-                    const hasPermission = permissionInfo?.user.permissions.includes(permission);
+                    const hasPermission = permissionInfo?.userPermissions?.includes(permission);
                     return (
                       <div key={permission} className="flex items-center justify-between p-2 border rounded">
                         <span className="text-sm">{permission}</span>
