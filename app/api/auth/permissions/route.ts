@@ -4,7 +4,7 @@ import {
   createAuthError,
   logAuditEvent
 } from '@/lib/auth-utils';
-import { AuthErrorType, UserRole, Permission } from '@/lib/auth-types';
+import { AuthErrorType, UserRole, Permission, ROLE_PERMISSIONS } from '@/lib/auth-types';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { withRateLimit } from '@/lib/rate-limiting';
 
@@ -24,8 +24,11 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Only admins can view all permissions
-      if (user.role !== UserRole.ADMIN) {
+      // Check if user wants all permissions (admin only) or just their own permissions
+      const url = new URL(req.url);
+      const getAllPermissions = url.searchParams.get('all') === 'true';
+      
+      if (getAllPermissions && user.role !== UserRole.ADMIN) {
         return NextResponse.json(
           { error: createAuthError(AuthErrorType.INSUFFICIENT_PERMISSIONS, 'Admin access required') },
           { status: 403 }
@@ -50,17 +53,26 @@ export async function GET(request: NextRequest) {
         return acc;
       }, {} as Record<string, typeof permissions>);
 
-      return NextResponse.json({
-        permissions,
-        permissionsByCategory,
-        categories: Object.keys(permissionsByCategory).map(category => ({
-          name: category,
-          count: permissionsByCategory[category].length,
-          dangerousCount: permissionsByCategory[category].filter(p => p.isDangerous).length
-        })),
-        totalPermissions: permissions.length,
-        dangerousPermissions: permissions.filter(p => p.isDangerous).length
-      });
+      if (getAllPermissions) {
+        // Return all permissions for admin users
+        return NextResponse.json({
+          permissions,
+          permissionsByCategory,
+          categories: Object.keys(permissionsByCategory).map(category => ({
+            name: category,
+            count: permissionsByCategory[category].length,
+            dangerousCount: permissionsByCategory[category].filter(p => p.isDangerous).length
+          })),
+          totalPermissions: permissions.length,
+          dangerousPermissions: permissions.filter(p => p.isDangerous).length
+        });
+      } else {
+        // Return user's role and basic permission info
+        return NextResponse.json({
+          userRole: user.role,
+          userPermissions: ROLE_PERMISSIONS[user.role] || []
+        });
+      }
 
     } catch (error) {
       console.error('Get permissions error:', error);
