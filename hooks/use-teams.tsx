@@ -69,7 +69,9 @@ export function useTeams() {
     setError(null);
 
     try {
-      const response = await fetch('/api/teams');
+      const response = await fetch('/api/teams', {
+        credentials: 'include'
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch teams: ${response.statusText}`);
@@ -102,6 +104,7 @@ export function useTeams() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(teamData),
       });
 
@@ -405,7 +408,9 @@ export function useTeams() {
     }
 
     try {
-      const response = await fetch('/api/teams/invitations');
+      const response = await fetch('/api/teams/invitations', {
+        credentials: 'include'
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch invitations: ${response.statusText}`);
@@ -436,6 +441,7 @@ export function useTeams() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ invitationToken }),
       });
 
