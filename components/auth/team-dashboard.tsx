@@ -50,7 +50,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export function TeamDashboard() {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const {
     teams,
     currentTeam,
@@ -104,6 +104,16 @@ export function TeamDashboard() {
   const handleCreateTeam = async () => {
     if (!newTeam.name.trim()) {
       alert('Team name is required');
+      return;
+    }
+
+    if (isAuthLoading || loading) {
+      alert('Please wait for authentication to complete');
+      return;
+    }
+
+    if (!user) {
+      alert('User not authenticated. Please refresh the page and try again.');
       return;
     }
 
@@ -286,7 +296,7 @@ export function TeamDashboard() {
                 <Button variant="outline" onClick={() => setShowCreateTeam(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreateTeam} disabled={loading}>
+                <Button onClick={handleCreateTeam} disabled={loading || isAuthLoading}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
                   Create Team
                 </Button>

@@ -68,13 +68,22 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Debug: Log cookies
+    console.log('Team creation request cookies:', {
+      authToken: request.cookies.get('sb-auth-token')?.value ? 'present' : 'missing',
+      sessionId: request.cookies.get('sb-session-id')?.value ? 'present' : 'missing'
+    });
+    
     const user = await getCurrentUser(request);
     if (!user) {
+      console.log('No user found in team creation request');
       return NextResponse.json(
         { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
         { status: 401 }
       );
     }
+    
+    console.log('User found for team creation:', user.email);
 
     const teamData = await request.json();
 
