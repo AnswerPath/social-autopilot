@@ -47,6 +47,46 @@ jest.mock('next/navigation', () => ({
 // Mock fetch globally
 global.fetch = jest.fn()
 
+// Mock Next.js Request and Response
+global.Request = class MockRequest {
+  constructor(url, options = {}) {
+    Object.defineProperty(this, 'url', { value: url, writable: false })
+    this.method = options.method || 'GET'
+    this.headers = new Map(Object.entries(options.headers || {}))
+    this.body = options.body
+  }
+  
+  async json() {
+    return JSON.parse(this.body || '{}')
+  }
+}
+
+global.Response = class MockResponse {
+  constructor(body, options = {}) {
+    this.body = body
+    this.status = options.status || 200
+    this.ok = this.status >= 200 && this.status < 300
+    this.headers = new Map(Object.entries(options.headers || {}))
+  }
+  
+  async json() {
+    return typeof this.body === 'string' ? JSON.parse(this.body) : this.body
+  }
+  
+  static json(data, init = {}) {
+    return new MockResponse(JSON.stringify(data), {
+      status: init.status || 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init.headers || {})
+      }
+    })
+  }
+}
+
+// Mock NextResponse
+global.NextResponse = global.Response
+
 // Mock environment variables
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'

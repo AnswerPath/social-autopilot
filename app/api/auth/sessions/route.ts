@@ -12,6 +12,7 @@ import {
   cleanupExpiredSessions
 } from '@/lib/session-management';
 import { withRateLimit } from '@/lib/rate-limiting';
+import { logActivity, ActivityCategory, ActivityLevel } from '@/lib/activity-logging';
 
 /**
  * Get user sessions with enhanced details
@@ -52,6 +53,23 @@ export async function GET(request: NextRequest) {
       if (includeAnalytics) {
         response.analytics = await getSessionAnalytics(user.id);
       }
+
+      // Log session viewing
+      await logActivity(
+        user.id,
+        'view_sessions',
+        ActivityCategory.SESSION_MANAGEMENT,
+        ActivityLevel.INFO,
+        {
+          resourceType: 'sessions',
+          details: { 
+            totalSessions: sessions.length,
+            activeSessions: sessions.filter(s => s.is_active).length,
+            includedAnalytics: includeAnalytics
+          },
+          request: req
+        }
+      );
 
       return NextResponse.json(response);
 
@@ -102,6 +120,24 @@ export async function DELETE(request: NextRequest) {
           'user_requested'
         );
 
+        // Log bulk session deactivation
+        await logActivity(
+          user.id,
+          'deactivate_other_sessions',
+          ActivityCategory.SESSION_MANAGEMENT,
+          ActivityLevel.WARNING,
+          {
+            resourceType: 'sessions',
+            details: { 
+              deactivatedCount,
+              currentSessionId,
+              reason: 'user_requested'
+            },
+            request: req,
+            severityScore: 6
+          }
+        );
+
         return NextResponse.json({
           message: `Deactivated ${deactivatedCount} other sessions`,
           deactivatedCount
@@ -117,6 +153,25 @@ export async function DELETE(request: NextRequest) {
             { status: 500 }
           );
         }
+
+        // Log specific session deactivation
+        await logActivity(
+          user.id,
+          'deactivate_session',
+          ActivityCategory.SESSION_MANAGEMENT,
+          ActivityLevel.WARNING,
+          {
+            resourceType: 'session',
+            resourceId: sessionId,
+            details: { 
+              sessionId,
+              reason: 'user_requested',
+              isCurrent: sessionId === currentSessionId
+            },
+            request: req,
+            severityScore: 5
+          }
+        );
 
         return NextResponse.json({
           message: 'Session deactivated successfully'
@@ -161,6 +216,24 @@ export async function POST(request: NextRequest) {
 
       if (action === 'cleanup') {
         const cleanedCount = await cleanupExpiredSessions();
+        
+        // Log admin session cleanup
+        await logActivity(
+          user.id,
+          'cleanup_expired_sessions',
+          ActivityCategory.SYSTEM_ADMINISTRATION,
+          ActivityLevel.INFO,
+          {
+            resourceType: 'sessions',
+            details: { 
+              cleanedCount,
+              action: 'cleanup',
+              initiatedBy: user.id
+            },
+            request: req,
+            severityScore: 4
+          }
+        );
         
         return NextResponse.json({
           message: `Cleaned up ${cleanedCount} expired sessions`,

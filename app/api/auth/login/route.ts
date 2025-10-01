@@ -13,8 +13,10 @@ import {
   assignUserRole, 
   logAuditEvent,
   createAuthError,
-  createUserSession
+  createUserSession,
+  isDevMode
 } from '@/lib/auth-utils'
+import { createMockAuthCookies, mockLogin } from '@/lib/auth-dev'
 import { withRateLimit, clearRateLimit } from '@/lib/rate-limiting'
 
 export async function POST(request: NextRequest) {
@@ -29,6 +31,53 @@ export async function POST(request: NextRequest) {
           { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Email and password are required') },
           { status: 400 }
         )
+      }
+
+      // Handle development mode
+      if (isDevMode()) {
+        try {
+          const mockUser = await mockLogin(email, password)
+          
+          const response = NextResponse.json({
+            user: mockUser,
+            session: {
+              expires_at: Date.now() + 3600000
+            }
+          })
+
+          const mockToken = 'dev-token-' + Date.now()
+          const mockRefreshToken = 'dev-refresh-' + Date.now()
+          const mockSessionId = 'dev-session-' + Date.now()
+
+          response.cookies.set('sb-auth-token', mockToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 60 * 60 * 24 // 24 hours
+          })
+
+          response.cookies.set('sb-refresh-token', mockRefreshToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            path: '/'
+          })
+
+          response.cookies.set('sb-session-id', mockSessionId, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            path: '/'
+          })
+
+          return response
+        } catch (error) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Invalid credentials') },
+            { status: 401 }
+          )
+        }
       }
 
       // Attempt to sign in with Supabase

@@ -11,6 +11,7 @@ import {
 import { AuthErrorType } from '@/lib/auth-types';
 import { createAuthError } from '@/lib/auth-utils';
 import { withRateLimit } from '@/lib/rate-limiting';
+import { logAuthEvent, ActivityLevel } from '@/lib/activity-logging';
 
 /**
  * Enhanced token refresh endpoint with security checks
@@ -58,9 +59,31 @@ export async function POST(request: NextRequest) {
       const refreshResult = await refreshAccessToken(refreshToken);
       
       if (!refreshResult.success) {
+        // Log failed token refresh
+        if (tokenValidation.userId) {
+          await logAuthEvent(
+            tokenValidation.userId,
+            'token_refresh_failed',
+            false,
+            { reason: 'Token refresh failed', sessionId },
+            req
+          );
+        }
+        
         return NextResponse.json(
           { error: createAuthError(AuthErrorType.TOKEN_INVALID, 'Token refresh failed') },
           { status: 401 }
+        );
+      }
+      
+      // Log successful token refresh
+      if (tokenValidation.userId) {
+        await logAuthEvent(
+          tokenValidation.userId,
+          'token_refresh_success',
+          true,
+          { sessionId, tokenExpired: tokenValidation.isExpired },
+          req
         );
       }
 

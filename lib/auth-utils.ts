@@ -14,11 +14,28 @@ import {
   ResourcePermissionCheck,
   PermissionAuditEntry
 } from '@/lib/auth-types'
+import { getCurrentUserDev, createMockAuthCookies } from '@/lib/auth-dev'
 
 // Cookie names for authentication
 const AUTH_COOKIE_NAME = 'sb-auth-token'
 const REFRESH_COOKIE_NAME = 'sb-refresh-token'
 const SESSION_ID_COOKIE_NAME = 'sb-session-id'
+
+/**
+ * Development mode check
+ */
+export function isDevMode(): boolean {
+  // In development, check if we're using placeholder Supabase config
+  const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
+  const usingPlaceholder = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
+                          process.env.NEXT_PUBLIC_SUPABASE_URL === 'https://placeholder.supabase.co' ||
+                          process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')
+  
+  const isDevModeEnabled = isDevelopment && usingPlaceholder
+  // console.log('🔧 Development mode check:', { isDevelopment, usingPlaceholder, isDevModeEnabled, supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL })
+  
+  return isDevModeEnabled
+}
 
 // Session configuration
 const SESSION_CONFIG = {
@@ -56,6 +73,11 @@ function generateSessionId(): string {
  * Get the current authenticated user from the request with enhanced session management
  */
 export async function getCurrentUser(request: NextRequest): Promise<AuthUser | null> {
+  // Use development mode if Supabase is not properly configured
+  if (isDevMode()) {
+    return await getCurrentUserDev(request)
+  }
+
   try {
     const token = request.cookies.get(AUTH_COOKIE_NAME)?.value
     const sessionId = request.cookies.get(SESSION_ID_COOKIE_NAME)?.value

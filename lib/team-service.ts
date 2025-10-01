@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { isDevMode } from '@/lib/auth-utils';
 import { 
   Team, 
   TeamMember, 
@@ -31,6 +32,7 @@ import { NextRequest } from 'next/server';
 export class TeamService {
   private static instance: TeamService;
   private supabaseAdmin = getSupabaseAdmin();
+  private mockTeams: Team[] = []; // Store mock teams in development mode
 
   private constructor() {}
 
@@ -54,6 +56,27 @@ export class TeamService {
     request?: NextRequest
   ): Promise<{ success: boolean; team?: Team; error?: string }> {
     try {
+      // Handle development mode
+      if (isDevMode()) {
+        // console.log('🚀 Creating mock team in development mode')
+        const mockTeam: Team = {
+          id: `team-${Date.now()}`,
+          name: teamData.name,
+          slug: teamData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+          description: teamData.description || '',
+          industry: teamData.industry || '',
+          size_category: teamData.size_category || 'startup',
+          website_url: teamData.website_url || '',
+          settings: teamData.settings || {},
+          created_by: userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+        // Store the mock team
+        this.mockTeams.push(mockTeam)
+        return { success: true, team: mockTeam }
+      }
+
       // Generate unique slug
       const { data: slugData, error: slugError } = await this.supabaseAdmin
         .rpc('generate_team_slug', { team_name: teamData.name });
@@ -770,6 +793,14 @@ export class TeamService {
    */
   async getUserTeams(userId: string): Promise<{ success: boolean; teams?: Team[]; error?: string }> {
     try {
+      // Handle development mode
+      if (isDevMode()) {
+        // console.log('🚀 Getting mock teams in development mode')
+        // Return teams created by this user
+        const userTeams = this.mockTeams.filter(team => team.created_by === userId)
+        return { success: true, teams: userTeams }
+      }
+
       const { data: teams, error } = await this.supabaseAdmin
         .from('team_members')
         .select(`
