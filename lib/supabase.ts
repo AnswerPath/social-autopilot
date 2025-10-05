@@ -10,26 +10,39 @@ const isUsingPlaceholders = supabaseUrl === 'https://placeholder.supabase.co' ||
                            supabaseServiceKey === 'placeholder-service-key' || 
                            supabaseAnonKey === 'placeholder-anon-key'
 
+// Singleton pattern to prevent multiple client instances
+let supabaseAdminInstance: any = null;
+let supabaseClientInstance: any = null;
+
 // Function to get Supabase admin client (for server-side operations)
 export function getSupabaseAdmin() {
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  })
+  if (!supabaseAdminInstance) {
+    supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+  }
+  return supabaseAdminInstance;
 }
 
 // Server-side client with service role key for admin operations
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+export const supabaseAdmin = getSupabaseAdmin();
 
-// Client-side client for user operations
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Client-side client for user operations (singleton)
+export const supabase = (() => {
+  if (!supabaseClientInstance) {
+    supabaseClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+  }
+  return supabaseClientInstance;
+})();
 
 // Mock client for testing when Supabase is not configured
 export const createMockSupabaseClient = () => {

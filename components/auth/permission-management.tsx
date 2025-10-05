@@ -20,12 +20,15 @@ interface PermissionInfo {
   permissions: {
     userPermissions: Permission[];
     rolePermissions: Permission[];
-    allPermissions: Record<Permission, string>;
+    allPermissions?: Record<Permission, string>;
   };
   role: {
     current: UserRole;
     available: UserRole[];
   };
+  // Add the actual API response structure
+  userRole?: UserRole;
+  userPermissions?: Permission[];
 }
 
 export function PermissionManagement() {
@@ -75,8 +78,8 @@ export function PermissionManagement() {
     return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
-  const groupedPermissions = permissionInfo && permissionInfo.userPermissions ? 
-    permissionInfo.userPermissions.reduce((acc, permission) => {
+  const groupedPermissions = permissionInfo && (permissionInfo.userPermissions || permissionInfo.permissions?.userPermissions) ? 
+    (permissionInfo.userPermissions || permissionInfo.permissions?.userPermissions || []).reduce((acc, permission) => {
       const category = getPermissionCategory(permission);
       if (!acc[category]) acc[category] = [];
       acc[category].push({ permission, description: getPermissionDescription(permission) });
@@ -143,18 +146,18 @@ export function PermissionManagement() {
                 <p><strong>Email:</strong> {user?.email}</p>
                 <div className="flex items-center"><strong>Role:</strong> 
                   <Badge variant="secondary" className="ml-2">
-                    {permissionInfo?.userRole}
+                    {permissionInfo?.userRole || permissionInfo?.permissions?.userPermissions?.length || 0}
                   </Badge>
                 </div>
-                <p><strong>Permissions:</strong> {permissionInfo?.userPermissions?.length || 0} total</p>
+                <p><strong>Permissions:</strong> {(permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || []).length} total</p>
               </div>
             </div>
             <div>
               <h4 className="font-medium mb-2">Role Permissions</h4>
               <div className="space-y-1 text-sm">
-                <p><strong>Role:</strong> {permissionInfo?.userRole}</p>
+                <p><strong>Role:</strong> {permissionInfo?.userRole || 'Unknown'}</p>
                 <p><strong>Available Roles:</strong> ADMIN, EDITOR, VIEWER</p>
-                <p><strong>Role Permissions:</strong> {permissionInfo?.userPermissions?.length || 0} total</p>
+                <p><strong>Role Permissions:</strong> {(permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || []).length} total</p>
               </div>
             </div>
           </div>
@@ -183,8 +186,9 @@ export function PermissionManagement() {
               <TabsContent key={category} value={category}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {permissions.map(({ permission, description }) => {
-                    const hasPermission = permissionInfo?.userPermissions?.includes(permission);
-                    const isRolePermission = permissionInfo?.userPermissions?.includes(permission);
+                    const userPermissions = permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || [];
+                    const hasPermission = userPermissions.includes(permission);
+                    const isRolePermission = userPermissions.includes(permission);
                     
                     return (
                       <Card key={permission} className="relative">
@@ -257,7 +261,8 @@ export function PermissionManagement() {
                 <h4 className="font-medium mb-2">Selected Permissions</h4>
                 <div className="space-y-2">
                   {selectedPermissions.map((permission) => {
-                    const hasPermission = permissionInfo?.userPermissions?.includes(permission);
+                    const userPermissions = permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || [];
+                    const hasPermission = userPermissions.includes(permission);
                     return (
                       <div key={permission} className="flex items-center justify-between p-2 border rounded">
                         <span className="text-sm">{permission}</span>
