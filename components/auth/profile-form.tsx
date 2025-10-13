@@ -37,13 +37,7 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
   const [avatarLoading, setAvatarLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-    reset,
-    setValue,
-  } = useForm<ProfileFormData>({
+  const form = useForm<ProfileFormData>({
     resolver: zodResolver(ProfileFormSchema),
     defaultValues: {
       first_name: '',
@@ -54,6 +48,8 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
       email_notifications: true,
     },
   });
+
+  const { register, handleSubmit, formState: { errors, isSubmitting }, reset, setValue } = form;
 
   // Load profile data when component mounts
   useEffect(() => {
@@ -296,7 +292,7 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
             </div>
             <Switch
               id="email_notifications"
-              {...register('email_notifications')}
+              checked={form.watch('email_notifications')}
               onCheckedChange={(checked) => setValue('email_notifications', checked)}
             />
           </div>

@@ -77,6 +77,11 @@ export function TeamDashboard() {
   const [showInviteMember, setShowInviteMember] = useState(false);
   const [showShareContent, setShowShareContent] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [teamSettings, setTeamSettings] = useState({
+    description: '',
+    industry: '',
+    website_url: ''
+  });
 
   // Form states
   const [newTeam, setNewTeam] = useState<CreateTeamRequest>({
@@ -99,6 +104,17 @@ export function TeamDashboard() {
     permissions: {},
     is_public: false
   });
+
+  // Initialize team settings when currentTeam changes
+  React.useEffect(() => {
+    if (currentTeam) {
+      setTeamSettings({
+        description: currentTeam.description || '',
+        industry: currentTeam.industry || '',
+        website_url: currentTeam.website_url || ''
+      });
+    }
+  }, [currentTeam]);
 
   // Handle create team
   const handleCreateTeam = async () => {
@@ -150,6 +166,21 @@ export function TeamDashboard() {
     if (success) {
       setShowShareContent(false);
       setShareData({ content_type: ContentType.POST, content_id: '', permissions: {}, is_public: false });
+    }
+  };
+
+  // Handle update team settings
+  const handleUpdateTeamSettings = async () => {
+    if (!currentTeam) return;
+    
+    const success = await updateTeam(currentTeam.id, {
+      description: teamSettings.description,
+      industry: teamSettings.industry,
+      website_url: teamSettings.website_url
+    });
+    
+    if (success) {
+      alert('Team settings updated successfully');
     }
   };
 
@@ -683,7 +714,8 @@ export function TeamDashboard() {
                     <Label htmlFor="team-description">Description</Label>
                     <Textarea
                       id="team-description"
-                      value={currentTeam.description || ''}
+                      value={teamSettings.description}
+                      onChange={(e) => setTeamSettings({ ...teamSettings, description: e.target.value })}
                       placeholder="Describe your team"
                     />
                   </div>
@@ -691,7 +723,8 @@ export function TeamDashboard() {
                     <Label htmlFor="team-industry">Industry</Label>
                     <Input
                       id="team-industry"
-                      value={currentTeam.industry || ''}
+                      value={teamSettings.industry}
+                      onChange={(e) => setTeamSettings({ ...teamSettings, industry: e.target.value })}
                       placeholder="e.g., Technology, Marketing"
                     />
                   </div>
@@ -699,12 +732,13 @@ export function TeamDashboard() {
                     <Label htmlFor="team-website">Website</Label>
                     <Input
                       id="team-website"
-                      value={currentTeam.website_url || ''}
+                      value={teamSettings.website_url}
+                      onChange={(e) => setTeamSettings({ ...teamSettings, website_url: e.target.value })}
                       placeholder="https://example.com"
                     />
                   </div>
                   <div className="flex justify-end">
-                    <Button>
+                    <Button onClick={handleUpdateTeamSettings}>
                       <Settings className="h-4 w-4 mr-2" />
                       Save Changes
                     </Button>
