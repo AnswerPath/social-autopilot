@@ -6,10 +6,10 @@ export const runtime = 'nodejs'
 // GET /api/approval/[id] - Get approval details for a specific post
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const { id: postId } = await params
 
     // Get post with approval details
     const { data: post, error: postError } = await supabaseAdmin
@@ -47,10 +47,10 @@ export async function GET(
 // PATCH /api/approval/[id] - Update approval status or add comments
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id
+    const { id: postId } = await params
     const body = await request.json()
     const { status, comment, commentType, resolveComment } = body
 

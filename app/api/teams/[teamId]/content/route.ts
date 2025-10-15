@@ -12,7 +12,7 @@ import { ContentType } from '@/lib/team-types';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { teamId: string } }
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   return withActivityLogging(async (req: NextRequest) => {
     try {
@@ -24,7 +24,7 @@ export async function GET(
         );
       }
 
-      const { teamId } = params;
+      const { teamId } = await params;
       
       // Check if user is a member of the team
       const hasPermission = await teamService.checkTeamPermission(teamId, user.id, 'canShareContent');
@@ -66,7 +66,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { teamId: string } }
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
     try {
@@ -78,7 +78,7 @@ export async function POST(
         );
       }
 
-      const { teamId } = params;
+      const { teamId } = await params;
       const contentData = await req.json();
 
       // Validate required fields

@@ -86,7 +86,7 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError]);
+  }, [user, setLoading, setError]);
 
   // Create a new team
   const createTeam = useCallback(async (teamData: CreateTeamRequest): Promise<boolean> => {
@@ -131,11 +131,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError]);
+  }, [user, setLoading, setError]);
 
   // Switch to a different team
   const switchTeam = useCallback(async (teamId: string): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -174,11 +174,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError]);
+  }, [user, setLoading, setError]);
 
   // Update team
   const updateTeam = useCallback(async (teamId: string, updateData: UpdateTeamRequest): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -220,11 +220,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError]);
+  }, [user, setLoading, setError]);
 
   // Delete team
   const deleteTeam = useCallback(async (teamId: string): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -258,11 +258,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError]);
+  }, [user, setLoading, setError]);
 
   // Fetch team members
   const fetchTeamMembers = useCallback(async (teamId: string, filters?: TeamMemberFilters) => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return;
     }
@@ -288,11 +288,11 @@ export function useTeams() {
       setError(err.message || 'Failed to fetch team members.');
       console.error('Error fetching team members:', err);
     }
-  }, [user, user, setError]);
+  }, [user, setError]);
 
   // Invite member to team
   const inviteMember = useCallback(async (teamId: string, invitationData: InviteMemberRequest): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -326,11 +326,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError, fetchTeamMembers]);
+  }, [user, setLoading, setError, fetchTeamMembers]);
 
   // Update member role
   const updateMemberRole = useCallback(async (teamId: string, userId: string, roleData: UpdateMemberRoleRequest): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -364,11 +364,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError, fetchTeamMembers]);
+  }, [user, setLoading, setError, fetchTeamMembers]);
 
   // Remove member from team
   const removeMember = useCallback(async (teamId: string, userId: string): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -398,11 +398,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError, fetchTeamMembers]);
+  }, [user, setLoading, setError, fetchTeamMembers]);
 
   // Fetch team invitations
   const fetchTeamInvitations = useCallback(async () => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return;
     }
@@ -423,11 +423,11 @@ export function useTeams() {
       setError(err.message || 'Failed to fetch invitations.');
       console.error('Error fetching invitations:', err);
     }
-  }, [user, user, setError]);
+  }, [user, setError]);
 
   // Accept team invitation
   const acceptInvitation = useCallback(async (invitationToken: string): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }

@@ -3,9 +3,9 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
 
-export async function PATCH(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id
+    const { id } = await params
     const body = await _request.json()
     const update: any = {}
     
@@ -48,9 +48,9 @@ export async function PATCH(_request: NextRequest, { params }: { params: { id: s
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id
+    const { id } = await params
     const { error } = await supabaseAdmin
       .from('scheduled_posts')
       .delete()

@@ -11,7 +11,7 @@ import { withActivityLogging } from '@/lib/activity-middleware';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { teamId: string } }
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   return withActivityLogging(async (req: NextRequest) => {
     try {
@@ -23,7 +23,7 @@ export async function GET(
         );
       }
 
-      const { teamId } = params;
+      const { teamId } = await params;
       const result = await teamService.getTeam(teamId);
 
       if (!result.success) {
@@ -66,7 +66,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { teamId: string } }
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
     try {
@@ -78,7 +78,7 @@ export async function PUT(
         );
       }
 
-      const { teamId } = params;
+      const { teamId } = await params;
       const updateData = await req.json();
 
       const result = await teamService.updateTeam(teamId, user.id, updateData, req);
@@ -108,7 +108,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { teamId: string } }
+  { params }: { params: Promise<{ teamId: string }> }
 ) {
   return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
     try {
@@ -120,7 +120,7 @@ export async function DELETE(
         );
       }
 
-      const { teamId } = params;
+      const { teamId } = await params;
       const result = await teamService.deleteTeam(teamId, user.id, req);
 
       if (!result.success) {
