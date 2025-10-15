@@ -135,7 +135,7 @@ ENABLE_2FA=true
 
 ### 2. Securing Environment Variables
 
-**Never commit `.env` files to version control**
+#### Never commit `.env` files to version control
 
 For hosting platforms, set environment variables in their dashboard:
 
@@ -175,7 +175,7 @@ Store in `/etc/environment` or use a secrets manager like:
 
 ### 2. Run Database Migrations
 
-**Option A: Using Supabase CLI**
+#### Option A: Using Supabase CLI
 ```bash
 # Install Supabase CLI
 npm install -g supabase
@@ -190,7 +190,7 @@ supabase link --project-ref your-project-ref
 supabase db push
 ```
 
-**Option B: Manual SQL Execution**
+#### Option B: Manual SQL Execution
 ```bash
 # Connect to your database
 psql "postgresql://[user]:[password]@[host]:5432/postgres"
@@ -473,7 +473,7 @@ curl https://your-domain.com/api/health/db
 
 Add these DNS records:
 
-```
+```text
 Type    Name    Value                   TTL
 A       @       your-server-ip          300
 A       www     your-server-ip          300
@@ -845,5 +845,5 @@ After deployment, verify:
 
 ---
 
-**Need deployment help?** Contact DevOps support at devops@example.com
+**Need deployment help?** Contact DevOps support at [devops@example.com](mailto:devops@example.com)
 

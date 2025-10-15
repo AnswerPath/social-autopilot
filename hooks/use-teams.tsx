@@ -471,11 +471,11 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError, fetchTeamInvitations]);
+  }, [user, setLoading, setError, fetchTeamInvitations]);
 
   // Fetch team shared content
   const fetchTeamContent = useCallback(async (teamId: string, contentType?: ContentType) => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return;
     }
@@ -497,11 +497,11 @@ export function useTeams() {
       setError(err.message || 'Failed to fetch team content.');
       console.error('Error fetching team content:', err);
     }
-  }, [user, user, setError]);
+  }, [user, setError]);
 
   // Share content with team
   const shareContent = useCallback(async (teamId: string, contentData: ShareContentRequest): Promise<boolean> => {
-    if (!user || !user) {
+    if (!user) {
       setError('User not authenticated.');
       return false;
     }
@@ -535,15 +535,15 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, user, setLoading, setError, fetchTeamContent]);
+  }, [user, setLoading, setError, fetchTeamContent]);
 
   // Load initial data
   useEffect(() => {
-    if (user && user) {
+    if (user) {
       fetchUserTeams();
       fetchTeamInvitations();
     }
-  }, [user, user, fetchUserTeams, fetchTeamInvitations]);
+  }, [user, fetchUserTeams, fetchTeamInvitations]);
 
   return {
     ...state,
@@ -561,7 +561,6 @@ export function useTeams() {
     acceptInvitation,
     fetchTeamContent,
     shareContent,
-    user,
     user
   };
 }

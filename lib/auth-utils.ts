@@ -14,7 +14,7 @@ import {
   ResourcePermissionCheck,
   PermissionAuditEntry
 } from '@/lib/auth-types'
-import { getCurrentUserDev, createMockAuthCookies } from '@/lib/auth-dev'
+import { getCurrentUserDev } from '@/lib/auth-dev'
 
 // Cookie names for authentication
 const AUTH_COOKIE_NAME = 'sb-auth-token'
@@ -63,10 +63,11 @@ interface SessionInfo {
 }
 
 /**
- * Generate a unique session ID
+ * Generate a unique session ID using cryptographically strong random values
  */
 function generateSessionId(): string {
-  return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  // Use crypto.randomUUID() for cryptographically strong session IDs
+  return `sess_${crypto.randomUUID()}`
 }
 
 /**
@@ -120,8 +121,8 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
 
     // Update last activity with enhanced security checks
     try {
-      const { updateSessionActivity } = await import('@/lib/session-management')
-      const updateResult = await updateSessionActivity(sessionId, request)
+      const { updateSessionActivity: updateSessionActivityEnhanced } = await import('@/lib/session-management')
+      const updateResult = await updateSessionActivityEnhanced(sessionId, request)
       
       // Check for security alerts
       if (updateResult.securityAlert) {
@@ -260,7 +261,10 @@ async function updateSessionTokens(
   await getSupabaseAdmin()
     .from('user_sessions')
     .update({ 
-      last_activity: new Date().toISOString() 
+      last_activity: new Date().toISOString(),
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      updated_at: new Date().toISOString()
     })
     .eq('session_id', sessionId)
 }
@@ -703,7 +707,7 @@ export function getRolePermissions(role: UserRole): Permission[] {
  * Get permission descriptions for UI display
  */
 export function getPermissionDescription(permission: Permission): string {
-  const descriptions: Record<Permission, string> = {
+  const descriptions: Partial<Record<Permission, string>> = {
     [Permission.CREATE_POST]: 'Create new posts',
     [Permission.EDIT_POST]: 'Edit existing posts',
     [Permission.DELETE_POST]: 'Delete posts',

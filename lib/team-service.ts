@@ -33,6 +33,7 @@ export class TeamService {
   private static instance: TeamService;
   private supabaseAdmin = getSupabaseAdmin();
   private mockTeams: Team[] = []; // Store mock teams in development mode
+  private mockInvitations: TeamInvitation[] = []; // Store mock invitations in development mode
 
   private constructor() {}
 
@@ -267,12 +268,29 @@ export class TeamService {
     filters: TeamMemberFilters = {}
   ): Promise<{ success: boolean; members?: TeamMember[]; error?: string }> {
     try {
+      // Handle development mode
+      if (isDevMode()) {
+        console.log('🔧 Development mode: Returning mock team members for team', teamId);
+        // Return mock member (the creator)
+        const mockTeam = this.mockTeams.find(t => t.id === teamId);
+        if (mockTeam) {
+          const mockMember: TeamMember = {
+            id: `member-${Date.now()}`,
+            team_id: teamId,
+            user_id: mockTeam.created_by,
+            role: TeamRole.OWNER,
+            permissions: {},
+            status: TeamMemberStatus.ACTIVE,
+            joined_at: mockTeam.created_at
+          };
+          return { success: true, members: [mockMember] };
+        }
+        return { success: true, members: [] };
+      }
+
       let query = this.supabaseAdmin
         .from('team_members')
-        .select(`
-          *,
-          user:user_profiles!team_members_user_id_fkey(display_name, avatar_url, email)
-        `)
+        .select('*')
         .eq('team_id', teamId);
 
       // Apply filters
@@ -331,8 +349,7 @@ export class TeamService {
         })
         .select(`
           *,
-          team:teams(name, slug),
-          inviter:user_profiles!team_invitations_invited_by_fkey(display_name, avatar_url)
+          team:teams(name, slug)
         `)
         .single();
 
@@ -466,10 +483,7 @@ export class TeamService {
         })
         .eq('team_id', teamId)
         .eq('user_id', targetUserId)
-        .select(`
-          *,
-          user:user_profiles!team_members_user_id_fkey(display_name, avatar_url, email)
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
@@ -579,10 +593,7 @@ export class TeamService {
           is_public: contentData.is_public || false,
           expires_at: contentData.expires_at
         })
-        .select(`
-          *,
-          sharer:user_profiles!team_content_sharing_shared_by_fkey(display_name, avatar_url)
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
@@ -623,10 +634,7 @@ export class TeamService {
     try {
       let query = this.supabaseAdmin
         .from('team_content_sharing')
-        .select(`
-          *,
-          sharer:user_profiles!team_content_sharing_shared_by_fkey(display_name, avatar_url)
-        `)
+        .select('*')
         .eq('team_id', teamId);
 
       if (contentType) {
@@ -825,12 +833,24 @@ export class TeamService {
    */
   async getUserInvitations(email: string): Promise<{ success: boolean; invitations?: TeamInvitation[]; error?: string }> {
     try {
+      // Handle development mode
+      if (isDevMode()) {
+        console.log('🔧 Development mode: Returning mock invitations');
+        return { 
+          success: true, 
+          invitations: this.mockInvitations.filter(inv => 
+            inv.email === email && 
+            inv.status === InvitationStatus.PENDING &&
+            new Date(inv.expires_at) > new Date()
+          ) 
+        };
+      }
+
       const { data: invitations, error } = await this.supabaseAdmin
         .from('team_invitations')
         .select(`
           *,
-          team:teams(name, slug, avatar_url),
-          inviter:user_profiles!team_invitations_invited_by_fkey(display_name, avatar_url)
+          team:teams(name, slug, avatar_url)
         `)
         .eq('email', email)
         .eq('status', InvitationStatus.PENDING)

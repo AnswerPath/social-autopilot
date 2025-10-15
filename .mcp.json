@@ -9,15 +9,19 @@
 				"task-master-ai"
 			],
 			"env": {
-				"ANTHROPIC_API_KEY": "YOUR_ANTHROPIC_API_KEY_HERE",
-				"PERPLEXITY_API_KEY": "YOUR_PERPLEXITY_API_KEY_HERE",
-				"OPENAI_API_KEY": "YOUR_OPENAI_KEY_HERE",
-				"GOOGLE_API_KEY": "YOUR_GOOGLE_KEY_HERE",
-				"XAI_API_KEY": "YOUR_XAI_KEY_HERE",
-				"OPENROUTER_API_KEY": "YOUR_OPENROUTER_KEY_HERE",
-				"MISTRAL_API_KEY": "YOUR_MISTRAL_KEY_HERE",
-				"AZURE_OPENAI_API_KEY": "YOUR_AZURE_KEY_HERE",
-				"OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY_HERE"
+				"ANTHROPIC_API_KEY": "your_anthropic_api_key_here",
+				"PERPLEXITY_API_KEY": "your_perplexity_api_key_here",
+				"OPENAI_API_KEY": "your_openai_api_key_here",
+				"GOOGLE_API_KEY": "your_google_api_key_here",
+				"XAI_API_KEY": "your_xai_api_key_here",
+				"OPENROUTER_API_KEY": "your_openrouter_api_key_here",
+				"MISTRAL_API_KEY": "your_mistral_api_key_here",
+				"AZURE_OPENAI_API_KEY": "your_azure_openai_api_key_here",
+				"AZURE_OPENAI_ENDPOINT": "https://your-endpoint.openai.azure.com/",
+				"OLLAMA_API_KEY": "your_ollama_api_key_here",
+				"OLLAMA_BASE_URL": "http://localhost:11434/api",
+				"BEDROCK_API_KEY": "your_bedrock_api_key_here",
+				"BEDROCK_BASE_URL": "https://bedrock.us-east-1.amazonaws.com"
 			}
 		}
 	}

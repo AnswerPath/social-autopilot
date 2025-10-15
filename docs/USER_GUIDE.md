@@ -135,7 +135,7 @@ Your account has been assigned one of three roles, each with different capabilit
 
 Control how and when you receive notifications:
 
-**Email Notifications**
+#### Email Notifications
 - **Email Notifications**: Master toggle for all email notifications
 - **Push Notifications**: Browser notifications when logged in
 - **Mention Notifications**: When someone mentions you
@@ -152,20 +152,20 @@ Control how and when you receive notifications:
 
 Enhance your account security:
 
-**Two-Factor Authentication (2FA)**
+#### Two-Factor Authentication (2FA)
 - Enable 2FA for an extra layer of security
 - You'll need to enter a code from your phone when logging in
 - Highly recommended for Admin accounts
 
-**Login Notifications**
+#### Login Notifications
 - Get notified when someone logs into your account
 - Alerts for new devices or locations
 
-**Session Timeout**
+#### Session Timeout
 - Configure how long you stay logged in when inactive
 - Options: 15, 30, 60, 120 minutes, or never
 
-**Password for Sensitive Actions**
+#### Password for Sensitive Actions
 - Require your password when performing sensitive operations
 - Recommended to keep enabled
 
@@ -397,5 +397,5 @@ Within a team, you may have one of these roles:
 
 ---
 
-**Need more help?** Contact your administrator or reach out to support at support@example.com.
+**Need more help?** Contact your administrator or reach out to support at [support@example.com](mailto:support@example.com).
 

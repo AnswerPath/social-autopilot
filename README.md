@@ -211,7 +211,7 @@ The application is built with a modern, scalable architecture:
 
 ### Key Components
 
-```
+```text
 social-autopilot/
 ├── app/                      # Next.js App Router
 │   ├── api/                  # API routes

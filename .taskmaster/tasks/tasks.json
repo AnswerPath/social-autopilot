@@ -345,7 +345,90 @@
           16
         ],
         "status": "pending",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Rich Text Editor with X-Specific Formatting",
+            "description": "Develop a rich text editor component that supports X's specific formatting options including bold, italic, lists, and character limitations.",
+            "dependencies": [],
+            "details": "Create a custom rich text editor component using a library like Draft.js or Slate. Implement X-specific formatting options including bold, italic, bullet points, and numbered lists. Add support for @mentions and #hashtags with proper styling. Ensure the editor handles line breaks and URLs according to X's formatting rules. Create reusable formatting toolbar with intuitive icons.",
+            "status": "pending",
+            "testStrategy": "Unit tests for each formatting feature. Integration tests for editor state management. Cross-browser compatibility testing. Keyboard shortcut testing for formatting actions."
+          },
+          {
+            "id": 2,
+            "title": "Build Media Upload and Validation System",
+            "description": "Create functionality for uploading, previewing, and validating images and videos with proper file type and size restrictions.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement drag-and-drop and file picker interfaces for media uploads. Add client-side validation for file types (JPG, PNG, GIF, MP4) and size limits according to X's specifications. Create thumbnail generation for uploaded media. Implement progress indicators for uploads. Add ability to remove or replace uploaded media. Handle multiple media attachments with proper UI for arrangement.",
+            "status": "pending",
+            "testStrategy": "Unit tests for validation logic. Integration tests for upload process. Performance testing with large files and slow connections. Error handling tests for invalid file types and sizes."
+          },
+          {
+            "id": 3,
+            "title": "Develop Character Counter with Real-Time Validation",
+            "description": "Create a character counter that enforces X's character limits with real-time validation and visual feedback.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement real-time character counting that updates as the user types. Create visual indicators showing remaining characters with color changes as limit approaches. Account for X's URL shortening in character count calculations. Handle special cases like emoji (counting as multiple characters) and CJK characters. Provide clear validation messages when limits are exceeded. Prevent submission of posts exceeding character limits.",
+            "status": "pending",
+            "testStrategy": "Unit tests for character counting logic including edge cases. Integration tests with the text editor. Validation tests with various content types including URLs and emoji."
+          },
+          {
+            "id": 4,
+            "title": "Implement Draft Saving with Auto-Save Functionality",
+            "description": "Create a system for automatically saving post drafts and allowing users to manage multiple saved drafts.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Implement auto-save functionality that triggers after user inactivity or at regular intervals. Create local storage solution for offline draft saving. Develop server-side storage for authenticated users with draft synchronization. Build draft management interface showing recent drafts with timestamps. Add ability to delete or continue editing saved drafts. Implement conflict resolution for drafts edited on multiple devices.",
+            "status": "pending",
+            "testStrategy": "Unit tests for auto-save timing and triggers. Integration tests for draft storage and retrieval. Offline functionality testing. Performance testing for large numbers of drafts."
+          },
+          {
+            "id": 5,
+            "title": "Create Post Preview Functionality",
+            "description": "Develop a preview mode that shows how posts will appear on X's platform with accurate rendering of formatting and media.",
+            "dependencies": [
+              1,
+              2,
+              3
+            ],
+            "details": "Create toggle between composition and preview modes. Implement accurate rendering of text formatting, @mentions, #hashtags, and URLs as they would appear on X. Show media attachments with proper dimensions and layout in preview. Simulate different device views in preview mode. Add ability to switch between light and dark mode previews. Ensure preview accurately reflects character count and truncation behavior.",
+            "status": "pending",
+            "testStrategy": "Visual regression testing comparing preview to actual X posts. Cross-device testing for preview accuracy. User acceptance testing for preview fidelity."
+          },
+          {
+            "id": 6,
+            "title": "Build Emoji Picker and Hashtag Suggestion System",
+            "description": "Implement an emoji selector and intelligent hashtag suggestion system to enhance post composition.",
+            "dependencies": [
+              1
+            ],
+            "details": "Integrate emoji picker with categories, search, and recently used sections. Implement hashtag suggestions based on post content and trending topics. Create autocomplete functionality for @mentions pulling from user's connections. Develop intelligent suggestion algorithms that improve based on user behavior. Ensure proper insertion of selected emoji and hashtags into the text editor. Optimize suggestion performance for minimal typing latency.",
+            "status": "pending",
+            "testStrategy": "Unit tests for suggestion algorithms. Performance testing for suggestion response time. User acceptance testing for suggestion relevance. Accessibility testing for keyboard navigation of suggestions."
+          },
+          {
+            "id": 7,
+            "title": "Implement Responsive Design for Mobile and Desktop",
+            "description": "Ensure the post composer works seamlessly across all device sizes with optimized layouts for mobile, tablet, and desktop.",
+            "dependencies": [
+              1,
+              2,
+              5,
+              6
+            ],
+            "details": "Create responsive layouts that adapt to different screen sizes and orientations. Optimize touch interactions for mobile devices including custom touch keyboards. Implement collapsible UI elements to maximize composition space on small screens. Ensure media upload and preview work properly on mobile devices. Test and optimize for various mobile browsers and operating systems. Create device-specific UI adjustments for optimal user experience.",
+            "status": "pending",
+            "testStrategy": "Cross-device testing on various physical devices. Responsive design testing across breakpoints. Touch interaction testing on mobile and tablet. Performance testing on lower-end mobile devices."
+          }
+        ]
       },
       {
         "id": 19,

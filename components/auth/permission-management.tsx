@@ -78,8 +78,9 @@ export function PermissionManagement() {
     return permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
-  const groupedPermissions = permissionInfo && (permissionInfo.userPermissions || permissionInfo.permissions?.userPermissions) ? 
-    (permissionInfo.userPermissions || permissionInfo.permissions?.userPermissions || []).reduce((acc, permission) => {
+  const userPermissions = permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || [];
+  const groupedPermissions = userPermissions.length > 0 ? 
+    userPermissions.reduce((acc, permission) => {
       const category = getPermissionCategory(permission);
       if (!acc[category]) acc[category] = [];
       acc[category].push({ permission, description: getPermissionDescription(permission) });
@@ -149,7 +150,7 @@ export function PermissionManagement() {
                     {permissionInfo?.userRole || permissionInfo?.permissions?.userPermissions?.length || 0}
                   </Badge>
                 </div>
-                <p><strong>Permissions:</strong> {(permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || []).length} total</p>
+                <p><strong>Permissions:</strong> {userPermissions.length} total</p>
               </div>
             </div>
             <div>
@@ -157,7 +158,7 @@ export function PermissionManagement() {
               <div className="space-y-1 text-sm">
                 <p><strong>Role:</strong> {permissionInfo?.userRole || 'Unknown'}</p>
                 <p><strong>Available Roles:</strong> ADMIN, EDITOR, VIEWER</p>
-                <p><strong>Role Permissions:</strong> {(permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || []).length} total</p>
+                <p><strong>Role Permissions:</strong> {userPermissions.length} total</p>
               </div>
             </div>
           </div>
@@ -186,7 +187,6 @@ export function PermissionManagement() {
               <TabsContent key={category} value={category}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {permissions.map(({ permission, description }) => {
-                    const userPermissions = permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || [];
                     const hasPermission = userPermissions.includes(permission);
                     const isRolePermission = userPermissions.includes(permission);
                     
@@ -261,7 +261,6 @@ export function PermissionManagement() {
                 <h4 className="font-medium mb-2">Selected Permissions</h4>
                 <div className="space-y-2">
                   {selectedPermissions.map((permission) => {
-                    const userPermissions = permissionInfo?.userPermissions || permissionInfo?.permissions?.userPermissions || [];
                     const hasPermission = userPermissions.includes(permission);
                     return (
                       <div key={permission} className="flex items-center justify-between p-2 border rounded">

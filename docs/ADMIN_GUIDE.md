@@ -154,7 +154,7 @@ To reactivate:
 
 ### Understanding the Role Hierarchy
 
-```
+```text
 ADMIN (Highest Privileges)
   ├─ Full system access
   ├─ User and role management

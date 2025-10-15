@@ -68,9 +68,23 @@ export async function GET(request: NextRequest) {
         });
       } else {
         // Return user's role and basic permission info
+        const userPermissions = ROLE_PERMISSIONS[user.role] || [];
+        
         return NextResponse.json({
           userRole: user.role,
-          userPermissions: ROLE_PERMISSIONS[user.role] || []
+          userPermissions,
+          permissions: {
+            userPermissions,
+            rolePermissions: userPermissions,
+            allPermissions: Object.values(Permission).reduce((acc, permission) => {
+              acc[permission] = permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              return acc;
+            }, {} as Record<Permission, string>)
+          },
+          role: {
+            current: user.role,
+            available: Object.values(UserRole)
+          }
         });
       }
 
