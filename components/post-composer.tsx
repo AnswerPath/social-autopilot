@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
+import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -25,7 +25,6 @@ export function PostComposer({ onClose }: PostComposerProps) {
   const [uploadedMedia, setUploadedMedia] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
 
-  const characterCount = content.length
   const maxCharacters = 280
 
   const handleSubmit = async () => {
@@ -105,33 +104,26 @@ export function PostComposer({ onClose }: PostComposerProps) {
           {/* Post Content */}
           <div className="space-y-2">
             <Label htmlFor="content">Post Content</Label>
-            <Textarea
-              id="content"
+            <RichTextEditor
               placeholder="What's happening?"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="min-h-[120px] resize-none"
-              maxLength={maxCharacters}
+              onContentChange={(text) => setContent(text)}
+              maxCharacters={maxCharacters}
+              initialContent={content}
             />
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/*,video/*"
-                  onChange={handleMediaUpload}
-                  style={{ display: 'none' }}
-                  id="media-upload"
-                />
-                <Button variant="outline" size="sm" asChild disabled={isUploading}>
-                  <label htmlFor="media-upload">
-                    <Image className="h-4 w-4 mr-2" />
-                    {isUploading ? 'Uploading...' : 'Add Media'}
-                  </label>
-                </Button>
-              </div>
-              <Badge variant={characterCount > maxCharacters * 0.9 ? "destructive" : "secondary"}>
-                {characterCount}/{maxCharacters}
-              </Badge>
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleMediaUpload}
+                style={{ display: 'none' }}
+                id="media-upload"
+              />
+              <Button variant="outline" size="sm" asChild disabled={isUploading}>
+                <label htmlFor="media-upload">
+                  <Image className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Uploading...' : 'Add Media'}
+                </label>
+              </Button>
             </div>
           </div>
 
