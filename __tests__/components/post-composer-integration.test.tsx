@@ -40,7 +40,7 @@ describe('PostComposer Integration', () => {
     render(<PostComposer onClose={mockOnClose} />)
     
     // Check that other elements are still present
-    expect(screen.getByText('Add Media')).toBeInTheDocument()
+    expect(screen.getByText('Click to upload')).toBeInTheDocument()
     expect(screen.getByText('When to Post')).toBeInTheDocument()
     expect(screen.getByText('Require Approval')).toBeInTheDocument()
   })

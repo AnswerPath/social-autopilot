@@ -27,6 +27,7 @@ export function PostComposer({ onClose }: PostComposerProps) {
   const [isPosting, setIsPosting] = useState(false)
   const [mediaAttachments, setMediaAttachments] = useState<MediaAttachment[]>([])
   const [uploadedMediaIds, setUploadedMediaIds] = useState<string[]>([])
+  const [isContentValid, setIsContentValid] = useState(true)
   const { toast } = useToast()
 
   const maxCharacters = 280
@@ -115,6 +116,7 @@ export function PostComposer({ onClose }: PostComposerProps) {
               onContentChange={(text) => setContent(text)}
               maxCharacters={maxCharacters}
               initialContent={content}
+              onValidationChange={setIsContentValid}
             />
           </div>
 
@@ -200,7 +202,7 @@ export function PostComposer({ onClose }: PostComposerProps) {
                 Submit for Approval
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isPosting || !content.trim()}>
+              <Button onClick={handleSubmit} disabled={isPosting || !content.trim() || !isContentValid}>
                 {postType === "now" ? (
                   <>
                     <Send className="h-4 w-4 mr-2" />

@@ -26,6 +26,7 @@ import { $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
 import { Bold, Italic, List, ListOrdered, Link } from 'lucide-react'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
+import { calculateXCharacterCount, getCharacterCountStatus } from '@/lib/x-character-counter'
 
 interface RichTextEditorProps {
   placeholder?: string
@@ -33,15 +34,18 @@ interface RichTextEditorProps {
   maxCharacters?: number
   initialContent?: string
   className?: string
+  onValidationChange?: (isValid: boolean) => void
 }
 
 // Custom plugin for character counting
 function CharacterCountPlugin({ 
   maxCharacters, 
-  onCharacterCountChange 
+  onCharacterCountChange,
+  onValidationChange
 }: { 
   maxCharacters?: number
-  onCharacterCountChange?: (count: number) => void 
+  onCharacterCountChange?: (count: number) => void
+  onValidationChange?: (isValid: boolean) => void
 }) {
   const [editor] = useLexicalComposerContext()
   
@@ -50,11 +54,15 @@ function CharacterCountPlugin({
       editorState.read(() => {
         const root = $getRoot()
         const text = root.getTextContent()
-        const count = text.length
+        const count = calculateXCharacterCount(text)
         onCharacterCountChange?.(count)
+        
+        // Check if text is valid (within character limit)
+        const isValid = count <= (maxCharacters || 280)
+        onValidationChange?.(isValid)
       })
     })
-  }, [editor, onCharacterCountChange])
+  }, [editor, onCharacterCountChange, onValidationChange, maxCharacters])
 
   return null
 }
@@ -200,9 +208,11 @@ export function RichTextEditor({
   onContentChange,
   maxCharacters = 280,
   initialContent = "",
-  className
+  className,
+  onValidationChange
 }: RichTextEditorProps) {
   const [characterCount, setCharacterCount] = useState(0)
+  const [isValid, setIsValid] = useState(true)
 
   const initialConfig = {
     namespace: 'RichTextEditor',
@@ -229,6 +239,11 @@ export function RichTextEditor({
       console.error('Lexical error:', error)
     }
   }
+
+  const handleValidationChange = useCallback((valid: boolean) => {
+    setIsValid(valid)
+    onValidationChange?.(valid)
+  }, [onValidationChange])
 
   const handleContentChange = useCallback((editorState: EditorState) => {
     editorState.read(() => {
@@ -269,20 +284,55 @@ export function RichTextEditor({
             <CharacterCountPlugin 
               maxCharacters={maxCharacters}
               onCharacterCountChange={setCharacterCount}
+              onValidationChange={handleValidationChange}
             />
             <OnChangePlugin onChange={handleContentChange} />
           </div>
         </div>
       </LexicalComposer>
       
-      {/* Character counter */}
-      <div className="flex justify-end p-2 border-t bg-muted/50">
-        <span className={cn(
-          "text-sm",
-          characterCount > maxCharacters * 0.9 ? "text-destructive" : "text-muted-foreground"
-        )}>
-          {characterCount}/{maxCharacters}
-        </span>
+      {/* Character counter with enhanced visual feedback */}
+      <div className="p-2 border-t bg-muted/50">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            {/* Progress bar */}
+            <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+              <div 
+                className={cn(
+                  "h-2 rounded-full transition-all duration-200",
+                  characterCount <= maxCharacters * 0.7 ? "bg-green-500" :
+                  characterCount <= maxCharacters * 0.9 ? "bg-yellow-500" :
+                  characterCount <= maxCharacters ? "bg-orange-500" : "bg-red-500"
+                )}
+                style={{ width: `${Math.min((characterCount / maxCharacters) * 100, 100)}%` }}
+              />
+            </div>
+            
+            {/* Validation message */}
+            {!isValid && (
+              <p className="text-xs text-red-600 mt-1">
+                Character limit exceeded. URLs count as 23 characters each.
+              </p>
+            )}
+          </div>
+          
+          {/* Character count */}
+          <div className="ml-4 text-right">
+            <span className={cn(
+              "text-sm font-medium",
+              characterCount <= maxCharacters * 0.7 ? "text-muted-foreground" :
+              characterCount <= maxCharacters * 0.9 ? "text-yellow-600" :
+              characterCount <= maxCharacters ? "text-orange-600" : "text-red-600 font-bold"
+            )}>
+              {characterCount}/{maxCharacters}
+            </span>
+            {characterCount > maxCharacters && (
+              <div className="text-xs text-red-600">
+                -{characterCount - maxCharacters}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

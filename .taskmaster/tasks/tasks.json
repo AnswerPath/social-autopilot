@@ -918,7 +918,7 @@
               1
             ],
             "details": "Implement real-time character counting that updates as the user types. Create visual indicators showing remaining characters with color changes as limit approaches. Account for X's URL shortening in character count calculations. Handle special cases like emoji (counting as multiple characters) and CJK characters. Provide clear validation messages when limits are exceeded. Prevent submission of posts exceeding character limits.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for character counting logic including edge cases. Integration tests with the text editor. Validation tests with various content types including URLs and emoji."
           },
           {
@@ -1083,7 +1083,7 @@
     ],
     "metadata": {
       "created": "2025-10-20T02:43:15.152Z",
-      "updated": "2025-10-20T18:28:14.097Z",
+      "updated": "2025-10-20T18:44:26.467Z",
       "description": "Tasks for implementing Post Composer and Media Management (Task 18)"
     }
   }
