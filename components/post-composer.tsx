@@ -8,8 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { X, Image, Calendar, Send, Save, Users } from 'lucide-react'
+import { X, Calendar, Send, Save, Users } from 'lucide-react'
 import { Switch } from "@/components/ui/switch"
+import { MediaUpload } from "@/components/ui/media-upload"
+import { useToast } from "@/hooks/use-toast"
+import type { MediaAttachment } from "@/lib/media-validation"
 
 interface PostComposerProps {
   onClose: () => void
@@ -22,8 +25,9 @@ export function PostComposer({ onClose }: PostComposerProps) {
   const [requiresApproval, setRequiresApproval] = useState(false)
   const [postType, setPostType] = useState("now")
   const [isPosting, setIsPosting] = useState(false)
-  const [uploadedMedia, setUploadedMedia] = useState<string[]>([])
-  const [isUploading, setIsUploading] = useState(false)
+  const [mediaAttachments, setMediaAttachments] = useState<MediaAttachment[]>([])
+  const [uploadedMediaIds, setUploadedMediaIds] = useState<string[]>([])
+  const { toast } = useToast()
 
   const maxCharacters = 280
 
@@ -34,7 +38,7 @@ export function PostComposer({ onClose }: PostComposerProps) {
     try {
       const payload = {
         text: content,
-        mediaIds: uploadedMedia,
+        mediaIds: uploadedMediaIds,
         ...(postType === "schedule" && scheduleDate && scheduleTime && {
           scheduledTime: new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
         })
@@ -49,46 +53,48 @@ export function PostComposer({ onClose }: PostComposerProps) {
       const result = await response.json()
       
       if (response.ok) {
-        // Success - close composer and refresh data
+        toast({
+          title: "Success",
+          description: "Post published successfully!",
+        })
         onClose()
-        // You could add a success toast here
       } else {
-        console.error('Failed to post:', result.error)
-        // You could add an error toast here
+        toast({
+          title: "Error",
+          description: result.error || "Failed to publish post",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error('Error posting tweet:', error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      })
     } finally {
       setIsPosting(false)
     }
   }
 
-  const handleMediaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const handleMediaUploadStart = () => {
+    // Optional: Show loading state or disable form
+  }
 
-    setIsUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
+  const handleMediaUploadComplete = (mediaId: string) => {
+    setUploadedMediaIds(prev => [...prev, mediaId])
+    toast({
+      title: "Success",
+      description: "Media uploaded successfully!",
+    })
+  }
 
-      const response = await fetch('/api/twitter/upload', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-      
-      if (response.ok) {
-        setUploadedMedia(prev => [...prev, result.mediaId])
-      } else {
-        console.error('Failed to upload media:', result.error)
-      }
-    } catch (error) {
-      console.error('Error uploading media:', error)
-    } finally {
-      setIsUploading(false)
-    }
+  const handleMediaUploadError = (error: string) => {
+    toast({
+      title: "Upload Error",
+      description: error,
+      variant: "destructive",
+    })
   }
 
   return (
@@ -110,21 +116,20 @@ export function PostComposer({ onClose }: PostComposerProps) {
               maxCharacters={maxCharacters}
               initialContent={content}
             />
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleMediaUpload}
-                style={{ display: 'none' }}
-                id="media-upload"
-              />
-              <Button variant="outline" size="sm" asChild disabled={isUploading}>
-                <label htmlFor="media-upload">
-                  <Image className="h-4 w-4 mr-2" />
-                  {isUploading ? 'Uploading...' : 'Add Media'}
-                </label>
-              </Button>
-            </div>
+          </div>
+
+          {/* Media Upload */}
+          <div className="space-y-2">
+            <Label>Media Attachments</Label>
+            <MediaUpload
+              platform="twitter"
+              attachments={mediaAttachments}
+              onAttachmentsChange={setMediaAttachments}
+              onUploadStart={handleMediaUploadStart}
+              onUploadComplete={handleMediaUploadComplete}
+              onUploadError={handleMediaUploadError}
+              disabled={isPosting}
+            />
           </div>
 
           {/* Post Type */}
