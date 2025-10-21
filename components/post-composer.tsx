@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { X, Calendar, Send, Save, Users, FileText, Clock } from 'lucide-react'
+import { X, Calendar, Send, Save, Users, FileText, Clock, Eye, Edit3, Smartphone, Monitor, Sun, Moon } from 'lucide-react'
 import { Switch } from "@/components/ui/switch"
 import { MediaUpload } from "@/components/ui/media-upload"
+import { PostPreview } from "@/components/ui/post-preview"
 import { useToast } from "@/hooks/use-toast"
 import type { MediaAttachment } from "@/lib/media-validation"
 import { DraftManager, type Draft, type DraftFormData } from "@/lib/draft-manager"
@@ -37,6 +38,9 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null)
   const [showDraftManager, setShowDraftManager] = useState(false)
   const [conflictResolution, setConflictResolution] = useState<any>(null)
+  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [previewDeviceView, setPreviewDeviceView] = useState<'mobile' | 'desktop'>('desktop')
+  const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light')
   const { toast } = useToast()
   const draftManager = DraftManager.getInstance()
   const hasUnsavedChanges = useRef(false)
@@ -271,6 +275,61 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Preview Mode Toggle */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant={isPreviewMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsPreviewMode(!isPreviewMode)}
+              >
+                {isPreviewMode ? (
+                  <>
+                    <Edit3 className="h-4 w-4 mr-2" />
+                    Edit
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview
+                  </>
+                )}
+              </Button>
+              
+              {/* Preview Controls */}
+              {isPreviewMode && (
+                <div className="flex items-center gap-1 ml-2">
+                  <Button
+                    variant={previewDeviceView === 'mobile' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPreviewDeviceView('mobile')}
+                    aria-label="Mobile view"
+                  >
+                    <Smartphone className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={previewDeviceView === 'desktop' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPreviewDeviceView('desktop')}
+                    aria-label="Desktop view"
+                  >
+                    <Monitor className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={previewTheme === 'dark' ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPreviewTheme(previewTheme === 'light' ? 'dark' : 'light')}
+                    aria-label={previewTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                  >
+                    {previewTheme === 'light' ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+            
             <Dialog open={showDraftManager} onOpenChange={setShowDraftManager}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -338,93 +397,119 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
             </div>
           )}
 
-          {/* Post Content */}
-          <div className="space-y-2">
-            <Label htmlFor="content">Post Content</Label>
-            <RichTextEditor
-              placeholder="What's happening?"
-              onContentChange={handleContentChange}
-              maxCharacters={maxCharacters}
-              initialContent={content}
-              onValidationChange={setIsContentValid}
-            />
-          </div>
-
-          {/* Media Upload */}
-          <div className="space-y-2">
-            <Label>Media Attachments</Label>
-            <MediaUpload
-              platform="twitter"
-              attachments={mediaAttachments}
-              onAttachmentsChange={setMediaAttachments}
-              onUploadStart={handleMediaUploadStart}
-              onUploadComplete={handleMediaUploadComplete}
-              onUploadError={handleMediaUploadError}
-              disabled={isPosting}
-            />
-          </div>
-
-          {/* Post Type */}
-          <div className="space-y-3">
-            <Label>When to Post</Label>
-            <Select value={postType} onValueChange={setPostType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="now">Post Now</SelectItem>
-                <SelectItem value="schedule">Schedule for Later</SelectItem>
-                <SelectItem value="draft">Save as Draft</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Schedule Options */}
-          {postType === "schedule" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(e) => setScheduleDate(e.target.value)}
-                />
+          {/* Main Content - Composer or Preview */}
+          {isPreviewMode ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold mb-2">Post Preview</h3>
+                <p className="text-sm text-gray-600">
+                  How your post will appear on X
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="time">Time</Label>
-                <Input
-                  id="time"
-                  type="time"
-                  value={scheduleTime}
-                  onChange={(e) => setScheduleTime(e.target.value)}
+              
+              <div className="flex justify-center">
+                <PostPreview
+                  content={content}
+                  mediaAttachments={mediaAttachments}
+                  uploadedMediaIds={uploadedMediaIds}
+                  deviceView={previewDeviceView}
+                  theme={previewTheme}
                 />
               </div>
             </div>
+          ) : (
+            <>
+              {/* Post Content */}
+              <div className="space-y-2">
+                <Label htmlFor="content">Post Content</Label>
+                <RichTextEditor
+                  placeholder="What's happening?"
+                  onContentChange={handleContentChange}
+                  maxCharacters={maxCharacters}
+                  initialContent={content}
+                  onValidationChange={setIsContentValid}
+                />
+              </div>
+
+              {/* Media Upload */}
+              <div className="space-y-2">
+                <Label>Media Attachments</Label>
+                <MediaUpload
+                  platform="twitter"
+                  attachments={mediaAttachments}
+                  onAttachmentsChange={setMediaAttachments}
+                  onUploadStart={handleMediaUploadStart}
+                  onUploadComplete={handleMediaUploadComplete}
+                  onUploadError={handleMediaUploadError}
+                  disabled={isPosting}
+                />
+              </div>
+
+              {/* Post Type */}
+              <div className="space-y-3">
+                <Label>When to Post</Label>
+                <Select value={postType} onValueChange={setPostType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="now">Post Now</SelectItem>
+                    <SelectItem value="schedule">Schedule for Later</SelectItem>
+                    <SelectItem value="draft">Save as Draft</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Schedule Options */}
+              {postType === "schedule" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Date</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="time">Time</Label>
+                    <Input
+                      id="time"
+                      type="time"
+                      value={scheduleTime}
+                      onChange={(e) => setScheduleTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Approval Workflow */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label>Require Approval</Label>
+                  <p className="text-sm text-gray-600">Send to manager for review before posting</p>
+                </div>
+                <Switch
+                  checked={requiresApproval}
+                  onCheckedChange={setRequiresApproval}
+                />
+              </div>
+            </>
           )}
-
-          {/* Approval Workflow */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label>Require Approval</Label>
-              <p className="text-sm text-gray-600">Send to manager for review before posting</p>
-            </div>
-            <Switch
-              checked={requiresApproval}
-              onCheckedChange={setRequiresApproval}
-            />
-          </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="outline" onClick={handleSaveDraft} disabled={!content.trim()}>
-              <Save className="h-4 w-4 mr-2" />
-              Save Draft
-            </Button>
-            {requiresApproval ? (
+            {!isPreviewMode && (
+              <Button variant="outline" onClick={handleSaveDraft} disabled={!content.trim()}>
+                <Save className="h-4 w-4 mr-2" />
+                Save Draft
+              </Button>
+            )}
+            {!isPreviewMode && (requiresApproval ? (
               <Button>
                 <Users className="h-4 w-4 mr-2" />
                 Submit for Approval
@@ -443,7 +528,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                   </>
                 )}
               </Button>
-            )}
+            ))}
           </div>
         </CardContent>
       </Card>
