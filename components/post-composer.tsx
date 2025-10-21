@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { RichTextEditor } from "@/components/ui/rich-text-editor"
+import { EnhancedRichTextEditor } from "@/components/ui/enhanced-rich-text-editor"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -422,7 +422,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
               {/* Post Content */}
               <div className="space-y-2">
                 <Label htmlFor="content">Post Content</Label>
-                <RichTextEditor
+                <EnhancedRichTextEditor
                   placeholder="What's happening?"
                   onContentChange={handleContentChange}
                   maxCharacters={maxCharacters}
