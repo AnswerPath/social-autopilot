@@ -257,52 +257,58 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-auto">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CardTitle>Create New Post</CardTitle>
-            {isAutoSaving && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Auto-saving...
-              </Badge>
-            )}
-            {lastAutoSave && !isAutoSaving && (
-              <Badge variant="outline" className="text-xs">
-                Saved {lastAutoSave.toLocaleTimeString()}
-              </Badge>
-            )}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+      <Card className="w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-auto">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+            <CardTitle className="text-lg sm:text-xl truncate">Create New Post</CardTitle>
+            <div className="flex items-center gap-1 sm:gap-2">
+              {isAutoSaving && (
+                <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                  <Clock className="h-3 w-3" />
+                  <span className="hidden sm:inline">Auto-saving...</span>
+                  <span className="sm:hidden">Saving...</span>
+                </Badge>
+              )}
+              {lastAutoSave && !isAutoSaving && (
+                <Badge variant="outline" className="text-xs">
+                  <span className="hidden sm:inline">Saved {lastAutoSave.toLocaleTimeString()}</span>
+                  <span className="sm:hidden">Saved</span>
+                </Badge>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 w-full sm:w-auto">
             {/* Preview Mode Toggle */}
             <div className="flex items-center gap-1">
               <Button
                 variant={isPreviewMode ? "default" : "outline"}
                 size="sm"
                 onClick={() => setIsPreviewMode(!isPreviewMode)}
+                className="min-h-[36px]"
               >
                 {isPreviewMode ? (
                   <>
-                    <Edit3 className="h-4 w-4 mr-2" />
-                    Edit
+                    <Edit3 className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Edit</span>
                   </>
                 ) : (
                   <>
-                    <Eye className="h-4 w-4 mr-2" />
-                    Preview
+                    <Eye className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Preview</span>
                   </>
                 )}
               </Button>
               
               {/* Preview Controls */}
               {isPreviewMode && (
-                <div className="flex items-center gap-1 ml-2">
+                <div className="flex items-center gap-1 ml-1 sm:ml-2">
                   <Button
                     variant={previewDeviceView === 'mobile' ? "default" : "outline"}
                     size="sm"
                     onClick={() => setPreviewDeviceView('mobile')}
                     aria-label="Mobile view"
+                    className="min-h-[36px] px-2"
                   >
                     <Smartphone className="h-4 w-4" />
                   </Button>
@@ -311,6 +317,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                     size="sm"
                     onClick={() => setPreviewDeviceView('desktop')}
                     aria-label="Desktop view"
+                    className="min-h-[36px] px-2"
                   >
                     <Monitor className="h-4 w-4" />
                   </Button>
@@ -319,6 +326,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                     size="sm"
                     onClick={() => setPreviewTheme(previewTheme === 'light' ? 'dark' : 'light')}
                     aria-label={previewTheme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                    className="min-h-[36px] px-2"
                   >
                     {previewTheme === 'light' ? (
                       <Moon className="h-4 w-4" />
@@ -332,12 +340,12 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
             
             <Dialog open={showDraftManager} onOpenChange={setShowDraftManager}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Drafts
+                <Button variant="outline" size="sm" className="min-h-[36px]">
+                  <FileText className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Drafts</span>
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[80vh]">
+              <DialogContent className="max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl max-h-[80vh] mx-2 sm:mx-4">
                 <DialogHeader>
                   <DialogTitle>Manage Drafts</DialogTitle>
                 </DialogHeader>
@@ -347,7 +355,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                 />
               </DialogContent>
             </Dialog>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} className="min-h-[36px] px-2">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -362,18 +370,19 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                     <span className="text-yellow-600 text-sm font-bold">!</span>
                   </div>
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-medium text-yellow-800 mb-2">
                     Draft Conflict Detected
                   </h3>
                   <p className="text-sm text-yellow-700 mb-3">
                     This draft was modified on another device. Choose how to resolve the conflict:
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Button 
                       size="sm" 
                       variant="outline"
                       onClick={() => handleResolveConflict('local')}
+                      className="min-h-[36px]"
                     >
                       Use Local Version
                     </Button>
@@ -381,6 +390,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                       size="sm" 
                       variant="outline"
                       onClick={() => handleResolveConflict('server')}
+                      className="min-h-[36px]"
                     >
                       Use Server Version
                     </Button>
@@ -388,6 +398,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                       size="sm" 
                       variant="outline"
                       onClick={() => handleResolveConflict('merge')}
+                      className="min-h-[36px]"
                     >
                       Merge Both
                     </Button>
@@ -462,7 +473,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
 
               {/* Schedule Options */}
               {postType === "schedule" && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="date">Date</Label>
                     <Input
@@ -470,6 +481,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                       type="date"
                       value={scheduleDate}
                       onChange={(e) => setScheduleDate(e.target.value)}
+                      className="min-h-[44px]"
                     />
                   </div>
                   <div className="space-y-2">
@@ -479,13 +491,14 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                       type="time"
                       value={scheduleTime}
                       onChange={(e) => setScheduleTime(e.target.value)}
+                      className="min-h-[44px]"
                     />
                   </div>
                 </div>
               )}
 
               {/* Approval Workflow */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div className="space-y-1">
                   <Label>Require Approval</Label>
                   <p className="text-sm text-gray-600">Send to manager for review before posting</p>
@@ -493,29 +506,30 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
                 <Switch
                   checked={requiresApproval}
                   onCheckedChange={setRequiresApproval}
+                  className="self-start sm:self-center"
                 />
               </div>
             </>
           )}
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={onClose}>
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={onClose} className="w-full sm:w-auto min-h-[44px]">
               Cancel
             </Button>
             {!isPreviewMode && (
-              <Button variant="outline" onClick={handleSaveDraft} disabled={!content.trim()}>
+              <Button variant="outline" onClick={handleSaveDraft} disabled={!content.trim()} className="w-full sm:w-auto min-h-[44px]">
                 <Save className="h-4 w-4 mr-2" />
                 Save Draft
               </Button>
             )}
             {!isPreviewMode && (requiresApproval ? (
-              <Button>
+              <Button className="w-full sm:w-auto min-h-[44px]">
                 <Users className="h-4 w-4 mr-2" />
                 Submit for Approval
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isPosting || !content.trim() || !isContentValid}>
+              <Button onClick={handleSubmit} disabled={isPosting || !content.trim() || !isContentValid} className="w-full sm:w-auto min-h-[44px]">
                 {postType === "now" ? (
                   <>
                     <Send className="h-4 w-4 mr-2" />

@@ -162,58 +162,65 @@ function EnhancedFormattingToolbar({ onEmojiSelect }: { onEmojiSelect: (emoji: s
   }
 
   return (
-    <div className="flex items-center gap-1 p-2 border-b">
-      <Toggle
-        pressed={isBold}
-        onPressedChange={formatBold}
-        size="sm"
-        aria-label="Bold"
-      >
-        <Bold className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        pressed={isItalic}
-        onPressedChange={formatItalic}
-        size="sm"
-        aria-label="Italic"
-      >
-        <Italic className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        pressed={isList}
-        onPressedChange={formatBulletList}
-        size="sm"
-        aria-label="Bullet List"
-      >
-        <List className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        pressed={isOrderedList}
-        onPressedChange={formatNumberedList}
-        size="sm"
-        aria-label="Numbered List"
-      >
-        <ListOrdered className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        pressed={isLink}
-        onPressedChange={formatLink}
-        size="sm"
-        aria-label="Link"
-      >
-        <Link className="h-4 w-4" />
-      </Toggle>
-      
-      {/* Emoji picker button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setShowEmojiPicker(true)}
-        className="h-8 w-8 p-0"
-        aria-label="Add emoji"
-      >
-        <Smile className="h-4 w-4" />
-      </Button>
+    <div className="flex items-center gap-1 p-2 border-b overflow-x-auto">
+      <div className="flex items-center gap-1 min-w-0">
+        <Toggle
+          pressed={isBold}
+          onPressedChange={formatBold}
+          size="sm"
+          aria-label="Bold"
+          className="min-h-[36px] min-w-[36px]"
+        >
+          <Bold className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          pressed={isItalic}
+          onPressedChange={formatItalic}
+          size="sm"
+          aria-label="Italic"
+          className="min-h-[36px] min-w-[36px]"
+        >
+          <Italic className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          pressed={isList}
+          onPressedChange={formatBulletList}
+          size="sm"
+          aria-label="Bullet List"
+          className="min-h-[36px] min-w-[36px]"
+        >
+          <List className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          pressed={isOrderedList}
+          onPressedChange={formatNumberedList}
+          size="sm"
+          aria-label="Numbered List"
+          className="min-h-[36px] min-w-[36px]"
+        >
+          <ListOrdered className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          pressed={isLink}
+          onPressedChange={formatLink}
+          size="sm"
+          aria-label="Link"
+          className="min-h-[36px] min-w-[36px]"
+        >
+          <Link className="h-4 w-4" />
+        </Toggle>
+        
+        {/* Emoji picker button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowEmojiPicker(true)}
+          className="h-9 w-9 p-0 min-h-[36px] min-w-[36px]"
+          aria-label="Add emoji"
+        >
+          <Smile className="h-4 w-4" />
+        </Button>
+      </div>
 
       <EmojiPicker
         isOpen={showEmojiPicker}
@@ -373,10 +380,10 @@ export function EnhancedRichTextEditor({
             <RichTextPlugin
               contentEditable={
                 <ContentEditable
-                  className="min-h-[120px] p-3 outline-none resize-none"
+                  className="min-h-[120px] sm:min-h-[140px] p-3 outline-none resize-none text-base sm:text-sm"
                   aria-placeholder={placeholder}
                   placeholder={
-                    <div className="absolute top-3 left-3 text-muted-foreground pointer-events-none">
+                    <div className="absolute top-3 left-3 text-muted-foreground pointer-events-none text-base sm:text-sm">
                       {placeholder}
                     </div>
                   }
@@ -406,8 +413,8 @@ export function EnhancedRichTextEditor({
       </LexicalComposer>
       
       {/* Character counter with enhanced visual feedback */}
-      <div className="p-2 border-t bg-muted/50">
-        <div className="flex items-center justify-between">
+      <div className="p-2 sm:p-3 border-t bg-muted/50">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
           <div className="flex-1">
             {/* Progress bar */}
             <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
@@ -431,7 +438,7 @@ export function EnhancedRichTextEditor({
           </div>
           
           {/* Character count */}
-          <div className="ml-4 text-right">
+          <div className="text-right sm:text-right">
             <span className={cn(
               "text-sm font-medium",
               characterCount <= maxCharacters * 0.7 ? "text-muted-foreground" :

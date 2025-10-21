@@ -52,9 +52,10 @@ export function MediaUpload({
       return
     }
 
+    let attachment: any = null
     try {
       // Create media attachment with thumbnail
-      const attachment = await createMediaAttachment(file)
+      attachment = await createMediaAttachment(file)
       
       // Add to attachments
       onAttachmentsChange([...attachments, attachment])
@@ -99,7 +100,9 @@ export function MediaUpload({
       onUploadError?.(error instanceof Error ? error.message : 'Upload failed')
       
       // Remove the attachment if upload failed
-      onAttachmentsChange(attachments.filter(att => att.id !== attachment.id))
+      if (attachment) {
+        onAttachmentsChange(attachments.filter(att => att.id !== attachment.id))
+      }
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
@@ -152,7 +155,7 @@ export function MediaUpload({
       {/* Upload Area */}
       <Card
         className={cn(
-          "border-2 border-dashed transition-colors cursor-pointer",
+          "border-2 border-dashed transition-colors cursor-pointer min-h-[120px] sm:min-h-[140px]",
           isDragOver && !disabled && "border-primary bg-primary/5",
           disabled && "opacity-50 cursor-not-allowed",
           !isDragOver && !disabled && "border-gray-300 hover:border-gray-400"
@@ -162,14 +165,17 @@ export function MediaUpload({
         onDrop={handleDrop}
         onClick={openFileDialog}
       >
-        <div className="p-6 text-center">
+        <div className="p-4 sm:p-6 text-center h-full flex items-center justify-center">
           <div className="flex flex-col items-center space-y-2">
-            <Upload className="h-8 w-8 text-gray-400" />
+            <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Click to upload</span> or drag and drop
+              <span className="font-medium">Tap to upload</span>
+              <span className="hidden sm:inline"> or drag and drop</span>
             </div>
-            <div className="text-xs text-gray-500">
-              Images: JPG, PNG, GIF, WebP (max 5MB) • Videos: MP4, MOV (max 512MB)
+            <div className="text-xs text-gray-500 text-center px-2">
+              <span className="block sm:inline">Images: JPG, PNG, GIF, WebP (max 5MB)</span>
+              <span className="hidden sm:inline"> • </span>
+              <span className="block sm:inline">Videos: MP4, MOV (max 512MB)</span>
             </div>
           </div>
         </div>
@@ -198,7 +204,7 @@ export function MediaUpload({
 
       {/* Media Attachments Grid */}
       {attachments.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {attachments.map((attachment) => (
             <div key={attachment.id} className="relative group">
               <Card className="overflow-hidden">
@@ -219,14 +225,14 @@ export function MediaUpload({
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 opacity-100 sm:opacity-0 transition-opacity h-8 w-8 p-0 min-h-[32px] min-w-[32px]"
                     onClick={(e) => {
                       e.stopPropagation()
                       removeAttachment(attachment.id)
                     }}
                     disabled={disabled}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
                 
