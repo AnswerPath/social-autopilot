@@ -14,6 +14,7 @@ import { TeamManagement } from "./team-management"
 import { EngagementMonitor } from "./engagement-monitor"
 import { Sidebar } from "./sidebar"
 import { SettingsPage } from "./settings-page"
+import { UserInfoCard } from "./auth/user-info-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function Dashboard() {
@@ -265,8 +266,14 @@ export function Dashboard() {
         <main className="flex-1 overflow-auto p-6">
           {activeTab === "dashboard" && (
             <div className="space-y-6">
-              {/* Data Source Indicator */}
-              <div className="flex items-center justify-between">
+              {/* User Info Card */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1">
+                  <UserInfoCard />
+                </div>
+                <div className="lg:col-span-2">
+                  {/* Data Source Indicator */}
+                  <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <Badge 
                     variant={
@@ -294,6 +301,8 @@ export function Dashboard() {
                 <span className="text-xs text-gray-500" suppressHydrationWarning>
                   {lastRefresh ? `Last updated: ${lastRefresh.toLocaleTimeString()}` : ''}
                 </span>
+              </div>
+                </div>
               </div>
 
               {/* API Notes */}
