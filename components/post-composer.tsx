@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
@@ -8,17 +8,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { X, Calendar, Send, Save, Users } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { X, Calendar, Send, Save, Users, FileText, Clock } from 'lucide-react'
 import { Switch } from "@/components/ui/switch"
 import { MediaUpload } from "@/components/ui/media-upload"
 import { useToast } from "@/hooks/use-toast"
 import type { MediaAttachment } from "@/lib/media-validation"
+import { DraftManager, type Draft, type DraftFormData } from "@/lib/draft-manager"
+import { DraftManagerComponent } from "@/components/draft-manager"
 
 interface PostComposerProps {
   onClose: () => void
+  initialDraft?: Draft
 }
 
-export function PostComposer({ onClose }: PostComposerProps) {
+export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
   const [content, setContent] = useState("")
   const [scheduleDate, setScheduleDate] = useState("")
   const [scheduleTime, setScheduleTime] = useState("")
@@ -28,9 +32,147 @@ export function PostComposer({ onClose }: PostComposerProps) {
   const [mediaAttachments, setMediaAttachments] = useState<MediaAttachment[]>([])
   const [uploadedMediaIds, setUploadedMediaIds] = useState<string[]>([])
   const [isContentValid, setIsContentValid] = useState(true)
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null)
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null)
+  const [showDraftManager, setShowDraftManager] = useState(false)
+  const [conflictResolution, setConflictResolution] = useState<any>(null)
   const { toast } = useToast()
+  const draftManager = DraftManager.getInstance()
+  const hasUnsavedChanges = useRef(false)
 
   const maxCharacters = 280
+
+  // Initialize with draft data if provided
+  useEffect(() => {
+    if (initialDraft) {
+      setContent(initialDraft.content)
+      setCurrentDraftId(initialDraft.id)
+      if (initialDraft.media_urls) {
+        setUploadedMediaIds(initialDraft.media_urls)
+      }
+    }
+  }, [initialDraft])
+
+  // Auto-save functionality
+  useEffect(() => {
+    if (!content.trim() && uploadedMediaIds.length === 0) return
+
+    const formData: DraftFormData = {
+      content,
+      mediaAttachments,
+      uploadedMediaIds
+    }
+
+    // Save to local storage immediately for offline support
+    const localKey = currentDraftId || 'temp'
+    draftManager.saveToLocalStorage(localKey, formData)
+
+    // Trigger auto-save if we have a draft ID
+    if (currentDraftId && currentDraftId !== 'temp') {
+      draftManager.triggerAutoSave(content, uploadedMediaIds)
+      setIsAutoSaving(true)
+      setLastAutoSave(new Date())
+      
+      // Reset auto-saving indicator after a short delay
+      setTimeout(() => setIsAutoSaving(false), 1000)
+    }
+
+    hasUnsavedChanges.current = true
+  }, [content, uploadedMediaIds, mediaAttachments, currentDraftId])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    const handleConflict = (event: CustomEvent) => {
+      setConflictResolution(event.detail)
+      toast({
+        title: "Draft Conflict Detected",
+        description: "This draft was modified on another device. Please choose how to resolve the conflict.",
+        variant: "destructive",
+      })
+    }
+
+    window.addEventListener('draft-conflict', handleConflict as EventListener)
+    
+    return () => {
+      window.removeEventListener('draft-conflict', handleConflict as EventListener)
+      draftManager.stopAutoSave()
+    }
+  }, [])
+
+  // Handle content change with auto-save
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent)
+  }
+
+  // Save draft manually
+  const handleSaveDraft = async () => {
+    try {
+      const formData: DraftFormData = {
+        content,
+        mediaAttachments,
+        uploadedMediaIds
+      }
+
+      let draft: Draft
+      if (currentDraftId && currentDraftId !== 'temp') {
+        draft = await draftManager.updateDraft(currentDraftId, formData)
+      } else {
+        draft = await draftManager.createDraft(formData)
+        setCurrentDraftId(draft.id)
+      }
+
+      hasUnsavedChanges.current = false
+      toast({
+        title: "Success",
+        description: "Draft saved successfully!",
+      })
+    } catch (error) {
+      console.error('Failed to save draft:', error)
+      toast({
+        title: "Error",
+        description: "Failed to save draft",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle draft selection from manager
+  const handleSelectDraft = (draft: Draft) => {
+    setContent(draft.content)
+    setCurrentDraftId(draft.id)
+    if (draft.media_urls) {
+      setUploadedMediaIds(draft.media_urls)
+    }
+    hasUnsavedChanges.current = false
+  }
+
+  // Handle conflict resolution
+  const handleResolveConflict = async (choice: 'local' | 'server' | 'merge') => {
+    if (!conflictResolution || !currentDraftId) return
+
+    try {
+      const resolvedDraft = await draftManager.resolveConflict(currentDraftId, conflictResolution, choice)
+      
+      setContent(resolvedDraft.content)
+      if (resolvedDraft.media_urls) {
+        setUploadedMediaIds(resolvedDraft.media_urls)
+      }
+      setConflictResolution(null)
+      
+      toast({
+        title: "Conflict Resolved",
+        description: `Draft updated using ${choice} version`,
+      })
+    } catch (error) {
+      console.error('Failed to resolve conflict:', error)
+      toast({
+        title: "Error",
+        description: "Failed to resolve conflict",
+        variant: "destructive",
+      })
+    }
+  }
 
   const handleSubmit = async () => {
     if (!content.trim()) return
@@ -54,6 +196,18 @@ export function PostComposer({ onClose }: PostComposerProps) {
       const result = await response.json()
       
       if (response.ok) {
+        // Clean up draft if it exists
+        if (currentDraftId && currentDraftId !== 'temp') {
+          try {
+            await draftManager.deleteDraft(currentDraftId)
+          } catch (error) {
+            console.error('Failed to delete draft after posting:', error)
+          }
+        }
+        
+        // Clean up local storage
+        draftManager.removeFromLocalStorage(currentDraftId || 'temp')
+        
         toast({
           title: "Success",
           description: "Post published successfully!",
@@ -102,18 +256,94 @@ export function PostComposer({ onClose }: PostComposerProps) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-auto">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Create New Post</CardTitle>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-3">
+            <CardTitle>Create New Post</CardTitle>
+            {isAutoSaving && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Auto-saving...
+              </Badge>
+            )}
+            {lastAutoSave && !isAutoSaving && (
+              <Badge variant="outline" className="text-xs">
+                Saved {lastAutoSave.toLocaleTimeString()}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Dialog open={showDraftManager} onOpenChange={setShowDraftManager}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Drafts
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh]">
+                <DialogHeader>
+                  <DialogTitle>Manage Drafts</DialogTitle>
+                </DialogHeader>
+                <DraftManagerComponent 
+                  onSelectDraft={handleSelectDraft}
+                  onClose={() => setShowDraftManager(false)}
+                />
+              </DialogContent>
+            </Dialog>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Conflict Resolution Dialog */}
+          {conflictResolution && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
+                    <span className="text-yellow-600 text-sm font-bold">!</span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-yellow-800 mb-2">
+                    Draft Conflict Detected
+                  </h3>
+                  <p className="text-sm text-yellow-700 mb-3">
+                    This draft was modified on another device. Choose how to resolve the conflict:
+                  </p>
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleResolveConflict('local')}
+                    >
+                      Use Local Version
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleResolveConflict('server')}
+                    >
+                      Use Server Version
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleResolveConflict('merge')}
+                    >
+                      Merge Both
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Post Content */}
           <div className="space-y-2">
             <Label htmlFor="content">Post Content</Label>
             <RichTextEditor
               placeholder="What's happening?"
-              onContentChange={(text) => setContent(text)}
+              onContentChange={handleContentChange}
               maxCharacters={maxCharacters}
               initialContent={content}
               onValidationChange={setIsContentValid}
@@ -190,12 +420,10 @@ export function PostComposer({ onClose }: PostComposerProps) {
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            {postType === "draft" && (
-              <Button variant="outline">
-                <Save className="h-4 w-4 mr-2" />
-                Save Draft
-              </Button>
-            )}
+            <Button variant="outline" onClick={handleSaveDraft} disabled={!content.trim()}>
+              <Save className="h-4 w-4 mr-2" />
+              Save Draft
+            </Button>
             {requiresApproval ? (
               <Button>
                 <Users className="h-4 w-4 mr-2" />
