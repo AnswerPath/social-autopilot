@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
+import { config } from 'dotenv'
+
+// Load environment variables from .env.local
+config({ path: '.env.local' })
 
 // Database setup script that works with v0's Supabase integration
 async function setupDatabase() {
@@ -91,6 +95,27 @@ async function setupDatabase() {
     }
     
     console.log('\n🎉 Database setup verification completed!')
+    
+    // Try to create demo credentials
+    console.log('\n🎭 Creating demo credentials...')
+    try {
+      const demoResponse = await fetch('http://localhost:3000/api/setup/demo-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (demoResponse.ok) {
+        console.log('✅ Demo credentials created successfully!')
+      } else {
+        const errorData = await demoResponse.json()
+        console.log('⚠️  Demo credentials creation failed:', errorData.error)
+        console.log('   You can create them manually in the UI')
+      }
+    } catch (error) {
+      console.log('⚠️  Could not create demo credentials (server may not be running)')
+      console.log('   You can create them manually in the UI')
+    }
+    
     console.log('\n📝 Next steps:')
     console.log('   1. Go to Settings → Twitter API in your app')
     console.log('   2. The database should now show as "Healthy"')

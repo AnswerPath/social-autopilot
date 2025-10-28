@@ -21,8 +21,9 @@ import {
   TextNode,
   FORMAT_TEXT_COMMAND
 } from 'lexical'
-import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND } from '@lexical/list'
-import { $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
+import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND, ListNode, ListItemNode } from '@lexical/list'
+import { $isLinkNode, TOGGLE_LINK_COMMAND, LinkNode } from '@lexical/link'
+import { HashtagNode } from '@lexical/hashtag'
 import { Bold, Italic, List, ListOrdered, Link } from 'lucide-react'
 import { Toggle } from '@/components/ui/toggle'
 import { cn } from '@/lib/utils'
@@ -216,6 +217,13 @@ export function RichTextEditor({
 
   const initialConfig = {
     namespace: 'RichTextEditor',
+    nodes: [
+      TextNode,
+      ListNode,
+      ListItemNode,
+      LinkNode,
+      HashtagNode
+    ],
     theme: {
       root: 'p-0',
       paragraph: 'mb-0',

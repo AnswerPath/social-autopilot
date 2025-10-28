@@ -14,7 +14,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:ci": "jest --ci --coverage --watchAll=false",
-    "test:integration": "node scripts/run-integration-tests.js"
+    "test:integration": "node scripts/run-integration-tests.js",
+    "setup-demo": "node scripts/setup-demo-credentials.js",
+    "create-demo": "node scripts/create-demo-credentials.js",
+    "setup-database": "node scripts/setup-database.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -58,6 +61,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
+    "dotenv": "^17.2.3",
     "embla-carousel-react": "8.5.1",
     "geist": "^1.3.1",
     "input-otp": "1.4.1",

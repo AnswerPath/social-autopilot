@@ -32,7 +32,6 @@ export function isDevMode(): boolean {
                           process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')
   
   const isDevModeEnabled = isDevelopment && usingPlaceholder
-  // console.log('🔧 Development mode check:', { isDevelopment, usingPlaceholder, isDevModeEnabled, supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL })
   
   return isDevModeEnabled
 }

@@ -203,22 +203,21 @@ export function generateThumbnail(file: File): Promise<string> {
       
       // Convert to data URL
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      // Clean up object URL
+      URL.revokeObjectURL(objectUrl);
+      
       resolve(dataUrl);
     };
     
     img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
       reject(new Error('Could not load image'));
     };
     
     // Create object URL for the image
     const objectUrl = URL.createObjectURL(file);
     img.src = objectUrl;
-    
-    // Clean up object URL after image loads
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      img.onload();
-    };
   });
 }
 

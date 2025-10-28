@@ -11,7 +11,7 @@ import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
 import { HashtagPlugin } from '@lexical/react/LexicalHashtagPlugin'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import LexicalErrorBoundary from '@lexical/react/LexicalErrorBoundary'
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { 
   $getRoot, 
   $getSelection, 
@@ -22,8 +22,9 @@ import {
   FORMAT_TEXT_COMMAND,
   $insertNodes
 } from 'lexical'
-import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND } from '@lexical/list'
-import { $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
+import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND, ListNode, ListItemNode } from '@lexical/list'
+import { $isLinkNode, TOGGLE_LINK_COMMAND, LinkNode } from '@lexical/link'
+import { HashtagNode } from '@lexical/hashtag'
 import { Bold, Italic, List, ListOrdered, Link, Smile, Hash, AtSign } from 'lucide-react'
 import { Toggle } from '@/components/ui/toggle'
 import { Button } from '@/components/ui/button'
@@ -322,6 +323,13 @@ export function EnhancedRichTextEditor({
 
   const initialConfig = {
     namespace: 'EnhancedRichTextEditor',
+    nodes: [
+      TextNode,
+      ListNode,
+      ListItemNode,
+      LinkNode,
+      HashtagNode
+    ],
     theme: {
       root: 'p-0',
       paragraph: 'mb-0',

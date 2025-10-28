@@ -81,14 +81,33 @@ export async function testDatabaseConnection(): Promise<{ success: boolean; erro
 export async function checkTableExists(): Promise<{ exists: boolean; error?: string }> {
   try {
     // Try to query the table directly
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('user_credentials')
       .select('id')
       .limit(1)
     
+    // If there's an error, check if it's a "table doesn't exist" error
+    if (error) {
+      if (error.message?.includes('relation "user_credentials" does not exist') || 
+          error.message?.includes('table') || 
+          error.code === '42P01') {
+        return { 
+          exists: false, 
+          error: error.message 
+        }
+      }
+      // For other errors (like permission issues), assume table exists
+      console.warn('⚠️ Table check warning:', error.message)
+      return { 
+        exists: true, 
+        error: error.message 
+      }
+    }
+    
+    // If no error, table exists (even if empty)
     return { 
-      exists: !error, 
-      error: error?.message 
+      exists: true, 
+      error: undefined 
     }
   } catch (error: any) {
     return { 
@@ -457,8 +476,19 @@ export async function createDemoCredentials(): Promise<{ success: boolean; error
       }
     }
 
-    // Delete any existing demo credentials first
-    await deleteTwitterCredentials('demo-user')
+    // Delete any existing demo credentials first (simplified)
+    try {
+      const { error } = await supabaseAdmin
+        .from('user_credentials')
+        .delete()
+        .eq('user_id', 'demo-user')
+      
+      if (error) {
+        console.warn('⚠️ Cleanup warning:', error.message)
+      }
+    } catch (cleanupError) {
+      console.warn('⚠️ Cleanup failed:', cleanupError)
+    }
 
     // Create properly encrypted demo credentials
     const demoCredentials = {
@@ -469,17 +499,44 @@ export async function createDemoCredentials(): Promise<{ success: boolean; error
       bearerToken: 'demo_bearer_token_klmno'
     }
     
-    const result = await storeTwitterCredentials('demo-user', demoCredentials)
+    console.log('🔒 Encrypting demo credentials...')
     
-    if (result.success) {
-      console.log('✅ Demo credentials created successfully')
-      return { success: true }
-    } else {
+    // Encrypt all credentials
+    const encryptedApiKey = await encrypt(demoCredentials.apiKey)
+    const encryptedApiSecret = await encrypt(demoCredentials.apiSecret)
+    const encryptedAccessToken = await encrypt(demoCredentials.accessToken)
+    const encryptedAccessSecret = await encrypt(demoCredentials.accessSecret)
+    const encryptedBearerToken = demoCredentials.bearerToken ? await encrypt(demoCredentials.bearerToken) : null
+    
+    console.log('💾 Storing encrypted credentials...')
+    
+    // Store in database
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .insert({
+        user_id: 'demo-user',
+        credential_type: 'twitter',
+        encrypted_api_key: encryptedApiKey,
+        encrypted_api_secret: encryptedApiSecret,
+        encrypted_access_token: encryptedAccessToken,
+        encrypted_access_secret: encryptedAccessSecret,
+        encrypted_bearer_token: encryptedBearerToken,
+        encryption_version: 1,
+        is_valid: false // Demo credentials are not valid for real use
+      })
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('❌ Failed to store demo credentials:', error)
       return { 
         success: false, 
-        error: result.error 
+        error: `Failed to store credentials: ${error.message}` 
       }
     }
+    
+    console.log('✅ Demo credentials created successfully')
+    return { success: true }
   } catch (error: any) {
     console.error('❌ Error creating demo credentials:', error)
     return { 
