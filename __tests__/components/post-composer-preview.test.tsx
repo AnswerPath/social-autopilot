@@ -2,9 +2,25 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PostComposer } from '@/components/post-composer'
 
-// Mock the RichTextEditor component
-jest.mock('@/components/ui/rich-text-editor', () => ({
-  RichTextEditor: ({ onContentChange, placeholder, initialContent }: any) => (
+// Mock the EnhancedRichTextEditor component and its dependencies
+jest.mock('@/components/ui/emoji-picker', () => ({
+  EmojiPicker: ({ onEmojiSelect }: any) => (
+    <div data-testid="emoji-picker">
+      <button onClick={() => onEmojiSelect('😀')}>😀</button>
+    </div>
+  )
+}))
+
+jest.mock('@/components/ui/hashtag-suggestions', () => ({
+  HashtagSuggestions: () => <div data-testid="hashtag-suggestions" />
+}))
+
+jest.mock('@/components/ui/mention-suggestions', () => ({
+  MentionSuggestions: () => <div data-testid="mention-suggestions" />
+}))
+
+jest.mock('@/components/ui/enhanced-rich-text-editor', () => ({
+  EnhancedRichTextEditor: ({ onContentChange, placeholder, initialContent }: any) => (
     <textarea
       data-testid="rich-text-editor"
       placeholder={placeholder}

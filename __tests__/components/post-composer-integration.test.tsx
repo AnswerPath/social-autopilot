@@ -2,9 +2,25 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { PostComposer } from '@/components/post-composer'
 
-// Mock the RichTextEditor to avoid Lexical complexity in tests
-jest.mock('@/components/ui/rich-text-editor', () => ({
-  RichTextEditor: ({ placeholder, onContentChange }: { placeholder?: string; onContentChange?: (text: string) => void }) => (
+// Mock the EnhancedRichTextEditor and its dependencies to avoid Lexical complexity in tests
+jest.mock('@/components/ui/emoji-picker', () => ({
+  EmojiPicker: ({ onEmojiSelect }: any) => (
+    <div data-testid="emoji-picker">
+      <button onClick={() => onEmojiSelect('😀')}>😀</button>
+    </div>
+  )
+}))
+
+jest.mock('@/components/ui/hashtag-suggestions', () => ({
+  HashtagSuggestions: () => <div data-testid="hashtag-suggestions" />
+}))
+
+jest.mock('@/components/ui/mention-suggestions', () => ({
+  MentionSuggestions: () => <div data-testid="mention-suggestions" />
+}))
+
+jest.mock('@/components/ui/enhanced-rich-text-editor', () => ({
+  EnhancedRichTextEditor: ({ placeholder, onContentChange }: { placeholder?: string; onContentChange?: (text: string) => void }) => (
     <div data-testid="rich-text-editor">
       <textarea 
         data-testid="editor-textarea"
@@ -40,7 +56,7 @@ describe('PostComposer Integration', () => {
     render(<PostComposer onClose={mockOnClose} />)
     
     // Check that other elements are still present
-    expect(screen.getByText('Click to upload')).toBeInTheDocument()
+    expect(screen.getByText(/Tap to upload/i)).toBeInTheDocument()
     expect(screen.getByText('When to Post')).toBeInTheDocument()
     expect(screen.getByText('Require Approval')).toBeInTheDocument()
   })
