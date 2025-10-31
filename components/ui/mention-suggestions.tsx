@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Users, Clock, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface User {
+export interface User {
   id: string
   username: string
   displayName: string

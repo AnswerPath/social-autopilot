@@ -126,8 +126,11 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
           last_activity: new Date().toISOString(),
           is_active: true,
-          ip_address: request.headers.get('x-forwarded-for') || 'unknown',
-          user_agent: request.headers.get('user-agent') || 'unknown',
+          ip_address:
+            (req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+             req.headers.get('x-real-ip') ||
+             'unknown'),
+          user_agent: req.headers.get('user-agent') || 'unknown',
           device_info: {}
         })
       
@@ -209,7 +212,7 @@ export async function POST(request: NextRequest) {
       maxAge: 30 * 24 * 60 * 60 // 30 days
     })
 
-    console.log('Login successful - Session ID:', sessionId)
+    // Login successful
 
     return response
 

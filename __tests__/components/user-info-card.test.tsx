@@ -77,4 +77,41 @@ describe('UserInfoCard Component', () => {
     expect(screen.getByText('DELETE POST')).toBeInTheDocument()
     expect(screen.getByText('MANAGE USERS')).toBeInTheDocument()
   })
+
+  it('should display loading state', () => {
+    const { useProfile } = require('@/hooks/use-profile')
+    jest.spyOn(require('@/hooks/use-profile'), 'useProfile').mockReturnValue({
+      profile: null,
+      loading: true,
+      error: null,
+      getAvatarUrl: () => '',
+      fetchProfile: jest.fn()
+    })
+    
+    render(<UserInfoCard />)
+    expect(screen.getByText('Loading user info...')).toBeInTheDocument()
+  })
+
+  it('should display error state', () => {
+    // Mock both useAuth and useProfile for error case
+    jest.spyOn(require('@/hooks/use-auth'), 'useAuth').mockReturnValue({
+      user: {
+        id: 'test-user-id',
+        email: 'test@example.com',
+        role: 'ADMIN',
+        permissions: []
+      }
+    })
+    
+    jest.spyOn(require('@/hooks/use-profile'), 'useProfile').mockReturnValue({
+      profile: null,
+      loading: false,
+      error: 'Failed to load profile',
+      getAvatarUrl: () => '',
+      fetchProfile: jest.fn()
+    })
+    
+    render(<UserInfoCard />)
+    expect(screen.getByText('Failed to load profile')).toBeInTheDocument()
+  })
 })

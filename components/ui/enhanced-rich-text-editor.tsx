@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils'
 import { calculateXCharacterCount } from '@/lib/x-character-counter'
 import { EmojiPicker } from './emoji-picker'
 import { HashtagSuggestions } from './hashtag-suggestions'
-import { MentionSuggestions } from './mention-suggestions'
+import { MentionSuggestions, type User as MentionUser } from './mention-suggestions'
 
 interface EnhancedRichTextEditorProps {
   placeholder?: string
@@ -240,7 +240,7 @@ function SuggestionPlugin({
 }: { 
   content: string
   onHashtagSelect: (hashtag: string) => void
-  onMentionSelect: (user: any) => void
+  onMentionSelect: (user: MentionUser) => void
 }) {
   const [editor] = useLexicalComposerContext()
   const [showHashtagSuggestions, setShowHashtagSuggestions] = useState(false)
@@ -280,7 +280,7 @@ function SuggestionPlugin({
     onHashtagSelect(hashtag)
   }
 
-  const handleMentionSelect = (user: any) => {
+  const handleMentionSelect = (user: MentionUser) => {
     // Replace the current mention query with the selected user
     const newContent = content.replace(/@\w*$/, `@${user.username} `)
     editor.update(() => {
@@ -375,7 +375,7 @@ export function EnhancedRichTextEditor({
     // Hashtag selection is handled by the suggestion plugin
   }, [])
 
-  const handleMentionSelect = useCallback((user: any) => {
+  const handleMentionSelect = useCallback((user: MentionUser) => {
     // Mention selection is handled by the suggestion plugin
   }, [])
 

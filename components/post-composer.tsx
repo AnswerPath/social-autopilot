@@ -15,7 +15,7 @@ import { MediaUpload } from "@/components/ui/media-upload"
 import { PostPreview } from "@/components/ui/post-preview"
 import { useToast } from "@/hooks/use-toast"
 import type { MediaAttachment } from "@/lib/media-validation"
-import { DraftManager, type Draft, type DraftFormData } from "@/lib/draft-manager"
+import { DraftManager, type Draft, type DraftFormData, type ConflictResolution } from "@/lib/draft-manager"
 import { DraftManagerComponent } from "@/components/draft-manager"
 
 interface PostComposerProps {
@@ -37,7 +37,7 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
   const [isAutoSaving, setIsAutoSaving] = useState(false)
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null)
   const [showDraftManager, setShowDraftManager] = useState(false)
-  const [conflictResolution, setConflictResolution] = useState<any>(null)
+  const [conflictResolution, setConflictResolution] = useState<ConflictResolution | null>(null)
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [previewDeviceView, setPreviewDeviceView] = useState<'mobile' | 'desktop'>('desktop')
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light')
@@ -178,14 +178,15 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
     }
   }
 
-  const handleSubmit = async () => {
-    if (!content.trim()) return
+  const handleSubmit = async (options?: { requiresApproval?: boolean }) => {
+    if (!content.trim() && uploadedMediaIds.length === 0) return
     
     setIsPosting(true)
     try {
       const payload = {
         text: content,
         mediaIds: uploadedMediaIds,
+        requiresApproval: options?.requiresApproval === true,
         ...(postType === "schedule" && scheduleDate && scheduleTime && {
           scheduledTime: new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
         })
@@ -524,21 +525,42 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
               </Button>
             )}
             {!isPreviewMode && (requiresApproval ? (
-              <Button className="w-full sm:w-auto min-h-[44px]">
+              <Button className="w-full sm:w-auto min-h-[44px]" onClick={() => handleSubmit({ requiresApproval: true })}>
                 <Users className="h-4 w-4 mr-2" />
                 Submit for Approval
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isPosting || !content.trim() || !isContentValid} className="w-full sm:w-auto min-h-[44px]">
+              <Button
+                onClick={async () => {
+                  if (postType === "draft") {
+                    await handleSaveDraft()
+                    onClose()
+                    return
+                  }
+                  await handleSubmit()
+                }}
+                disabled={
+                  isPosting
+                  || (!content.trim() && uploadedMediaIds.length === 0)
+                  || !isContentValid
+                  || (postType === "schedule" && (!scheduleDate || !scheduleTime))
+                }
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 {postType === "now" ? (
                   <>
                     <Send className="h-4 w-4 mr-2" />
                     {isPosting ? 'Posting...' : 'Post Now'}
                   </>
-                ) : (
+                ) : postType === "schedule" ? (
                   <>
                     <Calendar className="h-4 w-4 mr-2" />
                     {isPosting ? 'Scheduling...' : 'Schedule Post'}
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Draft
                   </>
                 )}
               </Button>
