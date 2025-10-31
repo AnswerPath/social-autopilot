@@ -35,6 +35,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // In development mode, return the mock profile from the user object
+    if (user.profile) {
+      return NextResponse.json({
+        profile: user.profile,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          permissions: user.permissions
+        }
+      });
+    }
+
     // Get user profile from database
     const { data: profile, error } = await supabaseAdmin
       .from('user_profiles')
