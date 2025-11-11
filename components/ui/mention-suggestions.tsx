@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Users, Clock, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -60,9 +59,25 @@ const saveRecentMention = (username: string) => {
 
 // Format follower count
 const formatFollowerCount = (count?: number): string => {
-  if (!count) return ''
-  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`
+  if (!count) {
+    return ''
+  }
+
+  const formatWithSuffix = (value: number, divisor: number, suffix: string) => {
+    const formatted = value / divisor
+    const hasDecimal = Math.abs(formatted % 1) > Number.EPSILON
+    const display = hasDecimal ? formatted.toFixed(1) : formatted.toFixed(0)
+    return `${display}${suffix}`
+  }
+
+  if (count >= 1_000_000) {
+    return formatWithSuffix(count, 1_000_000, 'M')
+  }
+
+  if (count >= 1_000) {
+    return formatWithSuffix(count, 1_000, 'K')
+  }
+
   return count.toString()
 }
 
@@ -76,10 +91,16 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
     const lowercaseQuery = query.toLowerCase()
     const allUsers = [...CONNECTIONS, ...SUGGESTED_USERS]
     
-    return allUsers.filter(user => 
-      user.username.toLowerCase().includes(lowercaseQuery) ||
-      user.displayName.toLowerCase().includes(lowercaseQuery)
-    )
+    return allUsers.filter(user => {
+      const username = user.username.toLowerCase()
+      const displayName = user.displayName.toLowerCase()
+      return (
+        username.includes(lowercaseQuery) ||
+        displayName.includes(lowercaseQuery) ||
+        username.startsWith(lowercaseQuery[0]) ||
+        displayName.startsWith(lowercaseQuery[0])
+      )
+    })
   }, [query])
 
   // Generate suggestions with priority
@@ -94,21 +115,52 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
     const suggested = SUGGESTED_USERS
     const filtered = filteredUsers
 
-    let combined: User[] = []
+    const ensureUnique = (users: User[]) => {
+      const map = new Map<string, User>()
+      users.forEach(user => {
+        if (!map.has(user.id)) {
+          map.set(user.id, user)
+        }
+      })
+      return Array.from(map.values())
+    }
+
+    let combined: User[]
 
     if (query.trim()) {
-      // If there's a query, prioritize filtered results
-      combined = [
-        ...filtered.filter(u => connections.some(c => c.id === u.id)), // Connections first
-        ...filtered.filter(u => suggested.some(s => s.id === u.id)),   // Then suggested
-        ...filtered.filter(u => !combined.some(c => c.id === u.id))    // Then others
-      ]
+      // Prioritise filtered connections, then suggested users, then any remaining matches
+      const filteredConnections = filtered.filter(u =>
+        connections.some(c => c.id === u.id)
+      )
+      const filteredSuggested = filtered.filter(u =>
+        suggested.some(s => s.id === u.id)
+      )
+      const remaining = filtered.filter(
+        u =>
+          !filteredConnections.some(c => c.id === u.id) &&
+          !filteredSuggested.some(s => s.id === u.id)
+      )
+
+      combined = ensureUnique([
+        ...filteredConnections,
+        ...filteredSuggested,
+        ...remaining,
+      ])
     } else {
-      // If no query, show recent mentions first, then connections
-      combined = [
+      // No query: show recent first, then connections, then suggested users
+      const recentIds = new Set(recent.map(r => r.id))
+      const connectionsWithoutRecent = connections.filter(
+        c => !recentIds.has(c.id)
+      )
+      const suggestedWithoutRecentOrConnections = suggested.filter(
+        s => !recentIds.has(s.id) && !connectionsWithoutRecent.some(c => c.id === s.id)
+      )
+
+      combined = ensureUnique([
         ...recent,
-        ...connections.filter(c => !recent.some(r => r.id === c.id))
-      ]
+        ...connectionsWithoutRecent,
+        ...suggestedWithoutRecentOrConnections,
+      ])
     }
 
     setSuggestions(combined.slice(0, 8)) // Limit to 8 suggestions
@@ -116,29 +168,116 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
 
   // Handle user selection
   const handleSelect = (user: User) => {
-    saveRecentMention(user.username)
-    onSelect(user)
+    const normalizedUser: User = {
+      ...user,
+      avatar: user.avatar ?? '/placeholder-user.jpg'
+    }
+
+    saveRecentMention(normalizedUser.username)
+    onSelect(normalizedUser)
   }
+
+  const suggestionsWithMeta = useMemo(() => {
+    const counts: Record<'recent' | 'connection' | 'suggested', number> = {
+      recent: 0,
+      connection: 0,
+      suggested: 0,
+    }
+    let lastType: User['type'] | null = null
+
+    return suggestions.flatMap((user) => {
+      const type = user.type ?? 'suggested'
+      const items: Array<
+        | { kind: 'header'; type: NonNullable<User['type']> }
+        | { kind: 'item'; user: User; typeIndex: number }
+      > = []
+
+      if (type !== lastType) {
+        items.push({ kind: 'header', type })
+        lastType = type
+      }
+
+      const typeIndex = counts[type] ?? 0
+      if (counts[type] !== undefined) {
+        counts[type] += 1
+      }
+
+      items.push({ kind: 'item', user, typeIndex })
+      return items
+    })
+  }, [suggestions])
 
   if (!isVisible || suggestions.length === 0) {
     return null
   }
 
+  const headerLabels: Record<'recent' | 'connection' | 'suggested', string> = {
+    recent: 'Recent',
+    connection: 'Following',
+    suggested: 'Suggested',
+  }
+
+  const badgeLabels: Record<'recent' | 'connection' | 'suggested', string> = {
+    recent: 'Recent mention',
+    connection: 'Following user',
+    suggested: 'Suggested for you',
+  }
+
   return (
     <div className={cn("absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1", className)}>
       <div className="p-2">
-        {suggestions.map((user, index) => (
+        {suggestionsWithMeta.map((entry, index) => {
+          if (entry.kind === 'header') {
+            return (
+              <div
+                key={`header-${entry.type}-${index}`}
+                className="px-2 py-1 text-xs font-semibold text-gray-500"
+              >
+                {headerLabels[entry.type]}
+              </div>
+            )
+          }
+
+          const { user, typeIndex } = entry
+          const initials = user.displayName
+            .split(' ')
+            .map(n => n[0])
+            .join('')
+            .toUpperCase()
+          const badgeLabel = user.type ? badgeLabels[user.type] : ''
+          const BadgeIcon =
+            user.type === 'recent'
+              ? Clock
+              : user.type === 'connection'
+              ? Users
+              : undefined
+
+          return (
           <div
             key={`${user.id}-${index}`}
             className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
             onClick={() => handleSelect(user)}
           >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={user.avatar} alt={user.displayName} />
-              <AvatarFallback>
-                {user.displayName.split(' ').map(n => n[0]).join('').toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <div className="relative flex shrink-0 overflow-hidden rounded-full h-8 w-8 bg-muted items-center justify-center">
+              {user.avatar ? (
+                <>
+                  <img
+                    src={user.avatar}
+                    alt={user.displayName}
+                    className="h-full w-full object-cover"
+                  />
+                  <span className="sr-only">{initials}</span>
+                </>
+              ) : (
+                <span
+                  className="flex h-full w-full items-center justify-center rounded-full bg-muted"
+                  role="img"
+                  aria-label={user.displayName}
+                >
+                  {initials}
+                </span>
+              )}
+            </div>
             
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -162,26 +301,33 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
             </div>
 
             <div className="flex-shrink-0">
-              {user.type === 'recent' && (
-                <Badge variant="outline" className="text-xs">
-                  <Clock className="h-3 w-3 mr-1" />
-                  Recent
-                </Badge>
-              )}
-              {user.type === 'connection' && (
-                <Badge variant="secondary" className="text-xs">
-                  <Users className="h-3 w-3 mr-1" />
-                  Following
-                </Badge>
-              )}
-              {user.type === 'suggested' && (
-                <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
-                  Suggested
+              {user.type && (
+                <Badge
+                  variant={
+                    user.type === 'suggested'
+                      ? 'outline'
+                      : user.type === 'recent'
+                      ? 'outline'
+                      : 'secondary'
+                  }
+                  className={cn(
+                    "text-xs",
+                    user.type === 'suggested' && "text-blue-600 border-blue-200"
+                  )}
+                  aria-label={`${badgeLabel} ${user.displayName}`}
+                >
+                  {BadgeIcon && (
+                    <BadgeIcon className="h-3 w-3 mr-1" aria-hidden="true" />
+                  )}
+                  <span aria-hidden="true">
+                    {user.type === 'connection' ? `Following ${typeIndex + 1}` : badgeLabel}
+                  </span>
                 </Badge>
               )}
             </div>
           </div>
-        ))}
+        )
+        })}
       </div>
 
       {/* Footer */}

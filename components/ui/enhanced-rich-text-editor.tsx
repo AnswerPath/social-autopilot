@@ -21,13 +21,12 @@ import {
   $createParagraphNode,
   TextNode,
   FORMAT_TEXT_COMMAND,
-  $insertNodes,
-  ParagraphNode
+  $insertNodes
 } from 'lexical'
 import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND, ListNode, ListItemNode } from '@lexical/list'
 import { $isLinkNode, TOGGLE_LINK_COMMAND, LinkNode } from '@lexical/link'
 import { HashtagNode } from '@lexical/hashtag'
-import { Bold, Italic, List, ListOrdered, Link, Smile, Hash, AtSign } from 'lucide-react'
+import { Bold, Italic, List, ListOrdered, Link, Smile } from 'lucide-react'
 import { Toggle } from '@/components/ui/toggle'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -35,6 +34,14 @@ import { calculateXCharacterCount } from '@/lib/x-character-counter'
 import { EmojiPicker } from './emoji-picker'
 import { HashtagSuggestions } from './hashtag-suggestions'
 import { MentionSuggestions, type User as MentionUser } from './mention-suggestions'
+import type { LexicalEditor } from 'lexical'
+type MaybeLexicalEditor = Pick<LexicalEditor, 'update' | 'dispatchCommand'> | { update?: (...args: any[]) => void; dispatchCommand?: (...args: any[]) => void }
+
+const runEditorUpdate = (editor: MaybeLexicalEditor, updateFn: () => void, options?: Record<string, unknown>) => {
+  if (typeof editor?.update === 'function') {
+    editor.update(updateFn, options)
+  }
+}
 
 interface EnhancedRichTextEditorProps {
   placeholder?: string
@@ -60,25 +67,33 @@ function InitialContentPlugin({ initialContent }: { initialContent: string }) {
                           (initialContent !== lastContentRef.current)
       
       if (shouldUpdate) {
-        editor.update(() => {
+        runEditorUpdate(editor, () => {
           const root = $getRoot()
           const currentText = root.getTextContent()
           
           // Set content if editor is empty or content is different
           // Allow setting even if empty string (for editing cleared content)
           if (!isInitializedRef.current || currentText !== initialContent) {
-            root.clear()
+            if (typeof (root as any).clear === 'function') {
+              ;(root as any).clear()
+            }
             if (initialContent) {
               // Create a paragraph node and append the text to it
               // Root nodes can only contain element nodes (like paragraphs), not text nodes directly
               const paragraph = $createParagraphNode()
               const textNode = $createTextNode(initialContent)
-              paragraph.append(textNode)
-              root.append(paragraph)
+              if (typeof paragraph.append === 'function') {
+                paragraph.append(textNode)
+              }
+              if (typeof (root as any).append === 'function') {
+                ;(root as any).append(paragraph)
+              }
             } else {
               // Even for empty content, create an empty paragraph
               const paragraph = $createParagraphNode()
-              root.append(paragraph)
+              if (typeof (root as any).append === 'function') {
+                ;(root as any).append(paragraph)
+              }
             }
             lastContentRef.current = initialContent
             isInitializedRef.current = true
@@ -199,7 +214,7 @@ function EnhancedFormattingToolbar({ onEmojiSelect }: { onEmojiSelect: (emoji: s
   }
 
   const handleEmojiSelect = (emoji: string) => {
-    editor.update(() => {
+    runEditorUpdate(editor, () => {
       const selection = $getSelection()
       if ($isRangeSelection(selection)) {
         const textNode = $createTextNode(emoji)
@@ -294,7 +309,6 @@ function SuggestionPlugin({
   const [showHashtagSuggestions, setShowHashtagSuggestions] = useState(false)
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false)
   const [currentQuery, setCurrentQuery] = useState('')
-  const editorRef = useRef<HTMLDivElement>(null)
 
   // Detect hashtag and mention patterns
   useEffect(() => {
@@ -319,10 +333,19 @@ function SuggestionPlugin({
   const handleHashtagSelect = (hashtag: string) => {
     // Replace the current hashtag query with the selected hashtag
     const newContent = content.replace(/#\w*$/, `#${hashtag} `)
-    editor.update(() => {
+    runEditorUpdate(editor, () => {
       const root = $getRoot()
-      root.clear()
-      root.append($createTextNode(newContent))
+      if (typeof (root as any).clear === 'function') {
+        ;(root as any).clear()
+      }
+      const paragraph = $createParagraphNode()
+      const textNode = $createTextNode(newContent)
+      if (typeof paragraph.append === 'function') {
+        paragraph.append(textNode)
+      }
+      if (typeof (root as any).append === 'function') {
+        ;(root as any).append(paragraph)
+      }
     })
     setShowHashtagSuggestions(false)
     onHashtagSelect(hashtag)
@@ -331,10 +354,19 @@ function SuggestionPlugin({
   const handleMentionSelect = (user: MentionUser) => {
     // Replace the current mention query with the selected user
     const newContent = content.replace(/@\w*$/, `@${user.username} `)
-    editor.update(() => {
+    runEditorUpdate(editor, () => {
       const root = $getRoot()
-      root.clear()
-      root.append($createTextNode(newContent))
+      if (typeof (root as any).clear === 'function') {
+        ;(root as any).clear()
+      }
+      const paragraph = $createParagraphNode()
+      const textNode = $createTextNode(newContent)
+      if (typeof paragraph.append === 'function') {
+        paragraph.append(textNode)
+      }
+      if (typeof (root as any).append === 'function') {
+        ;(root as any).append(paragraph)
+      }
     })
     setShowMentionSuggestions(false)
     onMentionSelect(user)
@@ -368,6 +400,11 @@ export function EnhancedRichTextEditor({
 }: EnhancedRichTextEditorProps) {
   const [characterCount, setCharacterCount] = useState(0)
   const [isValid, setIsValid] = useState(true)
+  const [editorContent, setEditorContent] = useState(initialContent ?? "")
+
+  useEffect(() => {
+    setEditorContent(initialContent ?? "")
+  }, [initialContent])
 
   const initialConfig = {
     namespace: 'EnhancedRichTextEditor',
@@ -412,8 +449,9 @@ export function EnhancedRichTextEditor({
       const root = $getRoot()
       const text = root.getTextContent()
       onContentChange?.(text)
+      setEditorContent(text)
     })
-  }, [onContentChange])
+  }, [onContentChange, setEditorContent])
 
   const handleEmojiSelect = useCallback((emoji: string) => {
     // Emoji selection is handled by the toolbar
@@ -455,7 +493,7 @@ export function EnhancedRichTextEditor({
             <LinkPlugin />
             <HashtagPlugin />
             <SuggestionPlugin
-              content={initialContent}
+              content={editorContent}
               onHashtagSelect={handleHashtagSelect}
               onMentionSelect={handleMentionSelect}
             />

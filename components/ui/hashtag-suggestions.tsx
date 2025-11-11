@@ -32,6 +32,12 @@ const TRENDING_HASHTAGS = [
   { tag: 'Developer', count: 12000, type: 'trending' as const }
 ]
 
+const formatCount = (count: number): string => {
+  const formatted = count / 1000
+  const hasDecimal = Math.abs(formatted % 1) > Number.EPSILON
+  return `${hasDecimal ? formatted.toFixed(1) : formatted.toFixed(0)}k`
+}
+
 // Related hashtags based on content analysis
 const getRelatedHashtags = (content: string): HashtagSuggestion[] => {
   const words = content.toLowerCase().split(/\s+/)
@@ -91,21 +97,38 @@ export function HashtagSuggestions({ content, isVisible, onSelect, className }: 
 
   // Generate suggestions based on content
   useEffect(() => {
-    if (!content.trim() || !isVisible) {
+    if (!isVisible) {
       setSuggestions([])
       return
     }
 
     const related = getRelatedHashtags(content)
     const recent = getRecentHashtags()
+    const recentWithFallback =
+      recent.length > 0
+        ? recent
+        : TRENDING_HASHTAGS.slice(2, 4).map(tag => ({
+            tag: tag.tag,
+            type: 'recent' as const,
+          }))
     const trending = TRENDING_HASHTAGS.slice(0, 5)
 
+    const seen = new Set<string>()
+    const combined: HashtagSuggestion[] = []
+    const addUnique = (items: HashtagSuggestion[]) => {
+      items.forEach(item => {
+        const key = item.tag.toLowerCase()
+        if (!seen.has(key)) {
+          seen.add(key)
+          combined.push(item)
+        }
+      })
+    }
+
     // Combine suggestions with priority: related > recent > trending
-    const combined = [
-      ...related,
-      ...recent.filter(r => !related.find(rel => rel.tag === r.tag)),
-      ...trending.filter(t => !related.find(rel => rel.tag === t.tag) && !recent.find(rec => rec.tag === t.tag))
-    ]
+    addUnique(related)
+    addUnique(recentWithFallback.filter(r => !related.find(rel => rel.tag === r.tag)))
+    addUnique(trending)
 
     setSuggestions(combined.slice(0, 12)) // Limit total suggestions
   }, [content, isVisible])
@@ -123,6 +146,28 @@ export function HashtagSuggestions({ content, isVisible, onSelect, className }: 
   return (
     <div className={cn("absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 p-3", className)}>
       <div className="space-y-3">
+        {/* Related */}
+        {suggestions.filter(s => s.type === 'related').length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Hash className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium text-gray-700">Related</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {suggestions.filter(s => s.type === 'related').map((suggestion, index) => (
+                <Badge
+                  key={`related-${index}`}
+                  variant="secondary"
+                  className="cursor-pointer hover:bg-blue-100 text-blue-700 border-blue-200"
+                  onClick={() => handleSelect(suggestion.tag)}
+                >
+                  #{suggestion.tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Trending */}
         {suggestions.filter(s => s.type === 'trending').length > 0 && (
           <div>
@@ -141,31 +186,11 @@ export function HashtagSuggestions({ content, isVisible, onSelect, className }: 
                   #{suggestion.tag}
                   {suggestion.count && (
                     <span className="ml-1 text-xs opacity-75">
-                      {suggestion.count > 1000 ? `${(suggestion.count / 1000).toFixed(1)}k` : suggestion.count}
+                      {suggestion.count >= 1000
+                        ? formatCount(suggestion.count)
+                        : suggestion.count}
                     </span>
                   )}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Related */}
-        {suggestions.filter(s => s.type === 'related').length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Hash className="h-4 w-4 text-blue-500" />
-              <span className="text-sm font-medium text-gray-700">Related</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {suggestions.filter(s => s.type === 'related').map((suggestion, index) => (
-                <Badge
-                  key={`related-${index}`}
-                  variant="secondary"
-                  className="cursor-pointer hover:bg-blue-100 text-blue-700 border-blue-200"
-                  onClick={() => handleSelect(suggestion.tag)}
-                >
-                  #{suggestion.tag}
                 </Badge>
               ))}
             </div>

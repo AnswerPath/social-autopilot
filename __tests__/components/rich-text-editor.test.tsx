@@ -8,7 +8,7 @@ describe.skip('RichTextEditor (deprecated - using EnhancedRichTextEditor)', () =
 
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-// import { RichTextEditor } from '@/components/ui/rich-text-editor'
+import { EnhancedRichTextEditor as RichTextEditor } from '@/components/ui/enhanced-rich-text-editor'
 
 // Mock the character counter utility
 jest.mock('@/lib/x-character-counter', () => ({
@@ -75,6 +75,10 @@ jest.mock('@lexical/react/LexicalLinkPlugin', () => ({
 
 jest.mock('@lexical/react/LexicalHashtagPlugin', () => ({
   HashtagPlugin: () => <div data-testid="hashtag-plugin" />
+}))
+
+jest.mock('@lexical/hashtag', () => ({
+  HashtagNode: class HashtagNode {},
 }))
 
 jest.mock('@lexical/react/LexicalOnChangePlugin', () => ({
