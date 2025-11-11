@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { X, Calendar, Send, Save, Users, FileText, Clock, Eye, Edit3, Smartphone, Monitor, Sun, Moon } from 'lucide-react'
+import { X, Calendar, Send, Save, Users, FileText, Clock, Eye, Edit3, Smartphone, Monitor, Sun, Moon, FileImage } from 'lucide-react'
 import { Switch } from "@/components/ui/switch"
 import { MediaUpload } from "@/components/ui/media-upload"
 import { PostPreview } from "@/components/ui/post-preview"
@@ -17,13 +17,16 @@ import { useToast } from "@/hooks/use-toast"
 import type { MediaAttachment } from "@/lib/media-validation"
 import { DraftManager, type Draft, type DraftFormData, type ConflictResolution } from "@/lib/draft-manager"
 import { DraftManagerComponent } from "@/components/draft-manager"
+import { getUserTimezone, convertFromUtc } from "@/lib/timezone-utils"
+import type { CalendarPost } from "@/lib/calendar-utils"
 
 interface PostComposerProps {
   onClose: () => void
   initialDraft?: Draft
+  editingPost?: CalendarPost | null
 }
 
-export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
+export function PostComposer({ onClose, initialDraft, editingPost }: PostComposerProps) {
   const [content, setContent] = useState("")
   const [scheduleDate, setScheduleDate] = useState("")
   const [scheduleTime, setScheduleTime] = useState("")
@@ -47,16 +50,60 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
 
   const maxCharacters = 280
 
-  // Initialize with draft data if provided
+  // Initialize with scheduled post data if editing (priority over draft)
   useEffect(() => {
-    if (initialDraft) {
+    if (editingPost) {
+      console.log('Initializing with editingPost:', editingPost)
+      
+      // Set content - handle null/undefined
+      const postContent = editingPost.content || ''
+      console.log('Setting content:', postContent)
+      setContent(postContent)
+      setCurrentDraftId(editingPost.id)
+      
+      // Set media URLs if available
+      const mediaUrls = editingPost.mediaUrls || []
+      console.log('Setting media URLs:', mediaUrls)
+      if (mediaUrls.length > 0) {
+        setUploadedMediaIds(mediaUrls)
+      } else {
+        setUploadedMediaIds([])
+      }
+      
+      // Set post type to schedule
+      setPostType("schedule")
+      
+      // Parse scheduled date/time from scheduledAt
+      // scheduledAt is in UTC, but we need to display it in the user's timezone
+      if (editingPost.scheduledAt) {
+        const utcDate = new Date(editingPost.scheduledAt)
+        const userTimezone = editingPost.timezone || getUserTimezone()
+        
+        // Convert UTC to user's timezone for display
+        const localDate = convertFromUtc(utcDate, userTimezone)
+        const year = localDate.getFullYear()
+        const month = String(localDate.getMonth() + 1).padStart(2, '0')
+        const day = String(localDate.getDate()).padStart(2, '0')
+        const hours = String(localDate.getHours()).padStart(2, '0')
+        const minutes = String(localDate.getMinutes()).padStart(2, '0')
+        
+        setScheduleDate(`${year}-${month}-${day}`)
+        setScheduleTime(`${hours}:${minutes}`)
+      }
+      
+      // Set approval requirement if needed
+      if (editingPost.status === 'pending_approval') {
+        setRequiresApproval(true)
+      }
+    } else if (initialDraft) {
+      // Only initialize with draft if not editing a scheduled post
       setContent(initialDraft.content)
       setCurrentDraftId(initialDraft.id)
       if (initialDraft.media_urls) {
         setUploadedMediaIds(initialDraft.media_urls)
       }
     }
-  }, [initialDraft])
+  }, [editingPost, initialDraft])
 
   // Auto-save functionality
   useEffect(() => {
@@ -183,53 +230,134 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
     
     setIsPosting(true)
     try {
-      const payload = {
-        text: content,
-        mediaIds: uploadedMediaIds,
-        requiresApproval: options?.requiresApproval === true,
-        ...(postType === "schedule" && scheduleDate && scheduleTime && {
-          scheduledTime: new Date(`${scheduleDate}T${scheduleTime}`).toISOString()
+      // For scheduled posts, use the scheduled-posts endpoint with timezone support
+      if (postType === "schedule" && scheduleDate && scheduleTime) {
+        const timezone = getUserTimezone()
+        const payload = {
+          content: content.trim(),
+          mediaUrls: uploadedMediaIds,
+          scheduledDate: scheduleDate,
+          scheduledTime: scheduleTime,
+          timezone,
+          submitForApproval: options?.requiresApproval === true || requiresApproval
+        }
+
+        console.log('Scheduling post with payload:', JSON.stringify(payload, null, 2))
+
+        // If editing an existing scheduled post, use PATCH instead of POST
+        const isEditing = editingPost && editingPost.id
+        const endpoint = isEditing 
+          ? `/api/scheduled-posts/${editingPost.id}`
+          : '/api/scheduled-posts'
+        const method = isEditing ? 'PATCH' : 'POST'
+
+        const response = await fetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         })
-      }
 
-      const response = await fetch('/api/twitter/post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      const result = await response.json()
-      
-      if (response.ok) {
-        // Clean up draft if it exists
-        if (currentDraftId && currentDraftId !== 'temp') {
-          try {
-            await draftManager.deleteDraft(currentDraftId)
-          } catch (error) {
-            console.error('Failed to delete draft after posting:', error)
-          }
+        const result = await response.json()
+        
+        console.log('Schedule post response:', { 
+          status: response.status, 
+          ok: response.ok,
+          result: JSON.stringify(result, null, 2)
+        })
+        
+        if (!response.ok) {
+          console.error('Schedule post failed:', result)
         }
         
-        // Clean up local storage
-        draftManager.removeFromLocalStorage(currentDraftId || 'temp')
-        
-        toast({
-          title: "Success",
-          description: "Post published successfully!",
-        })
-        onClose()
+        if (response.ok && result.success) {
+          // Clean up draft if it exists (only if not editing a scheduled post)
+          if (!isEditing && currentDraftId && currentDraftId !== 'temp') {
+            try {
+              await draftManager.deleteDraft(currentDraftId)
+            } catch (error) {
+              console.error('Failed to delete draft after scheduling:', error)
+            }
+          }
+          
+          // Clean up local storage (only if not editing a scheduled post)
+          if (!isEditing) {
+            draftManager.removeFromLocalStorage(currentDraftId || 'temp')
+          }
+          
+          toast({
+            title: "Success",
+            description: result.message || (isEditing
+              ? (result.requiresApproval 
+                  ? "Post updated and submitted for approval!" 
+                  : "Post updated successfully!")
+              : (result.requiresApproval 
+                  ? "Post submitted for approval successfully!" 
+                  : "Post scheduled successfully!")),
+          })
+          onClose()
+        } else {
+          // Handle conflict errors specially
+          if (response.status === 409 && result.conflictCheck) {
+            toast({
+              title: "Scheduling Conflict",
+              description: result.error || "Another post is scheduled at a similar time.",
+              variant: "destructive",
+            })
+          } else {
+            toast({
+              title: "Error",
+              description: result.error || result.details || "Failed to schedule post",
+              variant: "destructive",
+            })
+          }
+        }
       } else {
-        toast({
-          title: "Error",
-          description: result.error || "Failed to publish post",
-          variant: "destructive",
+        // For immediate posts, use the twitter/post endpoint
+        const payload = {
+          text: content,
+          mediaIds: uploadedMediaIds,
+          requiresApproval: options?.requiresApproval === true,
+        }
+
+        const response = await fetch('/api/twitter/post', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         })
+
+        const result = await response.json()
+        
+        if (response.ok) {
+          // Clean up draft if it exists
+          if (currentDraftId && currentDraftId !== 'temp') {
+            try {
+              await draftManager.deleteDraft(currentDraftId)
+            } catch (error) {
+              console.error('Failed to delete draft after posting:', error)
+            }
+          }
+          
+          // Clean up local storage
+          draftManager.removeFromLocalStorage(currentDraftId || 'temp')
+          
+          toast({
+            title: "Success",
+            description: "Post published successfully!",
+          })
+          onClose()
+        } else {
+          toast({
+            title: "Error",
+            description: result.error || "Failed to publish post",
+            variant: "destructive",
+          })
+        }
       }
     } catch (error) {
-      console.error('Error posting tweet:', error)
+      console.error('Error submitting post:', error)
       toast({
         title: "Error",
-        description: "An unexpected error occurred",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
         variant: "destructive",
       })
     } finally {
@@ -446,6 +574,22 @@ export function PostComposer({ onClose, initialDraft }: PostComposerProps) {
               {/* Media Upload */}
               <div className="space-y-2">
                 <Label>Media Attachments</Label>
+                
+                {/* Display already uploaded media when editing */}
+                {editingPost && uploadedMediaIds && uploadedMediaIds.length > 0 && (
+                  <div className="mb-3 p-3 bg-gray-50 rounded-lg border">
+                    <p className="text-sm font-medium mb-2">Already uploaded media:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {uploadedMediaIds.map((mediaId, index) => (
+                        <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                          <FileImage className="h-3 w-3" />
+                          {mediaId}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
                 <MediaUpload
                   platform="twitter"
                   attachments={mediaAttachments}

@@ -1,0 +1,357 @@
+import { supabaseAdmin } from '@/lib/supabase'
+import { postTweet } from '@/lib/twitter-api-node'
+
+/**
+ * Job queue service for processing scheduled posts
+ */
+
+export interface JobStatus {
+  pending: number
+  processing: number
+  failed: number
+  published: number
+}
+
+export interface QueueMetrics {
+  totalJobs: number
+  statusCounts: JobStatus
+  oldestPendingJob?: Date
+  recentFailures: number
+}
+
+/**
+ * Calculate retry delay using exponential backoff
+ */
+export function calculateRetryDelay(retryCount: number): number {
+  // Exponential backoff: 1min, 5min, 30min
+  const delays = [1 * 60 * 1000, 5 * 60 * 1000, 30 * 60 * 1000]
+  const index = Math.min(retryCount, delays.length - 1)
+  return delays[index]
+}
+
+/**
+ * Check if a job should be retried
+ */
+export function shouldRetry(retryCount: number, maxRetries: number): boolean {
+  return retryCount < maxRetries
+}
+
+/**
+ * Enqueue a job (mark as scheduled)
+ */
+export async function enqueueJob(postId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabaseAdmin
+      .from('scheduled_posts')
+      .update({
+        status: 'scheduled',
+        retry_count: 0
+      })
+      .eq('id', postId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Process queue - find and process due jobs
+ */
+export async function processQueue(): Promise<{
+  success: boolean
+  processed: number
+  results: Array<{ id: string; status: string; error?: string }>
+}> {
+  const now = new Date()
+  const nowIso = now.toISOString()
+
+  try {
+    // Find jobs that are due (scheduled_at <= now) and in scheduled/approved status
+    const { data: dueJobs, error: fetchError } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('*')
+      .in('status', ['scheduled', 'approved'])
+      .lte('scheduled_at', nowIso)
+      .order('scheduled_at', { ascending: true })
+      .limit(50) // Process up to 50 jobs at a time
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch due jobs: ${fetchError.message}`)
+    }
+
+    if (!dueJobs || dueJobs.length === 0) {
+      return { success: true, processed: 0, results: [] }
+    }
+
+    const results: Array<{ id: string; status: string; error?: string }> = []
+
+    // Process each job
+    for (const job of dueJobs) {
+      try {
+        // Mark as processing (lock the job)
+        await supabaseAdmin
+          .from('scheduled_posts')
+          .update({ status: 'processing' })
+          .eq('id', job.id)
+
+        // Post the tweet
+        const postResult = await postTweet(
+          job.content,
+          job.media_urls || undefined,
+          job.user_id
+        )
+
+        if (postResult.success) {
+          // Mark as published
+          await supabaseAdmin
+            .from('scheduled_posts')
+            .update({
+              status: 'published',
+              posted_tweet_id: postResult.data?.id || null,
+              retry_count: 0
+            })
+            .eq('id', job.id)
+
+          results.push({
+            id: job.id,
+            status: 'published'
+          })
+        } else {
+          // Handle failure with retry logic
+          const maxRetries = job.max_retries || 3
+          const retryCount = (job.retry_count || 0) + 1
+
+          if (shouldRetry(retryCount, maxRetries)) {
+            // Schedule retry with exponential backoff
+            const retryDelay = calculateRetryDelay(retryCount)
+            const retryTime = new Date(now.getTime() + retryDelay)
+
+            await supabaseAdmin
+              .from('scheduled_posts')
+              .update({
+                status: 'scheduled',
+                retry_count: retryCount,
+                last_retry_at: now.toISOString(),
+                scheduled_at: retryTime.toISOString(),
+                error: postResult.error || 'Unknown error'
+              })
+              .eq('id', job.id)
+
+            results.push({
+              id: job.id,
+              status: 'scheduled_retry',
+              error: `Retry ${retryCount}/${maxRetries}: ${postResult.error || 'Unknown error'}`
+            })
+          } else {
+            // Mark as permanently failed
+            await supabaseAdmin
+              .from('scheduled_posts')
+              .update({
+                status: 'failed',
+                error: postResult.error || 'Max retries exceeded',
+                retry_count: retryCount
+              })
+              .eq('id', job.id)
+
+            results.push({
+              id: job.id,
+              status: 'failed',
+              error: `Max retries exceeded: ${postResult.error || 'Unknown error'}`
+            })
+          }
+        }
+      } catch (jobError: any) {
+        // Job processing error
+        const maxRetries = job.max_retries || 3
+        const retryCount = (job.retry_count || 0) + 1
+
+        if (shouldRetry(retryCount, maxRetries)) {
+          const retryDelay = calculateRetryDelay(retryCount)
+          const retryTime = new Date(now.getTime() + retryDelay)
+
+          await supabaseAdmin
+            .from('scheduled_posts')
+            .update({
+              status: 'scheduled',
+              retry_count: retryCount,
+              last_retry_at: now.toISOString(),
+              scheduled_at: retryTime.toISOString(),
+              error: jobError.message || 'Unknown error'
+            })
+            .eq('id', job.id)
+
+          results.push({
+            id: job.id,
+            status: 'scheduled_retry',
+            error: `Retry ${retryCount}/${maxRetries}: ${jobError.message || 'Unknown error'}`
+          })
+        } else {
+          await supabaseAdmin
+            .from('scheduled_posts')
+            .update({
+              status: 'failed',
+              error: jobError.message || 'Max retries exceeded',
+              retry_count: retryCount
+            })
+            .eq('id', job.id)
+
+          results.push({
+            id: job.id,
+            status: 'failed',
+            error: `Max retries exceeded: ${jobError.message || 'Unknown error'}`
+          })
+        }
+      }
+    }
+
+    return {
+      success: true,
+      processed: results.length,
+      results
+    }
+  } catch (error: any) {
+    throw new Error(`Queue processing failed: ${error.message}`)
+  }
+}
+
+/**
+ * Get queue metrics
+ */
+export async function getQueueMetrics(): Promise<QueueMetrics> {
+  try {
+    // Get status counts
+    const { data: statusCounts, error: statusError } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('status')
+
+    if (statusError) {
+      throw new Error(`Failed to get status counts: ${statusError.message}`)
+    }
+
+    const counts: JobStatus = {
+      pending: 0,
+      processing: 0,
+      failed: 0,
+      published: 0
+    }
+
+    statusCounts?.forEach((job: any) => {
+      if (job.status === 'scheduled' || job.status === 'approved' || job.status === 'pending_approval') {
+        counts.pending++
+      } else if (job.status === 'processing') {
+        counts.processing++
+      } else if (job.status === 'failed') {
+        counts.failed++
+      } else if (job.status === 'published') {
+        counts.published++
+      }
+    })
+
+    // Get oldest pending job
+    const { data: oldestPending } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('scheduled_at')
+      .in('status', ['scheduled', 'approved', 'pending_approval'])
+      .order('scheduled_at', { ascending: true })
+      .limit(1)
+      .single()
+
+    // Get recent failures (last hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { data: recentFailures } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('id')
+      .eq('status', 'failed')
+      .gte('updated_at', oneHourAgo)
+
+    return {
+      totalJobs: statusCounts?.length || 0,
+      statusCounts: counts,
+      oldestPendingJob: oldestPending?.scheduled_at ? new Date(oldestPending.scheduled_at) : undefined,
+      recentFailures: recentFailures?.length || 0
+    }
+  } catch (error: any) {
+    throw new Error(`Failed to get queue metrics: ${error.message}`)
+  }
+}
+
+/**
+ * Retry a failed job manually
+ */
+export async function retryFailedJob(postId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get the job
+    const { data: job, error: fetchError } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('*')
+      .eq('id', postId)
+      .single()
+
+    if (fetchError || !job) {
+      return { success: false, error: 'Job not found' }
+    }
+
+    if (job.status !== 'failed') {
+      return { success: false, error: 'Job is not in failed status' }
+    }
+
+    const maxRetries = job.max_retries || 3
+    const retryCount = job.retry_count || 0
+
+    if (retryCount >= maxRetries) {
+      return { success: false, error: 'Max retries exceeded' }
+    }
+
+    // Reset job for retry
+    const retryDelay = calculateRetryDelay(retryCount)
+    const retryTime = new Date(Date.now() + retryDelay)
+
+    const { error: updateError } = await supabaseAdmin
+      .from('scheduled_posts')
+      .update({
+        status: 'scheduled',
+        retry_count: retryCount + 1,
+        last_retry_at: new Date().toISOString(),
+        scheduled_at: retryTime.toISOString(),
+        error: null
+      })
+      .eq('id', postId)
+
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Cancel a scheduled job
+ */
+export async function cancelJob(postId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabaseAdmin
+      .from('scheduled_posts')
+      .update({
+        status: 'cancelled'
+      })
+      .eq('id', postId)
+      .eq('user_id', userId)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+

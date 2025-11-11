@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { SchedulingService } from '@/lib/scheduling-service'
 
 export const runtime = 'nodejs'
 
@@ -27,17 +28,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('scheduled_posts')
-      .select(`
-        *,
-        approval_comments (
-          id,
-          comment,
-          comment_type,
-          user_id,
-          created_at,
-          is_resolved
-        )
-      `)
+      .select('*')
       .eq('user_id', userId)
       .order('scheduled_at', { ascending: true })
 
@@ -51,66 +42,116 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      console.error('Error fetching scheduled posts:', error)
+      return NextResponse.json({ 
+        success: false, 
+        error: error.message,
+        details: error.details || error.hint 
+      }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, posts: data || [] })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Failed to list scheduled posts' }, { status: 500 })
+    console.error('Exception in GET scheduled-posts:', error)
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Failed to list scheduled posts',
+      details: error.message 
+    }, { status: 500 })
   }
 }
 
-// Enhanced POST to check approval requirements
+// Enhanced POST to check approval requirements with timezone support and conflict detection
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { content, mediaUrls, scheduledAt, status, submitForApproval } = body
-    if (!content || !scheduledAt) {
-      return NextResponse.json({ error: 'content and scheduledAt are required' }, { status: 400 })
-    }
+    console.log('Received schedule request:', JSON.stringify(body, null, 2))
+    
+    const { 
+      content, 
+      mediaUrls, 
+      scheduledAt, 
+      scheduledDate, 
+      scheduledTime, 
+      timezone,
+      status, 
+      submitForApproval 
+    } = body
+    
     const userId = getUserId()
+    const schedulingService = new SchedulingService()
 
-    // Determine initial status based on approval requirements
-    let initialStatus = status || 'draft'
-    let requiresApproval = false
-
-    // Check if approval is required (basic logic - can be enhanced)
-    if (submitForApproval) {
-      initialStatus = 'pending_approval'
-      requiresApproval = true
-    } else if (content.length > 200 || 
-               content.toLowerCase().includes('sale') || 
-               content.toLowerCase().includes('discount') ||
-               (mediaUrls && mediaUrls.length > 0)) {
-      initialStatus = 'pending_approval'
-      requiresApproval = true
+    // Support both legacy format (scheduledAt) and new format (scheduledDate + scheduledTime)
+    let result
+    if (scheduledDate && scheduledTime) {
+      console.log('Using new format with date/time:', { scheduledDate, scheduledTime, timezone })
+      // New format with timezone support
+      result = await schedulingService.schedulePost({
+        content,
+        mediaUrls,
+        scheduledDate,
+        scheduledTime,
+        timezone,
+        userId,
+        status: status || (submitForApproval ? 'pending_approval' : undefined),
+        requiresApproval: submitForApproval
+      })
+    } else if (scheduledAt) {
+      // Legacy format - parse scheduledAt and extract date/time
+      const scheduledDateObj = new Date(scheduledAt)
+      const year = scheduledDateObj.getFullYear()
+      const month = String(scheduledDateObj.getMonth() + 1).padStart(2, '0')
+      const day = String(scheduledDateObj.getDate()).padStart(2, '0')
+      const hours = String(scheduledDateObj.getHours()).padStart(2, '0')
+      const minutes = String(scheduledDateObj.getMinutes()).padStart(2, '0')
+      
+      result = await schedulingService.schedulePost({
+        content,
+        mediaUrls,
+        scheduledDate: `${year}-${month}-${day}`,
+        scheduledTime: `${hours}:${minutes}`,
+        timezone,
+        userId,
+        status: status || (submitForApproval ? 'pending_approval' : undefined),
+        requiresApproval: submitForApproval
+      })
+    } else {
+      console.error('Missing required fields:', { scheduledAt, scheduledDate, scheduledTime })
+      return NextResponse.json({ 
+        success: false,
+        error: 'Either scheduledAt or both scheduledDate and scheduledTime are required' 
+      }, { status: 400 })
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('scheduled_posts')
-      .insert({
-        user_id: userId,
-        content: content.trim(),
-        media_urls: Array.isArray(mediaUrls) ? mediaUrls : null,
-        scheduled_at: new Date(scheduledAt).toISOString(),
-        status: initialStatus,
-        requires_approval: requiresApproval,
-        submitted_for_approval_at: initialStatus === 'pending_approval' ? new Date().toISOString() : null
-      })
-      .select('*')
-      .single()
+    console.log('Schedule result:', JSON.stringify({ success: result.success, error: result.error }, null, 2))
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (!result.success) {
+      // Check if it's a conflict error
+      if (result.conflictCheck && result.conflictCheck.hasConflict) {
+        return NextResponse.json({ 
+          success: false, 
+          error: result.error,
+          conflictCheck: result.conflictCheck
+        }, { status: 409 }) // 409 Conflict
+      }
+      
+      return NextResponse.json({ 
+        success: false, 
+        error: result.error 
+      }, { status: 400 })
     }
 
     return NextResponse.json({ 
       success: true, 
-      post: data,
-      requiresApproval,
-      message: requiresApproval ? 'Post submitted for approval' : 'Post created successfully'
+      post: result.post,
+      requiresApproval: result.post?.requires_approval || false,
+      message: result.post?.requires_approval ? 'Post submitted for approval' : 'Post created successfully'
     })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Failed to create scheduled post' }, { status: 500 })
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Failed to create scheduled post',
+      details: error.message 
+    }, { status: 500 })
   }
 }

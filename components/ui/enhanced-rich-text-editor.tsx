@@ -18,9 +18,11 @@ import {
   EditorState,
   $isRangeSelection,
   $createTextNode,
+  $createParagraphNode,
   TextNode,
   FORMAT_TEXT_COMMAND,
-  $insertNodes
+  $insertNodes,
+  ParagraphNode
 } from 'lexical'
 import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, REMOVE_LIST_COMMAND, ListNode, ListItemNode } from '@lexical/list'
 import { $isLinkNode, TOGGLE_LINK_COMMAND, LinkNode } from '@lexical/link'
@@ -41,6 +43,52 @@ interface EnhancedRichTextEditorProps {
   initialContent?: string
   className?: string
   onValidationChange?: (isValid: boolean) => void
+}
+
+// Plugin to set initial content
+function InitialContentPlugin({ initialContent }: { initialContent: string }) {
+  const [editor] = useLexicalComposerContext()
+  const lastContentRef = useRef<string | null>(null)
+  const isInitializedRef = useRef(false)
+  
+  useEffect(() => {
+    // Always set initial content on first mount or when it changes
+    if (initialContent !== undefined && initialContent !== null) {
+      // On first mount, always set the content
+      // On subsequent updates, only set if it changed and editor is empty or different
+      const shouldUpdate = !isInitializedRef.current || 
+                          (initialContent !== lastContentRef.current)
+      
+      if (shouldUpdate) {
+        editor.update(() => {
+          const root = $getRoot()
+          const currentText = root.getTextContent()
+          
+          // Set content if editor is empty or content is different
+          // Allow setting even if empty string (for editing cleared content)
+          if (!isInitializedRef.current || currentText !== initialContent) {
+            root.clear()
+            if (initialContent) {
+              // Create a paragraph node and append the text to it
+              // Root nodes can only contain element nodes (like paragraphs), not text nodes directly
+              const paragraph = $createParagraphNode()
+              const textNode = $createTextNode(initialContent)
+              paragraph.append(textNode)
+              root.append(paragraph)
+            } else {
+              // Even for empty content, create an empty paragraph
+              const paragraph = $createParagraphNode()
+              root.append(paragraph)
+            }
+            lastContentRef.current = initialContent
+            isInitializedRef.current = true
+          }
+        }, { tag: 'initial-content' })
+      }
+    }
+  }, [editor, initialContent])
+  
+  return null
 }
 
 // Custom plugin for character counting
@@ -400,6 +448,7 @@ export function EnhancedRichTextEditor({
               placeholder={null}
               ErrorBoundary={LexicalErrorBoundary}
             />
+            <InitialContentPlugin initialContent={initialContent} />
             <HistoryPlugin />
             <AutoFocusPlugin />
             <ListPlugin />
