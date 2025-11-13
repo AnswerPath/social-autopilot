@@ -87,11 +87,11 @@ export function calculateDailySchedule(
 
     postIndex++
     currentDate = addDays(currentDate, 1)
-    // Keep same time
-    const [hours, minutes] = config.startTime.split(':').map(Number)
-    if (!isNaN(hours) && !isNaN(minutes)) {
-      currentDate.setHours(hours)
-      currentDate.setMinutes(minutes)
+    // Keep same time - parse startTime to set hours/minutes
+    const [startHours, startMinutes] = config.startTime.split(':').map(Number)
+    if (!isNaN(startHours) && !isNaN(startMinutes)) {
+      currentDate.setHours(startHours)
+      currentDate.setMinutes(startMinutes)
     }
   }
 
@@ -131,11 +131,11 @@ export function calculateWeeklySchedule(
 
     postIndex++
     currentDate = addWeeks(currentDate, 1)
-    // Keep same time
-    const [hours, minutes] = config.startTime.split(':').map(Number)
-    if (!isNaN(hours) && !isNaN(minutes)) {
-      currentDate.setHours(hours)
-      currentDate.setMinutes(minutes)
+    // Keep same time - parse startTime to set hours/minutes
+    const [startHours, startMinutes] = config.startTime.split(':').map(Number)
+    if (!isNaN(startHours) && !isNaN(startMinutes)) {
+      currentDate.setHours(startHours)
+      currentDate.setMinutes(startMinutes)
     }
   }
 
@@ -233,6 +233,12 @@ export function validateBulkScheduleConfig(
     const requiredMinutes = config.customIntervalMinutes * (postCount - 1)
     if (requiredMinutes > totalMinutes) {
       return { valid: false, error: 'Not enough time in range to schedule all posts with the specified interval' }
+    }
+  } else if (config.frequency === 'even' && postCount > 1) {
+    // Even distribution uses totalMinutes / (postCount + 1) for spacing
+    const evenDistributionInterval = totalMinutes / (postCount + 1)
+    if (evenDistributionInterval < minInterval) {
+      return { valid: false, error: `Not enough time in range to schedule ${postCount} posts (minimum ${minInterval} minutes between posts)` }
     }
   } else if (postCount > 1 && totalMinutes < minInterval * (postCount - 1)) {
     return { valid: false, error: `Not enough time in range to schedule ${postCount} posts (minimum ${minInterval} minutes between posts)` }

@@ -13,7 +13,7 @@ export interface SchedulePostInput {
   scheduledTime: string // HH:MM
   timezone?: string
   userId: string
-  status?: 'draft' | 'scheduled' | 'pending_approval'
+  status?: 'draft' | 'scheduled' | 'pending_approval' | 'approved'
   requiresApproval?: boolean
 }
 
@@ -153,10 +153,11 @@ export class SchedulingService {
 
       // Determine initial status
       let initialStatus = input.status || 'scheduled'
-      let requiresApproval = input.requiresApproval || false
+      let requiresApproval = input.requiresApproval ?? false
 
       // Check if approval is required based on content
-      if (!input.requiresApproval && (
+      // Only apply heuristics if requiresApproval was not explicitly set to false
+      if (input.requiresApproval === undefined && (
         input.content.length > 200 ||
         input.content.toLowerCase().includes('sale') ||
         input.content.toLowerCase().includes('discount') ||

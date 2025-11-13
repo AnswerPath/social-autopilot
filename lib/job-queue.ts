@@ -21,11 +21,13 @@ export interface QueueMetrics {
 
 /**
  * Calculate retry delay using exponential backoff
+ * Note: retryCount is already incremented before calling this function
  */
 export function calculateRetryDelay(retryCount: number): number {
   // Exponential backoff: 1min, 5min, 30min
   const delays = [1 * 60 * 1000, 5 * 60 * 1000, 30 * 60 * 1000]
-  const index = Math.min(retryCount, delays.length - 1)
+  // retryCount is already incremented, so subtract 1 to get correct index
+  const index = Math.min(Math.max(retryCount - 1, 0), delays.length - 1)
   return delays[index]
 }
 
@@ -93,11 +95,38 @@ export async function processQueue(): Promise<{
     // Process each job
     for (const job of dueJobs) {
       try {
-        // Mark as processing (lock the job)
-        await supabaseAdmin
+        // Mark as processing (lock the job) - use conditional update to prevent race conditions
+        // Only update if status is 'scheduled' or 'approved' to prevent concurrent claims
+        const { data: lockedJob, error: lockError } = await supabaseAdmin
           .from('scheduled_posts')
           .update({ status: 'processing' })
           .eq('id', job.id)
+          .in('status', ['scheduled', 'approved'])
+          .select('id')
+          .single()
+
+        if (lockError) {
+          // If no rows were updated, another worker already claimed this job
+          if (lockError.code === 'PGRST116') {
+            results.push({
+              id: job.id,
+              status: 'skipped',
+              error: 'Job already claimed by another worker'
+            })
+            continue
+          }
+          throw new Error(`Failed to lock job ${job.id}: ${lockError.message}`)
+        }
+
+        // If no data returned, job was already claimed
+        if (!lockedJob) {
+          results.push({
+            id: job.id,
+            status: 'skipped',
+            error: 'Job already claimed by another worker'
+          })
+          continue
+        }
 
         // Post the tweet
         const postResult = await postTweet(

@@ -13,6 +13,7 @@ import { X, Calendar, Clock, Upload, CheckCircle2, AlertCircle } from 'lucide-re
 import { useToast } from "@/hooks/use-toast"
 import { calculateBulkSchedule, validateBulkScheduleConfig, type Frequency, type PostToSchedule } from "@/lib/bulk-scheduling"
 import { getUserTimezone, getCommonTimezones } from "@/lib/timezone-utils"
+import { format } from "date-fns"
 
 interface BulkSchedulerProps {
   posts?: PostToSchedule[]
@@ -37,12 +38,15 @@ export function BulkScheduler({ posts: initialPosts = [], onSuccess, onClose }: 
 
   useEffect(() => {
     // Set default dates (today and 7 days from now)
+    // Use format() instead of toISOString() to avoid UTC conversion issues
     const today = new Date()
     const weekFromNow = new Date()
     weekFromNow.setDate(today.getDate() + 7)
 
-    setStartDate(today.toISOString().split('T')[0])
-    setEndDate(weekFromNow.toISOString().split('T')[0])
+    const formatDateInput = (date: Date) => format(date, 'yyyy-MM-dd')
+
+    setStartDate(formatDateInput(today))
+    setEndDate(formatDateInput(weekFromNow))
   }, [])
 
   const handleAddPost = () => {
