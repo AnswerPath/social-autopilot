@@ -121,16 +121,19 @@ export function calculateTargetDateFromDrop(
   draggedPostId: string,
   targetDayNumber: number,
   currentMonth: Date,
-  posts: CalendarPost[]
+  posts: CalendarPost[],
+  userTimezone?: string
 ): { date: string; time: string } | null {
   try {
     // Find the original post to get its time
     const originalPost = posts.find(p => p.id === draggedPostId)
     if (!originalPost) return null
 
-    const originalDate = new Date(originalPost.scheduledAt)
-    const originalHours = originalDate.getHours()
-    const originalMinutes = originalDate.getMinutes()
+    // Convert to user's timezone to preserve the intended time
+    const timezone = userTimezone || originalPost.timezone || 'UTC'
+    const originalDateInTz = convertFromUtc(new Date(originalPost.scheduledAt), timezone)
+    const originalHours = originalDateInTz.getHours()
+    const originalMinutes = originalDateInTz.getMinutes()
 
     // Create new date for the target day
     const targetDate = new Date(

@@ -240,6 +240,16 @@ export function validateBulkScheduleConfig(
     if (evenDistributionInterval < minInterval) {
       return { valid: false, error: `Not enough time in range to schedule ${postCount} posts (minimum ${minInterval} minutes between posts)` }
     }
+  } else if (config.frequency === 'daily' && postCount > 1) {
+    const totalDays = Math.floor(totalMinutes / (24 * 60)) + 1
+    if (postCount > totalDays) {
+      return { valid: false, error: `Not enough days in range to schedule ${postCount} posts (only ${totalDays} days available)` }
+    }
+  } else if (config.frequency === 'weekly' && postCount > 1) {
+    const totalWeeks = Math.floor(totalMinutes / (7 * 24 * 60)) + 1
+    if (postCount > totalWeeks) {
+      return { valid: false, error: `Not enough weeks in range to schedule ${postCount} posts (only ${totalWeeks} weeks available)` }
+    }
   } else if (postCount > 1 && totalMinutes < minInterval * (postCount - 1)) {
     return { valid: false, error: `Not enough time in range to schedule ${postCount} posts (minimum ${minInterval} minutes between posts)` }
   }

@@ -58,6 +58,17 @@ export async function POST(request: NextRequest) {
     // Validate all posts first (pre-check for conflicts)
     for (let i = 0; i < posts.length; i++) {
       const post = posts[i]
+      
+      // Guard against non-object posts before destructuring
+      if (!post || typeof post !== 'object' || Array.isArray(post)) {
+        failures.push({
+          index: i,
+          error: 'Post entry must be an object with the required fields',
+          post
+        })
+        continue
+      }
+      
       const { content, scheduledDate, scheduledTime, timezone } = post
 
       if (!content || !scheduledDate || !scheduledTime) {

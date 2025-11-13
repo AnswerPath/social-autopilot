@@ -181,7 +181,8 @@ export function CalendarView() {
       draggedPost.id,
       targetDay,
       currentDate,
-      scheduledPosts
+      scheduledPosts,
+      userTimezone
     )
 
     if (!newDateTime) {

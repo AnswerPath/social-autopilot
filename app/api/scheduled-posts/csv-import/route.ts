@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
             error: result.error || 'Failed to schedule post'
           })
           failures.push({
-            row: i + 1, // +1 because CSV rows are 1-indexed (header is row 1)
+            row: i + 2, // +2 because CSV rows are 1-indexed (header is row 1)
             error: result.error || 'Failed to schedule post',
             post
           })
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
           error: errorMessage
         })
         failures.push({
-          row: i + 1,
+          row: i + 2,
           error: errorMessage,
           post
         })

@@ -344,14 +344,16 @@ export async function retryFailedJob(postId: string): Promise<{ success: boolean
     }
 
     // Reset job for retry
-    const retryDelay = calculateRetryDelay(retryCount)
+    // Note: calculateRetryDelay expects the incremented retry count
+    const nextRetryCount = retryCount + 1
+    const retryDelay = calculateRetryDelay(nextRetryCount)
     const retryTime = new Date(Date.now() + retryDelay)
 
     const { error: updateError } = await supabaseAdmin
       .from('scheduled_posts')
       .update({
         status: 'scheduled',
-        retry_count: retryCount + 1,
+        retry_count: nextRetryCount,
         last_retry_at: new Date().toISOString(),
         scheduled_at: retryTime.toISOString(),
         error: null

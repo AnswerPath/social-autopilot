@@ -33,6 +33,29 @@ export async function POST(
       }, { status: 400 })
     }
 
+    // Load the job first to verify ownership
+    const { supabaseAdmin } = await import('@/lib/supabase')
+    const { data: job, error: fetchError } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('user_id')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !job) {
+      return NextResponse.json({
+        success: false,
+        error: 'Job not found'
+      }, { status: 404 })
+    }
+
+    // Verify ownership
+    if (job.user_id !== user.id) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized: You can only retry your own jobs'
+      }, { status: 403 })
+    }
+
     const result = await retryFailedJob(id)
 
     if (!result.success) {
