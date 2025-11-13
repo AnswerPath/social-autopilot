@@ -89,6 +89,7 @@ export function BulkScheduler({ posts: initialPosts = [], onSuccess, onClose }: 
     if (startDate && endDate && selectedPosts.length > 0) {
       handleGeneratePreview()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, startTime, endDate, endTime, frequency, customInterval, selectedPosts])
 
   const handleSubmit = async () => {
@@ -337,4 +338,5 @@ export function BulkScheduler({ posts: initialPosts = [], onSuccess, onClose }: 
     </div>
   )
 }
+
 

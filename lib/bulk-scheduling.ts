@@ -88,8 +88,11 @@ export function calculateDailySchedule(
     postIndex++
     currentDate = addDays(currentDate, 1)
     // Keep same time
-    currentDate.setHours(parseInt(config.startTime.split(':')[0]))
-    currentDate.setMinutes(parseInt(config.startTime.split(':')[1]))
+    const [hours, minutes] = config.startTime.split(':').map(Number)
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      currentDate.setHours(hours)
+      currentDate.setMinutes(minutes)
+    }
   }
 
   return results
@@ -129,8 +132,11 @@ export function calculateWeeklySchedule(
     postIndex++
     currentDate = addWeeks(currentDate, 1)
     // Keep same time
-    currentDate.setHours(parseInt(config.startTime.split(':')[0]))
-    currentDate.setMinutes(parseInt(config.startTime.split(':')[1]))
+    const [hours, minutes] = config.startTime.split(':').map(Number)
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      currentDate.setHours(hours)
+      currentDate.setMinutes(minutes)
+    }
   }
 
   return results
@@ -234,4 +240,5 @@ export function validateBulkScheduleConfig(
 
   return { valid: true }
 }
+
 

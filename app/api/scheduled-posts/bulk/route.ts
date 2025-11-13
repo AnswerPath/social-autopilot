@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SchedulingService } from '@/lib/scheduling-service'
+import { getCurrentUser, createAuthError } from '@/lib/auth-utils'
+import { AuthErrorType } from '@/lib/auth-types'
 
 export const runtime = 'nodejs'
 
-function getUserId(): string {
-  return 'demo-user'
-}
-
+/**
+ * Bulk schedule multiple posts
+ * POST /api/scheduled-posts/bulk
+ */
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate user
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.UNAUTHORIZED, 'Authentication required') },
+        { status: 401 }
+      )
+    }
+
     const body = await request.json()
     const { posts } = body
 
@@ -18,11 +29,31 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const userId = getUserId()
+    // Validate array size to prevent DoS
+    if (posts.length > 100) {
+      return NextResponse.json({ 
+        error: 'Maximum 100 posts allowed per bulk request' 
+      }, { status: 400 })
+    }
+
+    const userId = user.id
     const schedulingService = new SchedulingService()
 
-    const results: Array<{ success: boolean; post?: any; error?: string; index: number }> = []
-    const failures: Array<{ index: number; error: string; post: any }> = []
+    interface BulkResult {
+      success: boolean
+      post?: unknown
+      error?: string
+      index: number
+    }
+
+    interface BulkFailure {
+      index: number
+      error: string
+      post: unknown
+    }
+
+    const results: BulkResult[] = []
+    const failures: BulkFailure[] = []
 
     // Validate all posts first (pre-check for conflicts)
     for (let i = 0; i < posts.length; i++) {
@@ -81,15 +112,16 @@ export async function POST(request: NextRequest) {
             post
           })
         }
-      } catch (error: any) {
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         results.push({
           success: false,
-          error: error.message || 'Unknown error',
+          error: errorMessage,
           index: i
         })
         failures.push({
           index: i,
-          error: error.message || 'Unknown error',
+          error: errorMessage,
           post
         })
       }
@@ -114,12 +146,15 @@ export async function POST(request: NextRequest) {
       results,
       failures: failures.length > 0 ? failures : undefined
     })
-  } catch (error: any) {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to bulk schedule posts'
+    console.error('Bulk schedule error:', error)
     return NextResponse.json({
       success: false,
       error: 'Failed to bulk schedule posts',
-      details: error.message
+      details: errorMessage
     }, { status: 500 })
   }
 }
+
 

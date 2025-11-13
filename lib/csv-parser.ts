@@ -39,8 +39,14 @@ function validateRow(row: any, rowIndex: number): { valid: boolean; errors: stri
   // Check required fields
   if (!row.content || typeof row.content !== 'string' || row.content.trim().length === 0) {
     errors.push('content is required')
-  } else if (row.content.length > 280) {
-    errors.push('content exceeds 280 characters')
+  } else {
+    const trimmedContent = row.content.trim()
+    if (trimmedContent.length > 280) {
+      errors.push('content exceeds 280 characters')
+    }
+    if (trimmedContent.length === 0) {
+      errors.push('content cannot be empty')
+    }
   }
 
   if (!row.scheduled_date || typeof row.scheduled_date !== 'string') {
@@ -89,6 +95,13 @@ function validateRow(row: any, rowIndex: number): { valid: boolean; errors: stri
     if (urls.length > 4) {
       warnings.push('media_urls should not exceed 4 URLs')
     }
+    // Basic URL validation
+    const urlPattern = /^https?:\/\/.+/
+    urls.forEach((url: string) => {
+      if (!urlPattern.test(url)) {
+        warnings.push(`media_url "${url}" may not be a valid URL`)
+      }
+    })
   }
 
   return {
@@ -202,4 +215,5 @@ export function generateCSVTemplate(): string {
 
   return Papa.unparse(rows)
 }
+
 

@@ -165,10 +165,11 @@ export async function processQueue(): Promise<{
             })
           }
         }
-      } catch (jobError: any) {
+      } catch (jobError) {
         // Job processing error
         const maxRetries = job.max_retries || 3
         const retryCount = (job.retry_count || 0) + 1
+        const errorMessage = jobError instanceof Error ? jobError.message : 'Unknown error'
 
         if (shouldRetry(retryCount, maxRetries)) {
           const retryDelay = calculateRetryDelay(retryCount)
@@ -181,21 +182,21 @@ export async function processQueue(): Promise<{
               retry_count: retryCount,
               last_retry_at: now.toISOString(),
               scheduled_at: retryTime.toISOString(),
-              error: jobError.message || 'Unknown error'
+              error: errorMessage
             })
             .eq('id', job.id)
 
           results.push({
             id: job.id,
             status: 'scheduled_retry',
-            error: `Retry ${retryCount}/${maxRetries}: ${jobError.message || 'Unknown error'}`
+            error: `Retry ${retryCount}/${maxRetries}: ${errorMessage}`
           })
         } else {
           await supabaseAdmin
             .from('scheduled_posts')
             .update({
               status: 'failed',
-              error: jobError.message || 'Max retries exceeded',
+              error: errorMessage,
               retry_count: retryCount
             })
             .eq('id', job.id)
@@ -203,7 +204,7 @@ export async function processQueue(): Promise<{
           results.push({
             id: job.id,
             status: 'failed',
-            error: `Max retries exceeded: ${jobError.message || 'Unknown error'}`
+            error: `Max retries exceeded: ${errorMessage}`
           })
         }
       }
@@ -214,8 +215,9 @@ export async function processQueue(): Promise<{
       processed: results.length,
       results
     }
-  } catch (error: any) {
-    throw new Error(`Queue processing failed: ${error.message}`)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    throw new Error(`Queue processing failed: ${errorMessage}`)
   }
 }
 
@@ -240,7 +242,11 @@ export async function getQueueMetrics(): Promise<QueueMetrics> {
       published: 0
     }
 
-    statusCounts?.forEach((job: any) => {
+    interface JobStatusRow {
+      status: string
+    }
+
+    statusCounts?.forEach((job: JobStatusRow) => {
       if (job.status === 'scheduled' || job.status === 'approved' || job.status === 'pending_approval') {
         counts.pending++
       } else if (job.status === 'processing') {
@@ -275,8 +281,9 @@ export async function getQueueMetrics(): Promise<QueueMetrics> {
       oldestPendingJob: oldestPending?.scheduled_at ? new Date(oldestPending.scheduled_at) : undefined,
       recentFailures: recentFailures?.length || 0
     }
-  } catch (error: any) {
-    throw new Error(`Failed to get queue metrics: ${error.message}`)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    throw new Error(`Failed to get queue metrics: ${errorMessage}`)
   }
 }
 
@@ -327,8 +334,9 @@ export async function retryFailedJob(postId: string): Promise<{ success: boolean
     }
 
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -350,8 +358,10 @@ export async function cancelJob(postId: string, userId: string): Promise<{ succe
     }
 
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: errorMessage }
   }
 }
+
 

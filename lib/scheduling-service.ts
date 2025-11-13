@@ -28,7 +28,7 @@ export interface ConflictCheck {
 
 export interface SchedulePostResult {
   success: boolean
-  post?: any
+  post?: unknown
   error?: string
   conflictCheck?: ConflictCheck
 }
@@ -278,7 +278,7 @@ export class SchedulingService {
   /**
    * Get timezone-aware scheduled post
    */
-  async getPost(postId: string, userId: string): Promise<any | null> {
+  async getPost(postId: string, userId: string): Promise<unknown | null> {
     const { data, error } = await supabaseAdmin
       .from('scheduled_posts')
       .select('*')
@@ -293,4 +293,5 @@ export class SchedulingService {
     return data
   }
 }
+
 
