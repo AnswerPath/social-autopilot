@@ -12,3 +12,4 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_posts_requires_approval
 ON scheduled_posts(requires_approval, status)
 WHERE requires_approval = true;
 
+

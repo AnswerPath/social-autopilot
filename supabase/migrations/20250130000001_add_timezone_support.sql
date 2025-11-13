@@ -24,3 +24,4 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_posts_user_scheduled_at
 ON scheduled_posts(user_id, scheduled_at)
 WHERE status IN ('scheduled', 'pending_approval', 'approved');
 
+

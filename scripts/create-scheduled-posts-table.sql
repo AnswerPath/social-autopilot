@@ -56,3 +56,4 @@ CREATE POLICY "Allow all operations for demo (scheduled_posts)" ON scheduled_pos
 GRANT ALL ON scheduled_posts TO authenticated;
 GRANT ALL ON scheduled_posts TO anon;
 
+

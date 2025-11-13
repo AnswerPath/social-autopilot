@@ -70,13 +70,14 @@ export function CSVImport({ onSuccess, onClose }: CSVImportProps) {
           description: `Successfully parsed ${result.posts.length} post(s)`,
         })
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to parse CSV file"
       toast({
         title: "Error",
-        description: error.message || "Failed to parse CSV file",
+        description: errorMessage,
         variant: "destructive",
       })
-      setErrors([{ row: 0, error: error.message || "Failed to parse CSV file" }])
+      setErrors([{ row: 0, error: errorMessage }])
     } finally {
       setIsUploading(false)
     }
@@ -127,17 +128,22 @@ export function CSVImport({ onSuccess, onClose }: CSVImportProps) {
       })
 
       if (result.failures && result.failures.length > 0) {
-        setErrors(result.failures.map((f: any) => ({
-          row: f.row || 0,
-          error: f.error || 'Failed to import'
+        interface ImportFailure {
+          row?: number
+          error?: string
+        }
+        setErrors(result.failures.map((f: ImportFailure) => ({
+          row: f.row ?? 0,
+          error: f.error ?? 'Failed to import'
         })))
       } else {
         onSuccess?.()
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to import posts"
       toast({
         title: "Error",
-        description: error.message || "Failed to import posts",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -286,4 +292,5 @@ export function CSVImport({ onSuccess, onClose }: CSVImportProps) {
     </div>
   )
 }
+
 
