@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SchedulingService } from '@/lib/scheduling-service'
+import { recordRevision } from '@/lib/approval/revisions'
 
 export const runtime = 'nodejs'
 
@@ -94,6 +95,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .single()
 
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+
+    await recordRevision(
+      data.id,
+      userId,
+      {
+        content: data.content,
+        media_urls: data.media_urls,
+        scheduled_at: data.scheduled_at,
+        status: data.status
+      },
+      undefined,
+      'update'
+    )
+
     return NextResponse.json({ success: true, post: data })
   } catch (error: any) {
     return NextResponse.json({ 

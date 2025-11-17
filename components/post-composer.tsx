@@ -19,6 +19,8 @@ import { DraftManager, type Draft, type DraftFormData, type ConflictResolution }
 import { DraftManagerComponent } from "@/components/draft-manager"
 import { getUserTimezone, convertFromUtc } from "@/lib/timezone-utils"
 import type { CalendarPost } from "@/lib/calendar-utils"
+import { ApprovalCommentPanel } from "@/components/approval/comment-panel"
+import { VersionHistoryDialog } from "@/components/approval/version-history-dialog"
 
 interface PostComposerProps {
   onClose: () => void
@@ -657,6 +659,21 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
             </>
           )}
 
+          {editingPost?.id && (
+            <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <Label className="text-sm">Current Status</Label>
+                  <p className="text-sm text-gray-600">
+                    {formatApprovalStatus(editingPost.status)}
+                  </p>
+                </div>
+                <VersionHistoryDialog postId={editingPost.id} />
+              </div>
+              <ApprovalCommentPanel postId={editingPost.id} />
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
             <Button variant="outline" onClick={onClose} className="w-full sm:w-auto min-h-[44px]">
@@ -714,4 +731,21 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
       </Card>
     </div>
   )
+}
+
+function formatApprovalStatus(status?: string | null) {
+  switch (status) {
+    case 'pending_approval':
+      return 'Pending approval'
+    case 'approved':
+      return 'Approved and scheduled'
+    case 'rejected':
+      return 'Rejected - requires attention'
+    case 'changes_requested':
+      return 'Changes requested'
+    case 'draft':
+      return 'Draft'
+    default:
+      return status || 'Unknown'
+  }
 }

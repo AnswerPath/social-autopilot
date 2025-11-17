@@ -1023,7 +1023,7 @@
           "16",
           "18"
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -1031,7 +1031,7 @@
             "description": "Create the foundational scheduling system that allows users to schedule posts with proper timezone handling and conflict detection.",
             "dependencies": [],
             "details": "Develop a scheduling service that handles date/time selection with timezone conversion. Implement conflict detection logic to prevent overlapping posts. Create database schema for storing scheduled posts with status tracking. Integrate with existing post creation workflow to add scheduling options.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for scheduling logic, timezone conversion, and conflict detection. Integration tests with post creation flow. Test edge cases like DST changes and timezone boundaries."
           },
           {
@@ -1042,7 +1042,7 @@
               1
             ],
             "details": "Implement a monthly/weekly calendar view component using a modern JavaScript framework. Add visual indicators for post status (draft, scheduled, published, failed). Implement drag-and-drop functionality for easy rescheduling. Include filtering options by status, platform, or content type. Add tooltips to show post details on hover.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for calendar component rendering. Integration tests for drag-and-drop functionality. Accessibility testing for keyboard navigation. Cross-browser compatibility testing."
           },
           {
@@ -1053,7 +1053,7 @@
               1
             ],
             "details": "Design and implement a bulk scheduling form with options for start date/time, end date/time, and frequency (daily, weekly, custom). Add ability to select multiple posts for scheduling. Implement preview functionality to show scheduling timeline before confirmation. Create validation to prevent scheduling conflicts and provide warnings.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for bulk scheduling algorithms and validation logic. Integration tests for the bulk scheduling workflow. User acceptance testing with different scheduling patterns."
           },
           {
@@ -1064,7 +1064,7 @@
               1
             ],
             "details": "Design CSV template format with columns for post content, scheduling time, platform, etc. Implement file upload component with validation for CSV format and content. Create parser to convert CSV data to scheduled post objects. Add error handling and reporting for invalid entries. Implement preview before final import to verify scheduling.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for CSV parsing and validation. Integration tests with file upload component. Test with various CSV formats including malformed files. Performance testing with large CSV files."
           },
           {
@@ -1078,7 +1078,7 @@
               4
             ],
             "details": "Implement a job queue system using a reliable message broker (e.g., RabbitMQ, Redis). Create worker processes to handle publishing of scheduled posts. Implement retry logic for failed publishing attempts. Add monitoring and alerting for queue health. Create admin interface for viewing queue status and manually triggering failed jobs. Implement rescheduling and cancellation functionality for queued posts.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests for queue operations and job processing. Integration tests for the entire scheduling to publishing flow. Stress testing with high volume of scheduled posts. Failure recovery testing by simulating system outages."
           }
         ]
@@ -1095,8 +1095,65 @@
           "18",
           "19"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Multi-Step Approval Workflow with Configurable Chains",
+            "description": "Design and implement the core approval workflow system with configurable approval chains that can be customized per department or content type.",
+            "dependencies": [],
+            "details": "Create database models for approval workflows, steps, and user roles. Implement the state machine for post status transitions (draft, pending, approved, rejected). Develop API endpoints for creating and configuring approval chains. Build logic for determining the next approver in the chain based on configuration.",
+            "status": "done",
+            "testStrategy": "Unit tests for workflow state transitions. Integration tests to verify correct approver sequencing. Test cases for different approval chain configurations."
+          },
+          {
+            "id": 2,
+            "title": "Develop Notification System for Pending Approvals",
+            "description": "Create a comprehensive notification system that alerts users about pending approvals via multiple channels including in-app, email, and SMS.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement notification queue with priority handling. Create notification templates for different approval events. Develop in-app notification component with real-time updates. Integrate with email service for email notifications. Set up SMS gateway integration for urgent approvals. Build user preference settings for notification channels.",
+            "status": "done",
+            "testStrategy": "Unit tests for notification generation. Integration tests for delivery across channels. Mock testing of external services (email, SMS). User acceptance testing for notification preferences."
+          },
+          {
+            "id": 3,
+            "title": "Create Commenting and Feedback System for Draft Content",
+            "description": "Implement a commenting system that allows reviewers to provide feedback on specific parts of draft content during the approval process.",
+            "dependencies": [
+              1
+            ],
+            "details": "Design and implement comment data model with relationships to posts and users. Create API endpoints for adding, editing, and deleting comments. Develop UI components for displaying comments inline with content. Implement comment threading for discussions. Add notification triggers when new comments are added. Build comment resolution functionality for addressing feedback.",
+            "status": "done",
+            "testStrategy": "Unit tests for comment CRUD operations. Integration tests for comment notifications. User acceptance testing of the commenting interface. Performance testing with large numbers of comments."
+          },
+          {
+            "id": 4,
+            "title": "Implement Version History and Revision Tracking",
+            "description": "Build a system to track all revisions of posts throughout the approval process, allowing users to view changes and revert to previous versions if needed.",
+            "dependencies": [
+              1
+            ],
+            "details": "Design version control data model for storing post revisions. Implement diff algorithm to highlight changes between versions. Create API endpoints for retrieving version history and specific revisions. Develop UI for comparing versions side by side. Build functionality to restore previous versions. Implement automatic version creation on significant edits.",
+            "status": "done",
+            "testStrategy": "Unit tests for diff generation and version retrieval. Integration tests for version restoration. Performance testing with posts having many revisions. User acceptance testing of the version comparison interface."
+          },
+          {
+            "id": 5,
+            "title": "Develop Approval Dashboard with Bulk Actions",
+            "description": "Create a comprehensive dashboard for managers to review pending content with bulk approval capabilities and status tracking throughout the approval process.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Design and implement dashboard UI with filtering and sorting options. Create views for pending approvals, recently approved, and rejected content. Implement bulk selection and approval/rejection functionality. Build status indicators showing current position in approval workflow. Develop metrics and reporting on approval times and bottlenecks. Add search functionality for finding specific content in the approval queue.",
+            "status": "done",
+            "testStrategy": "Unit tests for dashboard data retrieval. Integration tests for bulk actions. User acceptance testing of dashboard interface. Performance testing with large approval queues. Accessibility testing of dashboard components."
+          }
+        ]
       },
       {
         "id": 21,
@@ -1185,7 +1242,8 @@
         "feature-task-18-post-composer"
       ],
       "created": "2025-10-31T01:45:12.990Z",
-      "description": "Tasks for feature-task-18-post-composer context"
+      "description": "Tasks for feature-task-18-post-composer context",
+      "updated": "2025-11-16T02:56:42.528Z"
     }
   }
 }

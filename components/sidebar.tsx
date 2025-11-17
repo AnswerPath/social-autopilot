@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { BarChart3, Calendar, Home, MessageSquare, Settings, Users, Zap } from 'lucide-react'
+import { BarChart3, Calendar, Home, MessageSquare, Settings, Users, Zap, ShieldCheck } from 'lucide-react'
 
 interface SidebarProps {
   activeTab: string
@@ -13,6 +13,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const navigation = [
     { id: "dashboard", name: "Dashboard", icon: Home },
     { id: "calendar", name: "Calendar", icon: Calendar },
+    { id: "approvals", name: "Approvals", icon: ShieldCheck },
     { id: "analytics", name: "Analytics", icon: BarChart3 },
     { id: "engagement", name: "Engagement", icon: MessageSquare },
     { id: "team", name: "Team", icon: Users },
