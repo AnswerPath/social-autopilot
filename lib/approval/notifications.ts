@@ -86,8 +86,7 @@ export async function markNotificationsRead(notificationIds: string[], recipient
   const { error } = await supabaseAdmin
     .from('approval_notifications')
     .update({
-      read_at: new Date().toISOString(),
-      status: 'sent'
+      read_at: new Date().toISOString()
     })
     .in('id', notificationIds)
     .eq('recipient_id', recipientId)

@@ -96,18 +96,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
 
-    await recordRevision(
-      data.id,
-      userId,
-      {
-        content: data.content,
-        media_urls: data.media_urls,
-        scheduled_at: data.scheduled_at,
-        status: data.status
-      },
-      undefined,
-      'update'
-    )
+    // Record revision as non-fatal operation - don't fail the update if revision logging fails
+    try {
+      await recordRevision(
+        data.id,
+        userId,
+        {
+          content: data.content,
+          media_urls: data.media_urls,
+          scheduled_at: data.scheduled_at,
+          status: data.status
+        },
+        undefined,
+        'update'
+      )
+    } catch (err) {
+      console.error('Failed to record revision for scheduled post update', err)
+      // Intentionally non-fatal: main update already succeeded.
+    }
 
     return NextResponse.json({ success: true, post: data })
   } catch (error: any) {

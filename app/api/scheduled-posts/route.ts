@@ -144,24 +144,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.post) {
-      const postId = (result.post as any).id
+      const post = result.post as any
+      const postId = post.id
 
-      await recordRevision(
-        postId,
-        userId,
-        {
-          content: (result.post as any).content,
-          media_urls: (result.post as any).media_urls,
-          scheduled_at: (result.post as any).scheduled_at,
-          status: (result.post as any).status
-        },
-        undefined,
-        'create'
-      )
+      // Record revision as non-fatal operation - don't fail post creation if revision logging fails
+      try {
+        await recordRevision(
+          postId,
+          userId,
+          {
+            content: post.content,
+            media_urls: post.media_urls,
+            scheduled_at: post.scheduled_at,
+            status: post.status
+          },
+          undefined,
+          'create'
+        )
+      } catch (err) {
+        console.error('Failed to record revision for scheduled post create', err)
+        // Intentionally non-fatal.
+      }
 
       // If this post requires approval, attach it to a workflow so that
       // it appears in the Approvals dashboard and can progress through steps.
-      if ((result.post as any).requires_approval) {
+      if (post.requires_approval) {
         try {
           await ensureWorkflowAssignment(postId, userId)
         } catch (workflowError) {

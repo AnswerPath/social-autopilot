@@ -109,7 +109,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true })
       case 'bulk-approve': {
         const postIds: string[] = body.postIds || []
-        const decision: 'approve' | 'reject' = body.decision || 'approve'
+        // Validate decision - only allow 'approve' or 'reject'
+        let decision: 'approve' | 'reject'
+        if (body.decision === 'approve' || body.decision === 'reject') {
+          decision = body.decision
+        } else if (body.decision === null || body.decision === undefined) {
+          decision = 'approve' // Default to approve when not provided
+        } else {
+          return NextResponse.json(
+            { success: false, error: 'Invalid decision. Must be "approve" or "reject"' },
+            { status: 400 }
+          )
+        }
         const result = await bulkAdvanceWorkflow(postIds, userId, decision)
         return NextResponse.json({
           success: true,
@@ -201,8 +212,25 @@ async function submitForApproval(postId: string, userId: string, workflowId?: st
 }
 
 async function handleRevisionRestore(postId: string, revisionId: string, actorId: string) {
-  const revision = await restoreRevision(postId, revisionId)
-  if (!revision) {
+  // Verify actor has permission to modify this post
+  const { data: post, error: postError } = await supabaseAdmin
+    .from('scheduled_posts')
+    .select('user_id')
+    .eq('id', postId)
+    .single()
+
+  if (postError || !post) {
+    return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
+  }
+
+  if (post.user_id !== actorId) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
+  }
+
+  let revision
+  try {
+    revision = await restoreRevision(postId, revisionId)
+  } catch (error: any) {
     return NextResponse.json({ success: false, error: 'Revision not found' }, { status: 404 })
   }
 

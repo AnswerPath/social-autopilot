@@ -277,5 +277,150 @@ describe('Approval Workflow', () => {
       expect(capturedActionDetails).toBeNull()
     })
   })
+
+  describe('CodeRabbit Fixes', () => {
+    describe('Comment 10: Error check for existing assignment query', () => {
+      const mockPostId = 'post-123'
+      const mockOwnerId = 'owner-123'
+
+      it('should throw error when assignment query fails', async () => {
+        const assignmentQuery = {
+          eq: jest.fn().mockReturnThis(),
+          maybeSingle: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'Database connection failed' }
+          })
+        }
+
+        ;(supabaseAdmin.from as jest.Mock).mockImplementation((table: string) => {
+          if (table === 'post_approval_assignments') {
+            return {
+              select: jest.fn().mockReturnValue(assignmentQuery)
+            }
+          }
+          return {}
+        })
+
+        await expect(
+          ensureWorkflowAssignment(mockPostId, mockOwnerId)
+        ).rejects.toThrow('Failed to check existing assignment')
+
+        expect(assignmentQuery.maybeSingle).toHaveBeenCalled()
+      })
+
+      it('should handle query errors with contextual information', async () => {
+        const assignmentQuery = {
+          eq: jest.fn().mockReturnThis(),
+          maybeSingle: jest.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'Network error' }
+          })
+        }
+
+        ;(supabaseAdmin.from as jest.Mock).mockImplementation((table: string) => {
+          if (table === 'post_approval_assignments') {
+            return {
+              select: jest.fn().mockReturnValue(assignmentQuery)
+            }
+          }
+          return {}
+        })
+
+        try {
+          await ensureWorkflowAssignment(mockPostId, mockOwnerId)
+          fail('Should have thrown an error')
+        } catch (error: any) {
+          expect(error.message).toContain('Failed to check existing assignment')
+          expect(error.message).toContain('Network error')
+        }
+      })
+    })
+
+    describe('Comment 11: Dashboard query filtering', () => {
+      const mockUserId = 'user-123'
+
+      it('should return empty array when user has no assigned steps', async () => {
+        let dashboardQueryCalled = false
+
+        const approverStepsQuery = {
+          eq: jest.fn().mockResolvedValue({
+            data: [], // No assigned steps
+            error: null
+          })
+        }
+
+        const approverStepsSelect = jest.fn().mockReturnValue(approverStepsQuery)
+
+        ;(supabaseAdmin.from as jest.Mock).mockImplementation((table: string) => {
+          if (table === 'approval_workflow_steps') {
+            return {
+              select: approverStepsSelect
+            }
+          }
+          if (table === 'approval_dashboard_summary') {
+            dashboardQueryCalled = true
+          }
+          return {
+            select: jest.fn().mockReturnThis(),
+            order: jest.fn().mockReturnThis(),
+            in: jest.fn().mockResolvedValue({ data: [], error: null })
+          }
+        })
+
+        const result = await getApprovalDashboard(mockUserId)
+
+        expect(result).toEqual([])
+        expect(dashboardQueryCalled).toBe(false)
+      })
+
+      it('should filter dashboard by stepIds when user has assigned steps', async () => {
+        const mockSteps = [
+          { id: 'step-1' },
+          { id: 'step-2' }
+        ]
+
+        const approverStepsQuery = {
+          eq: jest.fn().mockResolvedValue({
+            data: mockSteps,
+            error: null
+          })
+        }
+
+        const approverStepsSelect = jest.fn().mockReturnValue(approverStepsQuery)
+
+        const mockInFn = jest.fn().mockResolvedValue({
+          data: [],
+          error: null
+        })
+
+        const dashboardQueryChain = {
+          in: mockInFn
+        }
+
+        const dashboardOrder = jest.fn().mockReturnValue(dashboardQueryChain)
+        const dashboardSelect = jest.fn().mockReturnValue({
+          order: dashboardOrder
+        })
+
+        ;(supabaseAdmin.from as jest.Mock).mockImplementation((table: string) => {
+          if (table === 'approval_workflow_steps') {
+            return {
+              select: approverStepsSelect
+            }
+          }
+          if (table === 'approval_dashboard_summary') {
+            return {
+              select: dashboardSelect
+            }
+          }
+          return {}
+        })
+
+        await getApprovalDashboard(mockUserId)
+
+        expect(mockInFn).toHaveBeenCalledWith('current_step_id', ['step-1', 'step-2'])
+      })
+    })
+  })
 })
 

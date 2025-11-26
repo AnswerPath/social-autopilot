@@ -80,12 +80,13 @@ export async function POST(request: NextRequest) {
       // Post immediately or route into approval workflow if required
       if (requiresApproval === true) {
         const userId = getUserId()
-        const now = new Date()
-        const year = now.getFullYear()
-        const month = String(now.getMonth() + 1).padStart(2, '0')
-        const day = String(now.getDate()).padStart(2, '0')
-        const hours = String(now.getHours()).padStart(2, '0')
-        const minutes = String(now.getMinutes()).padStart(2, '0')
+        // Nudge scheduled time slightly into the future to satisfy schedule validation
+        const scheduled = new Date(Date.now() + 2 * 60 * 1000)
+        const year = scheduled.getFullYear()
+        const month = String(scheduled.getMonth() + 1).padStart(2, '0')
+        const day = String(scheduled.getDate()).padStart(2, '0')
+        const hours = String(scheduled.getHours()).padStart(2, '0')
+        const minutes = String(scheduled.getMinutes()).padStart(2, '0')
 
         const schedulingService = new SchedulingService()
         const scheduleResult = await schedulingService.schedulePost({

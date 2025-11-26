@@ -13,6 +13,22 @@ export interface PostRevision {
   summary?: string
 }
 
+/**
+ * Record a revision snapshot for a post.
+ * 
+ * Note: This function throws on database errors. Callers should wrap this in try/catch
+ * if revision logging failures should not break the primary operation (e.g., post creation/update).
+ * This ensures that transient revision table issues don't cause user-facing endpoints to fail
+ * when the main scheduled_posts mutation has already succeeded.
+ * 
+ * @param postId - The ID of the post to record a revision for
+ * @param authorId - The ID of the user creating the revision
+ * @param snapshot - Snapshot of post data at this revision
+ * @param diff - Optional diff object showing what changed
+ * @param reason - Optional reason for the revision
+ * @returns The created PostRevision record
+ * @throws Error if database operation fails
+ */
 export async function recordRevision(
   postId: string,
   authorId: string,
@@ -83,7 +99,7 @@ export async function listRevisions(postId: string): Promise<PostRevision[]> {
   }))
 }
 
-export async function restoreRevision(postId: string, revisionId: string): Promise<PostRevision | null> {
+export async function restoreRevision(postId: string, revisionId: string): Promise<PostRevision> {
   const { data, error } = await supabaseAdmin
     .from('post_revisions')
     .select('*')

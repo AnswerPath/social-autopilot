@@ -175,7 +175,7 @@ export function ManagerApprovalDashboard() {
             variant="outline"
             size="sm"
             onClick={() => handleBulk('reject')}
-            disabled={bulkLoading === 'approve' || loading}
+            disabled={bulkLoading !== null || loading}
           >
             {bulkLoading === 'reject' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
             Reject Selected
@@ -183,7 +183,7 @@ export function ManagerApprovalDashboard() {
           <Button
             size="sm"
             onClick={() => handleBulk('approve')}
-            disabled={bulkLoading === 'reject' || loading}
+            disabled={bulkLoading !== null || loading}
           >
             {bulkLoading === 'approve' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
             Approve Selected

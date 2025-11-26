@@ -286,6 +286,11 @@ export async function ensureWorkflowAssignment(
     .eq('post_id', postId)
     .maybeSingle()
 
+  if (existing.error) {
+    console.error('Failed to check existing assignment', existing.error, { postId })
+    throw new Error(`Failed to check existing assignment: ${existing.error.message}`)
+  }
+
   if (existing.data) {
     return existing.data as PostApprovalAssignment
   }
@@ -510,14 +515,17 @@ export async function getApprovalDashboard(userId: string): Promise<ApprovalDash
 
   const stepIds = approverSteps.data?.map((row) => row.id) ?? []
 
+  // If user has no assigned approval steps, return empty array to avoid unfiltered query
+  if (stepIds.length === 0) {
+    return []
+  }
+
   let query = supabaseAdmin
     .from('approval_dashboard_summary')
     .select('*')
     .order('submitted_for_approval_at', { ascending: true })
 
-  if (stepIds.length > 0) {
-    query = query.in('current_step_id', stepIds)
-  }
+  query = query.in('current_step_id', stepIds)
 
   const { data, error } = await query
 
