@@ -214,10 +214,14 @@ async function handleRevisionRestore(postId: string, revisionId: string, actorId
   if (snapshot.scheduled_at) updatePayload.scheduled_at = snapshot.scheduled_at
 
   if (Object.keys(updatePayload).length > 0) {
-    await supabaseAdmin
+    const { error: updateError } = await supabaseAdmin
       .from('scheduled_posts')
       .update(updatePayload)
       .eq('id', postId)
+
+    if (updateError) {
+      return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })
+    }
   }
 
   await recordRevision(

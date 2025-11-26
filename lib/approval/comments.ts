@@ -53,23 +53,22 @@ export async function createApprovalComment({
   mentions,
   workflowStepId
 }: CreateCommentInput): Promise<ApprovalComment> {
+  // For root comments, thread_id will be set to the comment's own id after creation
+  // For replies, thread_id should match the parent's thread_id (handled after insert)
   const payload = {
     post_id: postId,
     user_id: userId,
     comment,
     comment_type: commentType,
     parent_comment_id: parentCommentId ?? null,
-    thread_id: parentCommentId ?? undefined,
+    thread_id: null, // Will be set correctly after insert
     mentions: mentions?.length ? mentions : null,
     workflow_step_id: workflowStepId ?? null
   }
 
   const { data, error } = await supabaseAdmin
     .from('approval_comments')
-    .insert({
-      ...payload,
-      thread_id: parentCommentId,
-    })
+    .insert(payload)
     .select('*')
     .single()
 
@@ -78,15 +77,36 @@ export async function createApprovalComment({
     throw new Error(error.message)
   }
 
-  // Ensure thread_id is set to self for root comments
-  if (!data.thread_id) {
-    await supabaseAdmin
+  // Set thread_id: for root comments, use own id; for replies, get parent's thread_id
+  let threadId: string
+  if (parentCommentId) {
+    // Get parent comment's thread_id
+    const { data: parentComment } = await supabaseAdmin
       .from('approval_comments')
-      .update({ thread_id: data.id })
-      .eq('id', data.id)
+      .select('thread_id')
+      .eq('id', parentCommentId)
+      .single()
+    threadId = parentComment?.thread_id || parentCommentId
+  } else {
+    // Root comment: thread_id is the comment's own id
+    threadId = data.id
   }
 
-  return data as ApprovalComment
+  // Update with correct thread_id
+  const { data: updatedData, error: updateError } = await supabaseAdmin
+    .from('approval_comments')
+    .update({ thread_id: threadId })
+    .eq('id', data.id)
+    .select('*')
+    .single()
+
+  if (updateError) {
+    console.error('Failed to update thread_id', updateError)
+    // Return original data even if thread_id update fails
+    return data as ApprovalComment
+  }
+
+  return updatedData as ApprovalComment
 }
 
 export async function resolveApprovalComment(

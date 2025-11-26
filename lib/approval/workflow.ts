@@ -319,7 +319,7 @@ export async function ensureWorkflowAssignment(
     throw new Error(error.message)
   }
 
-  await supabaseAdmin
+  const { error: updateError } = await supabaseAdmin
     .from('scheduled_posts')
     .update({
       approval_workflow_id: workflow.id,
@@ -330,6 +330,11 @@ export async function ensureWorkflowAssignment(
       }
     })
     .eq('id', postId)
+
+  if (updateError) {
+    console.error('Failed to update scheduled post with workflow metadata', updateError)
+    throw new Error(updateError.message)
+  }
 
   await queueApprovalNotifications({
     postId,
@@ -425,7 +430,7 @@ export async function advanceWorkflowStep(
     throw new Error(updateAssignmentError.message)
   }
 
-  await supabaseAdmin
+  const { error: updatePostError } = await supabaseAdmin
     .from('scheduled_posts')
     .update({
       status: newPostStatus,
@@ -440,7 +445,18 @@ export async function advanceWorkflowStep(
     })
     .eq('id', postId)
 
-  await supabaseAdmin
+  if (updatePostError) {
+    console.error('Failed to update scheduled post status', updatePostError)
+    throw new Error(updatePostError.message)
+  }
+
+  // Preserve both comment and reason in action_details, even if only one is provided
+  const hasDetails = options?.comment || options?.reason
+  const actionDetails = hasDetails
+    ? { comment: options?.comment ?? null, reason: options?.reason ?? null }
+    : null
+
+  const { error: historyError } = await supabaseAdmin
     .from('approval_history')
     .insert({
       post_id: postId,
@@ -449,8 +465,13 @@ export async function advanceWorkflowStep(
       previous_status: assignment.status,
       new_status: newPostStatus,
       workflow_step_id: currentStep?.id ?? null,
-      action_details: options?.comment ? { comment: options.comment, reason: options?.reason } : null
+      action_details: actionDetails
     })
+
+  if (historyError) {
+    console.error('Failed to insert approval history', historyError)
+    throw new Error(historyError.message)
+  }
 }
 
 export async function bulkAdvanceWorkflow(
@@ -623,10 +644,11 @@ async function createDefaultWorkflow(ownerId: string): Promise<WorkflowWithSteps
     throw new Error(wfErr.message)
   }
 
+  const workflow = wf as ApprovalWorkflow
   const { data: step, error: stepErr } = await supabaseAdmin
     .from('approval_workflow_steps')
     .insert({
-      workflow_id: (wf as any).id,
+      workflow_id: workflow.id,
       step_order: 1,
       step_name: 'Review',
       approver_type: 'user',
