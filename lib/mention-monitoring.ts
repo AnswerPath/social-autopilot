@@ -2,6 +2,7 @@ import { TwitterApi } from 'twitter-api-v2';
 import { supabaseAdmin } from './supabase';
 import { XApiCredentials } from './x-api-service';
 import { ApiErrorHandler } from './error-handling';
+import { createSentimentService } from './sentiment/sentiment-service';
 
 export interface Mention {
   id: string;
@@ -193,6 +194,10 @@ export class MentionMonitoringService {
         (u: any) => u.id === tweet.author_id
       );
 
+      // Analyze sentiment
+      const sentimentService = createSentimentService();
+      const sentimentAnalysis = sentimentService.analyze(tweet.text);
+
       const mention: Omit<Mention, 'id' | 'created_at'> = {
         user_id: this.userId,
         tweet_id: tweet.id,
@@ -200,6 +205,8 @@ export class MentionMonitoringService {
         author_username: author?.username || 'unknown',
         author_name: author?.name,
         text: tweet.text,
+        sentiment: sentimentAnalysis.sentiment,
+        sentiment_confidence: sentimentAnalysis.confidence,
         is_flagged: false,
         is_replied: false,
       };
@@ -221,7 +228,7 @@ export class MentionMonitoringService {
         throw error;
       }
 
-      console.log(`Mention captured: @${mention.author_username} - ${mention.text.substring(0, 50)}...`);
+      console.log(`Mention captured: @${mention.author_username} [${sentimentAnalysis.sentiment}] - ${mention.text.substring(0, 50)}...`);
 
       // Call onMention callback if provided
       if (this.onMention && storedMention) {
