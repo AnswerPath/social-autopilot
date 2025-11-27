@@ -39,8 +39,9 @@ export async function GET(
     }
 
     return NextResponse.json({ success: true, post })
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Failed to fetch approval details' }, { status: 500 })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch approval details'
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 })
   }
 }
 
@@ -101,7 +102,8 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: 'Failed to update approval' }, { status: 500 })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update approval'
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 })
   }
 }

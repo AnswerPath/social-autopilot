@@ -16,6 +16,8 @@ import { Sidebar } from "./sidebar"
 import { SettingsPage } from "./settings-page"
 import { UserInfoCard } from "./auth/user-info-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ManagerApprovalDashboard } from "./approval/manager-dashboard"
+import { ApprovalNotificationCenter } from "./approval/notification-center"
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -231,6 +233,7 @@ export function Dashboard() {
               <h1 className="text-2xl font-bold text-gray-900">
                 {activeTab === "dashboard" && "Dashboard"}
                 {activeTab === "calendar" && "Content Calendar"}
+                {activeTab === "approvals" && "Approvals"}
                 {activeTab === "analytics" && "Analytics"}
                 {activeTab === "team" && "Team Management"}
                 {activeTab === "engagement" && "Engagement Monitor"}
@@ -239,6 +242,7 @@ export function Dashboard() {
               <p className="text-gray-600">
                 {activeTab === "dashboard" && "Overview of your social media performance"}
                 {activeTab === "calendar" && "Manage and schedule your content"}
+                {activeTab === "approvals" && "Manage multi-step approval workflows"}
                 {activeTab === "analytics" && "Insights and performance metrics"}
                 {activeTab === "team" && "Manage team members and permissions"}
                 {activeTab === "engagement" && "Monitor mentions and engagement"}
@@ -250,10 +254,7 @@ export function Dashboard() {
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 {isLoading ? 'Loading...' : 'Refresh'}
               </Button>
-              <Button variant="outline" size="sm">
-                <Bell className="h-4 w-4 mr-2" />
-                Notifications
-              </Button>
+              <ApprovalNotificationCenter />
               <Button onClick={() => setShowComposer(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Post
@@ -444,6 +445,7 @@ export function Dashboard() {
           )}
 
           {activeTab === "calendar" && <CalendarView />}
+          {activeTab === "approvals" && <ManagerApprovalDashboard />}
           {activeTab === "analytics" && <AnalyticsDashboard />}
           {activeTab === "team" && <TeamManagement />}
           {activeTab === "engagement" && <EngagementMonitor />}

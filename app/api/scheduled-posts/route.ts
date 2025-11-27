@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SchedulingService } from '@/lib/scheduling-service'
+import { recordRevision } from '@/lib/approval/revisions'
+import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
 
 export const runtime = 'nodejs'
 
@@ -141,11 +143,46 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    if (result.post) {
+      const post = result.post as any
+      const postId = post.id
+
+      // Record revision as non-fatal operation - don't fail post creation if revision logging fails
+      try {
+        await recordRevision(
+          postId,
+          userId,
+          {
+            content: post.content,
+            media_urls: post.media_urls,
+            scheduled_at: post.scheduled_at,
+            status: post.status
+          },
+          undefined,
+          'create'
+        )
+      } catch (err) {
+        console.error('Failed to record revision for scheduled post create', err)
+        // Intentionally non-fatal.
+      }
+
+      // If this post requires approval, attach it to a workflow so that
+      // it appears in the Approvals dashboard and can progress through steps.
+      if (post.requires_approval) {
+        try {
+          await ensureWorkflowAssignment(postId, userId)
+        } catch (workflowError) {
+          console.error('Failed to ensure workflow assignment for scheduled post', workflowError)
+          // Do not fail the main request – approvals UI may be limited but post creation succeeded.
+        }
+      }
+    }
+
     return NextResponse.json({ 
       success: true, 
       post: result.post,
-      requiresApproval: result.post?.requires_approval || false,
-      message: result.post?.requires_approval ? 'Post submitted for approval' : 'Post created successfully'
+      requiresApproval: (result.post as any)?.requires_approval || false,
+      message: (result.post as any)?.requires_approval ? 'Post submitted for approval' : 'Post created successfully'
     })
   } catch (error: any) {
     return NextResponse.json({ 
