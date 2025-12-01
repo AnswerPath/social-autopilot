@@ -1,8 +1,122 @@
 import { encrypt, decrypt } from './encryption';
-import { getSupabaseClient } from './build-utils';
+import { supabaseAdmin } from './supabase';
 import { XApiCredentials } from './x-api-service';
 
-const supabase = getSupabaseClient();
+/**
+ * Clean up demo mentions when switching to real credentials
+ * Exported so it can be called manually
+ */
+export async function cleanupDemoMentions(userId: string): Promise<{ success: boolean; deletedCount?: number; error?: string }> {
+  try {
+    console.log('🧹 [CLEANUP] Starting demo mentions cleanup for user:', userId);
+    
+    // First, check if mentions table exists by attempting a simple query
+    const { data: mentions, error: fetchError } = await supabaseAdmin
+      .from('mentions')
+      .select('id, tweet_id')
+      .eq('user_id', userId)
+      .limit(1);
+    
+    // Check for table not found errors
+    if (fetchError) {
+      if (fetchError.message?.includes('does not exist') || 
+          fetchError.message?.includes('Could not find the table') ||
+          fetchError.code === '42P01') {
+        console.log('ℹ️ [CLEANUP] Mentions table does not exist yet, skipping demo cleanup');
+        return { success: true, deletedCount: 0 };
+      }
+      console.warn('⚠️ [CLEANUP] Warning: Failed to fetch mentions for cleanup:', fetchError.message);
+      return { success: false, error: fetchError.message };
+    }
+    
+    // Table exists, now fetch all mentions for cleanup
+    console.log('🔍 [CLEANUP] Fetching all mentions for user:', userId);
+    const { data: allMentions, error: allFetchError } = await supabaseAdmin
+      .from('mentions')
+      .select('id, tweet_id')
+      .eq('user_id', userId);
+    
+    if (allFetchError) {
+      console.warn('⚠️ [CLEANUP] Warning: Failed to fetch all mentions for cleanup:', allFetchError.message);
+      return { success: false, error: allFetchError.message };
+    }
+    
+    if (!allMentions || allMentions.length === 0) {
+      console.log('ℹ️ [CLEANUP] No mentions found to clean up');
+      return { success: true, deletedCount: 0 };
+    }
+    
+    console.log(`📊 [CLEANUP] Found ${allMentions.length} total mentions for user ${userId}`);
+    
+    // Filter to only demo mentions (tweet_id starts with 'demo-' or 'demo-reply-')
+    const demoMentionIds = allMentions
+      .filter(m => {
+        if (!m.tweet_id || typeof m.tweet_id !== 'string') {
+          return false;
+        }
+        const isDemo = m.tweet_id.startsWith('demo-') || m.tweet_id.startsWith('demo-reply-');
+        if (!isDemo) {
+          // Only log first few non-demo mentions to avoid spam
+          if (allMentions.indexOf(m) < 3) {
+            console.log(`🔍 [CLEANUP] Non-demo mention found: tweet_id="${m.tweet_id.substring(0, 50)}${m.tweet_id.length > 50 ? '...' : ''}"`);
+          }
+        }
+        return isDemo;
+      })
+      .map(m => m.id);
+    
+    console.log(`📊 [CLEANUP] Found ${demoMentionIds.length} demo mentions out of ${allMentions.length} total mentions`);
+    
+    if (demoMentionIds.length === 0 && allMentions.length > 0) {
+      console.log('ℹ️ [CLEANUP] All mentions appear to be real (no demo- prefix found)');
+    }
+    
+    if (demoMentionIds.length > 0) {
+      console.log(`🧹 [CLEANUP] Deleting ${demoMentionIds.length} demo mentions with IDs:`, demoMentionIds.slice(0, 5), demoMentionIds.length > 5 ? '...' : '');
+      
+      // Delete in batches if there are many (Supabase has limits)
+      const batchSize = 100;
+      let totalDeleted = 0;
+      
+      for (let i = 0; i < demoMentionIds.length; i += batchSize) {
+        const batch = demoMentionIds.slice(i, i + batchSize);
+        const { error: deleteError, count } = await supabaseAdmin
+          .from('mentions')
+          .delete()
+          .in('id', batch);
+        
+        if (deleteError) {
+          console.error(`❌ [CLEANUP] Failed to delete batch ${i / batchSize + 1}:`, deleteError.message);
+          return { success: false, error: deleteError.message };
+        }
+        
+        totalDeleted += count || batch.length;
+        console.log(`✅ [CLEANUP] Deleted batch ${i / batchSize + 1}: ${count || batch.length} mentions`);
+      }
+      
+      console.log(`✅ [CLEANUP] Successfully cleaned up ${totalDeleted} demo mentions`);
+      return { success: true, deletedCount: totalDeleted };
+    } else {
+      console.log('ℹ️ [CLEANUP] No demo mentions found to clean up (all mentions are real)');
+      return { success: true, deletedCount: 0 };
+    }
+  } catch (cleanupError: any) {
+    // Handle any unexpected errors gracefully
+    const errorMessage = cleanupError?.message || String(cleanupError);
+    console.error('❌ [CLEANUP] Error during demo mentions cleanup:', errorMessage);
+    console.error('❌ [CLEANUP] Error stack:', cleanupError?.stack);
+    
+    if (errorMessage.includes('does not exist') || 
+        errorMessage.includes('Could not find the table') ||
+        cleanupError?.code === '42P01') {
+      console.log('ℹ️ [CLEANUP] Mentions table does not exist yet, skipping demo cleanup');
+      return { success: true, deletedCount: 0 };
+    } else {
+      console.warn('⚠️ [CLEANUP] Warning: Error during demo mentions cleanup:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+}
 
 export interface StoredXApiCredentials extends XApiCredentials {
   id: string;
@@ -27,22 +141,24 @@ export async function storeXApiCredentials(
     const encryptedAccessToken = await encrypt(credentials.accessToken);
     const encryptedAccessTokenSecret = await encrypt(credentials.accessTokenSecret);
 
-    const { data, error } = await supabase
-      .from('credentials')
-      .upsert({
-        user_id: userId,
-        credential_type: 'x-api',
-        encrypted_credentials: JSON.stringify({
-          apiKey: encryptedApiKey,
-          apiKeySecret: encryptedApiKeySecret,
-          accessToken: encryptedAccessToken,
-          accessTokenSecret: encryptedAccessTokenSecret,
-          userId: credentials.userId,
-        }),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+    const encryptedData = {
+      user_id: userId,
+      credential_type: 'x-api',
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: encryptedApiKeySecret,
+      encrypted_access_token: encryptedAccessToken,
+      encrypted_access_secret: encryptedAccessTokenSecret,
+      encrypted_bearer_token: null, // X API doesn't use bearer token
+      encryption_version: 1,
+      is_valid: false, // Will be validated separately
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .upsert(encryptedData, {
+        onConflict: 'user_id,credential_type'
       })
-      .select()
+      .select('id')
       .single();
 
     if (error) {
@@ -54,6 +170,18 @@ export async function storeXApiCredentials(
     }
 
     console.log('✅ X API credentials stored successfully');
+    
+    // Check if these are real credentials (not demo)
+    const isRealCredentials = !credentials.apiKey.includes('demo_') && 
+      !credentials.apiKeySecret.includes('demo_') &&
+      !credentials.accessToken.includes('demo_') &&
+      !credentials.accessTokenSecret.includes('demo_');
+    
+    // If switching to real credentials, clean up demo mentions
+    if (isRealCredentials) {
+      await cleanupDemoMentions(userId);
+    }
+    
     return {
       success: true,
       id: data.id,
@@ -76,8 +204,8 @@ export async function getXApiCredentials(
   try {
     console.log('🔍 Retrieving X API credentials for user:', userId);
 
-    const { data, error } = await supabase
-      .from('credentials')
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
       .select('*')
       .eq('user_id', userId)
       .eq('credential_type', 'x-api')
@@ -98,7 +226,8 @@ export async function getXApiCredentials(
       };
     }
 
-    if (!data.encrypted_credentials) {
+    if (!data.encrypted_api_key || !data.encrypted_api_secret || 
+        !data.encrypted_access_token || !data.encrypted_access_secret) {
       return {
         success: false,
         error: 'Invalid encrypted credentials found. Please re-add your X API credentials.',
@@ -106,18 +235,17 @@ export async function getXApiCredentials(
     }
 
     try {
-      const encryptedData = JSON.parse(data.encrypted_credentials);
-      const decryptedApiKey = await decrypt(encryptedData.apiKey);
-      const decryptedApiKeySecret = await decrypt(encryptedData.apiKeySecret);
-      const decryptedAccessToken = await decrypt(encryptedData.accessToken);
-      const decryptedAccessTokenSecret = await decrypt(encryptedData.accessTokenSecret);
+      const decryptedApiKey = await decrypt(data.encrypted_api_key);
+      const decryptedApiKeySecret = await decrypt(data.encrypted_api_secret);
+      const decryptedAccessToken = await decrypt(data.encrypted_access_token);
+      const decryptedAccessTokenSecret = await decrypt(data.encrypted_access_secret);
 
       const credentials: XApiCredentials = {
         apiKey: decryptedApiKey,
         apiKeySecret: decryptedApiKeySecret,
         accessToken: decryptedAccessToken,
         accessTokenSecret: decryptedAccessTokenSecret,
-        userId: encryptedData.userId,
+        userId: userId,
       };
 
       console.log('✅ X API credentials retrieved successfully');
@@ -150,8 +278,8 @@ export async function deleteXApiCredentials(
   try {
     console.log('🗑️ Deleting X API credentials for user:', userId);
 
-    const { error } = await supabase
-      .from('credentials')
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
       .delete()
       .eq('user_id', userId)
       .eq('credential_type', 'x-api');
@@ -193,17 +321,15 @@ export async function updateXApiCredentials(
     const encryptedAccessToken = await encrypt(credentials.accessToken);
     const encryptedAccessTokenSecret = await encrypt(credentials.accessTokenSecret);
 
-    const { error } = await supabase
-      .from('credentials')
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
       .update({
-        encrypted_credentials: JSON.stringify({
-          apiKey: encryptedApiKey,
-          apiKeySecret: encryptedApiKeySecret,
-          accessToken: encryptedAccessToken,
-          accessTokenSecret: encryptedAccessTokenSecret,
-          userId: credentials.userId,
-        }),
-        updated_at: new Date().toISOString(),
+        encrypted_api_key: encryptedApiKey,
+        encrypted_api_secret: encryptedApiKeySecret,
+        encrypted_access_token: encryptedAccessToken,
+        encrypted_access_secret: encryptedAccessTokenSecret,
+        encryption_version: 1,
+        is_valid: false, // Will be validated separately
       })
       .eq('user_id', userId)
       .eq('credential_type', 'x-api');
@@ -217,6 +343,18 @@ export async function updateXApiCredentials(
     }
 
     console.log('✅ X API credentials updated successfully');
+    
+    // Check if these are real credentials (not demo)
+    const isRealCredentials = !credentials.apiKey.includes('demo_') && 
+      !credentials.apiKeySecret.includes('demo_') &&
+      !credentials.accessToken.includes('demo_') &&
+      !credentials.accessTokenSecret.includes('demo_');
+    
+    // If switching to real credentials, clean up demo mentions
+    if (isRealCredentials) {
+      await cleanupDemoMentions(userId);
+    }
+    
     return {
       success: true,
     };
@@ -236,8 +374,8 @@ export async function hasXApiCredentials(
   userId: string
 ): Promise<{ success: boolean; hasCredentials: boolean; error?: string }> {
   try {
-    const { data, error } = await supabase
-      .from('credentials')
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
       .select('id')
       .eq('user_id', userId)
       .eq('credential_type', 'x-api')

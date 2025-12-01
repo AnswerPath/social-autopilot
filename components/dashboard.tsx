@@ -12,6 +12,9 @@ import { CalendarView } from "./calendar-view"
 import { AnalyticsDashboard } from "./analytics-dashboard"
 import { TeamManagement } from "./team-management"
 import { EngagementMonitor } from "./engagement-monitor"
+import { AutoReplyRules } from "./engagement/auto-reply-rules"
+import { AutoReplyAnalytics } from "./engagement/auto-reply-analytics"
+import { FlaggedMentions } from "./engagement/flagged-mentions"
 import { Sidebar } from "./sidebar"
 import { SettingsPage } from "./settings-page"
 import { UserInfoCard } from "./auth/user-info-card"
@@ -448,7 +451,27 @@ export function Dashboard() {
           {activeTab === "approvals" && <ManagerApprovalDashboard />}
           {activeTab === "analytics" && <AnalyticsDashboard />}
           {activeTab === "team" && <TeamManagement />}
-          {activeTab === "engagement" && <EngagementMonitor />}
+          {activeTab === "engagement" && (
+            <div className="space-y-6">
+              <EngagementMonitor />
+              <Tabs defaultValue="rules" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="rules">Auto-Reply Rules</TabsTrigger>
+                  <TabsTrigger value="flagged">Flagged Mentions</TabsTrigger>
+                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                </TabsList>
+                <TabsContent value="rules">
+                  <AutoReplyRules />
+                </TabsContent>
+                <TabsContent value="flagged">
+                  <FlaggedMentions />
+                </TabsContent>
+                <TabsContent value="analytics">
+                  <AutoReplyAnalytics />
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
           {activeTab === "settings" && <SettingsPage />}
         </main>
       </div>

@@ -171,6 +171,83 @@ export async function storeTwitterCredentials(
     
     console.log('✅ Credentials stored successfully with ID:', data.id)
     
+    // Check if these are real credentials (not demo)
+    const isRealCredentials = !credentials.apiKey.includes('demo_') && 
+      !credentials.apiSecret.includes('demo_') &&
+      !credentials.accessToken.includes('demo_') &&
+      !credentials.accessSecret.includes('demo_')
+    
+    // If switching to real credentials, clean up demo mentions
+    if (isRealCredentials) {
+      try {
+        console.log('🧹 Cleaning up demo mentions for user:', userId)
+        
+        // First, check if mentions table exists by attempting a simple query
+        // If the table doesn't exist, we'll catch the error and skip cleanup
+        const { data: mentions, error: fetchError } = await supabaseAdmin
+          .from('mentions')
+          .select('id, tweet_id')
+          .eq('user_id', userId)
+          .limit(1) // Just check if table exists and has any data
+        
+        // Check for table not found errors
+        if (fetchError) {
+          // If table doesn't exist, that's okay - just skip cleanup
+          if (fetchError.message?.includes('does not exist') || 
+              fetchError.message?.includes('Could not find the table') ||
+              fetchError.code === '42P01') { // PostgreSQL error code for "relation does not exist"
+            console.log('ℹ️ Mentions table does not exist yet, skipping demo cleanup')
+          } else {
+            console.warn('⚠️ Warning: Failed to fetch mentions for cleanup:', fetchError.message)
+          }
+        } else if (mentions && mentions.length > 0) {
+          // Table exists and has data, now fetch all mentions for cleanup
+          const { data: allMentions, error: allFetchError } = await supabaseAdmin
+            .from('mentions')
+            .select('id, tweet_id')
+            .eq('user_id', userId)
+          
+          if (allFetchError) {
+            console.warn('⚠️ Warning: Failed to fetch all mentions for cleanup:', allFetchError.message)
+          } else if (allMentions && allMentions.length > 0) {
+            // Filter to only demo mentions (tweet_id starts with 'demo-')
+            const demoMentionIds = allMentions
+              .filter(m => m.tweet_id && m.tweet_id.startsWith('demo-'))
+              .map(m => m.id)
+            
+            if (demoMentionIds.length > 0) {
+              console.log(`🧹 Deleting ${demoMentionIds.length} demo mentions`)
+              const { error: deleteError } = await supabaseAdmin
+                .from('mentions')
+                .delete()
+                .in('id', demoMentionIds)
+              
+              if (deleteError) {
+                console.warn('⚠️ Warning: Failed to delete demo mentions:', deleteError.message)
+              } else {
+                console.log(`✅ Successfully cleaned up ${demoMentionIds.length} demo mentions`)
+              }
+            } else {
+              console.log('ℹ️ No demo mentions found to clean up')
+            }
+          }
+        } else {
+          console.log('ℹ️ No mentions found to clean up')
+        }
+      } catch (cleanupError: any) {
+        // Handle any unexpected errors gracefully
+        const errorMessage = cleanupError?.message || String(cleanupError)
+        if (errorMessage.includes('does not exist') || 
+            errorMessage.includes('Could not find the table') ||
+            cleanupError?.code === '42P01') {
+          console.log('ℹ️ Mentions table does not exist yet, skipping demo cleanup')
+        } else {
+          console.warn('⚠️ Warning: Error during demo mentions cleanup:', errorMessage)
+        }
+        // Don't fail the credential storage if cleanup fails
+      }
+    }
+    
     return { 
       success: true, 
       id: data.id 
@@ -559,16 +636,46 @@ export async function getDatabaseHealth(): Promise<{
   try {
     console.log('🏥 Checking database health...')
     
-    // Test encryption first
-    const encryptionTest = await testEncryption()
-    const encryptionWorking = encryptionTest.success
-    
-    if (!encryptionWorking) {
-      console.error('❌ Encryption test failed:', encryptionTest.error)
+    // Test encryption first with timeout protection
+    let encryptionWorking = false
+    try {
+      const encryptionTest = await Promise.race([
+        testEncryption(),
+        new Promise<{ success: boolean; error?: string }>((_, reject) => 
+          setTimeout(() => reject(new Error('Encryption test timeout')), 5000)
+        )
+      ])
+      encryptionWorking = encryptionTest.success
+      if (!encryptionWorking) {
+        console.error('❌ Encryption test failed:', encryptionTest.error)
+      }
+    } catch (encryptionError: any) {
+      console.error('❌ Encryption test error:', encryptionError.message || encryptionError)
+      // Continue with other tests even if encryption fails
     }
     
     // Check if table exists
-    const tableCheck = await checkTableExists()
+    let tableCheck
+    try {
+      tableCheck = await Promise.race([
+        checkTableExists(),
+        new Promise<{ exists: boolean; error?: string }>((_, reject) =>
+          setTimeout(() => reject(new Error('Table check timeout')), 5000)
+        )
+      ])
+    } catch (tableError: any) {
+      console.error('❌ Table check error:', tableError.message || tableError)
+      return {
+        success: false,
+        tableExists: false,
+        canRead: false,
+        canWrite: false,
+        recordCount: 0,
+        encryptionWorking,
+        error: `Table check failed: ${tableError.message || 'Unknown error'}`
+      }
+    }
+    
     if (!tableCheck.exists) {
       return {
         success: false,
@@ -577,56 +684,71 @@ export async function getDatabaseHealth(): Promise<{
         canWrite: false,
         recordCount: 0,
         encryptionWorking,
-        error: 'Table does not exist'
+        error: tableCheck.error || 'Table does not exist'
       }
     }
 
-    // Test read access
+    // Test read access with timeout
     let canRead = false
     let recordCount = 0
     try {
-      const { data, error } = await supabaseAdmin
-        .from('user_credentials')
-        .select('id')
+      const readResult = await Promise.race([
+        supabaseAdmin.from('user_credentials').select('id').limit(100),
+        new Promise<{ data: any; error: any }>((_, reject) =>
+          setTimeout(() => reject(new Error('Read test timeout')), 5000)
+        )
+      ])
       
-      if (!error) {
+      if (!readResult.error) {
         canRead = true
-        recordCount = data?.length || 0
+        recordCount = readResult.data?.length || 0
+      } else {
+        console.error('❌ Read test failed:', readResult.error.message)
       }
-    } catch (readError) {
-      console.error('❌ Read test failed:', readError)
+    } catch (readError: any) {
+      console.error('❌ Read test error:', readError.message || readError)
+      // Continue with other tests
     }
 
-    // Test write access (try to insert and immediately delete a test record)
+    // Test write access (try to insert and immediately delete a test record) with timeout
     let canWrite = false
     try {
-      const testRecord = {
-        user_id: 'test-user-' + Date.now(),
-        credential_type: 'test',
-        encrypted_api_key: await encrypt('test'),
-        encrypted_api_secret: await encrypt('test'),
-        encrypted_access_token: await encrypt('test'),
-        encrypted_access_secret: await encrypt('test'),
-        encryption_version: 1,
-        is_valid: false
-      }
+      // Only test write if encryption is working
+      if (encryptionWorking) {
+        const testRecord = {
+          user_id: 'test-user-' + Date.now(),
+          credential_type: 'test',
+          encrypted_api_key: await encrypt('test'),
+          encrypted_api_secret: await encrypt('test'),
+          encrypted_access_token: await encrypt('test'),
+          encrypted_access_secret: await encrypt('test'),
+          encryption_version: 1,
+          is_valid: false
+        }
 
-      const { data: insertData, error: insertError } = await supabaseAdmin
-        .from('user_credentials')
-        .insert(testRecord)
-        .select('id')
-        .single()
+        const insertResult = await Promise.race([
+          supabaseAdmin.from('user_credentials').insert(testRecord).select('id').single(),
+          new Promise<{ data: any; error: any }>((_, reject) =>
+            setTimeout(() => reject(new Error('Write test timeout')), 5000)
+          )
+        ])
 
-      if (!insertError && insertData) {
-        canWrite = true
-        // Clean up test record
-        await supabaseAdmin
-          .from('user_credentials')
-          .delete()
-          .eq('id', insertData.id)
+        if (!insertResult.error && insertResult.data) {
+          canWrite = true
+          // Clean up test record (don't wait for this to complete)
+          supabaseAdmin
+            .from('user_credentials')
+            .delete()
+            .eq('id', insertResult.data.id)
+            .then(() => console.log('✅ Test record cleaned up'))
+            .catch((err) => console.warn('⚠️ Failed to clean up test record:', err))
+        } else {
+          console.error('❌ Write test failed:', insertResult.error?.message)
+        }
       }
-    } catch (writeError) {
-      console.error('❌ Write test failed:', writeError)
+    } catch (writeError: any) {
+      console.error('❌ Write test error:', writeError.message || writeError)
+      // Continue - write test failure is not critical
     }
 
     console.log('✅ Database health check completed')
@@ -641,6 +763,12 @@ export async function getDatabaseHealth(): Promise<{
     }
   } catch (error: any) {
     console.error('❌ Database health check failed:', error)
+    const errorMessage = error?.message || String(error) || 'Unknown error'
+    // Don't include HTML in error messages
+    const cleanError = errorMessage.includes('<html>') 
+      ? 'Database connection failed - please check your Supabase configuration'
+      : errorMessage
+    
     return {
       success: false,
       tableExists: false,
@@ -648,7 +776,7 @@ export async function getDatabaseHealth(): Promise<{
       canWrite: false,
       recordCount: 0,
       encryptionWorking: false,
-      error: error.message
+      error: cleanError
     }
   }
 }

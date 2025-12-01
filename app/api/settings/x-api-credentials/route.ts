@@ -4,9 +4,11 @@ import {
   getXApiCredentials,
   deleteXApiCredentials,
   updateXApiCredentials,
+  cleanupDemoMentions,
 } from '@/lib/x-api-storage';
 import { validateXApiCredentials } from '@/lib/x-api-storage';
 import { XApiCredentials } from '@/lib/x-api-service';
+import { activeMonitors } from '@/app/api/mentions/stream/route';
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,11 +56,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Stop any active demo monitoring and clean up demo mentions
+    const monitor = activeMonitors.get(userId);
+    if (monitor && monitor.type === 'demo') {
+      console.log('🛑 Stopping demo monitoring after credentials configured');
+      if (monitor.interval) {
+        clearInterval(monitor.interval);
+      }
+      activeMonitors.delete(userId);
+    }
+
+    // Clean up demo mentions (this is also done in storeXApiCredentials, but we'll do it here too for immediate effect)
+    console.log('🧹 [CREDENTIALS] Triggering demo mentions cleanup after storing credentials');
+    const cleanupResult = await cleanupDemoMentions(userId);
+    if (cleanupResult.success) {
+      if (cleanupResult.deletedCount && cleanupResult.deletedCount > 0) {
+        console.log(`✅ [CREDENTIALS] Cleaned up ${cleanupResult.deletedCount} demo mentions after storing credentials`);
+      } else {
+        console.log('ℹ️ [CREDENTIALS] No demo mentions found to clean up (may have been cleaned already)');
+      }
+    } else {
+      console.error(`❌ [CREDENTIALS] Failed to clean up demo mentions: ${cleanupResult.error}`);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'X API credentials stored successfully',
       id: storeResult.id,
       user: validation.user,
+      demoMentionsCleaned: cleanupResult.deletedCount || 0,
     });
   } catch (error) {
     console.error('Error storing X API credentials:', error);
@@ -143,10 +169,34 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Stop any active demo monitoring and clean up demo mentions
+    const monitor = activeMonitors.get(userId);
+    if (monitor && monitor.type === 'demo') {
+      console.log('🛑 Stopping demo monitoring after credentials updated');
+      if (monitor.interval) {
+        clearInterval(monitor.interval);
+      }
+      activeMonitors.delete(userId);
+    }
+
+    // Clean up demo mentions
+    console.log('🧹 [CREDENTIALS] Triggering demo mentions cleanup after updating credentials');
+    const cleanupResult = await cleanupDemoMentions(userId);
+    if (cleanupResult.success) {
+      if (cleanupResult.deletedCount && cleanupResult.deletedCount > 0) {
+        console.log(`✅ [CREDENTIALS] Cleaned up ${cleanupResult.deletedCount} demo mentions after updating credentials`);
+      } else {
+        console.log('ℹ️ [CREDENTIALS] No demo mentions found to clean up (may have been cleaned already)');
+      }
+    } else {
+      console.error(`❌ [CREDENTIALS] Failed to clean up demo mentions: ${cleanupResult.error}`);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'X API credentials updated successfully',
       user: validation.user,
+      demoMentionsCleaned: cleanupResult.deletedCount || 0,
     });
   } catch (error) {
     console.error('Error updating X API credentials:', error);

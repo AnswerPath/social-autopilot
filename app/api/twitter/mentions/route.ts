@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTwitterCredentials } from '@/lib/database-storage'
+import { getUnifiedCredentials } from '@/lib/unified-credentials'
 import { TwitterApi } from 'twitter-api-v2'
 
 export const runtime = 'nodejs'
@@ -8,10 +8,92 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching mentions...')
     
-    const result = await getTwitterCredentials('demo-user')
+    const userId = request.headers.get('x-user-id') || 'demo-user'
+    const result = await getUnifiedCredentials(userId)
     
     if (!result.success || !result.credentials) {
-      console.log('❌ No credentials found')
+      console.log(`❌ No credentials found for user ${userId}, checking for demo mentions in database`)
+      // Try to get mentions from database (demo mode)
+      // Only return demo mentions (tweet_id starts with 'demo-')
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase')
+        const { data: mentions, error } = await supabaseAdmin
+          .from('mentions')
+          .select('*')
+          .eq('user_id', userId)
+          .like('tweet_id', 'demo-%') // Only get demo mentions
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (error) {
+          console.error('❌ Database error fetching mentions:', error)
+          console.error('Error details:', JSON.stringify(error, null, 2))
+        } else {
+          console.log(`✅ Found ${mentions?.length || 0} mentions in database for ${userId}`)
+          if (mentions && mentions.length > 0) {
+            // Check sentiment distribution in raw database data
+            const rawSentimentCounts = mentions.reduce((acc, m) => {
+              const sent = m.sentiment || 'NULL'
+              acc[sent] = (acc[sent] || 0) + 1
+              return acc
+            }, {} as Record<string, number>)
+            console.log('📊 Raw database sentiment counts:', rawSentimentCounts)
+            console.log('Sample mention (raw):', {
+              text: mentions[0].text?.substring(0, 50) + '...',
+              sentiment: mentions[0].sentiment,
+              sentiment_confidence: mentions[0].sentiment_confidence
+            })
+          }
+        }
+        
+        if (!error && mentions && mentions.length > 0) {
+          // Convert database mentions to expected format
+          const formattedMentions = mentions.map(mention => ({
+            id: mention.tweet_id || mention.id,
+            text: mention.text,
+            created_at: mention.created_at,
+            username: mention.author_username,
+            name: mention.author_name || mention.author_username,
+            profile_image_url: '/placeholder.svg?height=40&width=40',
+            public_metrics: {
+              followers_count: Math.floor(Math.random() * 5000) + 100, // Random followers for demo
+              following_count: Math.floor(Math.random() * 1000) + 50,
+            },
+            sentiment: mention.sentiment || 'neutral',
+          }))
+          
+          // Log sentiment distribution for debugging
+          const sentimentCounts = formattedMentions.reduce((acc, m) => {
+            const sent = m.sentiment || 'neutral'
+            acc[sent] = (acc[sent] || 0) + 1
+            return acc
+          }, {} as Record<string, number>)
+          console.log(`✅ Returning ${formattedMentions.length} formatted mentions from database`)
+          console.log(`📊 Sentiment distribution:`, sentimentCounts)
+          console.log(`📊 Sample sentiments (first 5):`, formattedMentions.slice(0, 5).map(m => ({ text: m.text.substring(0, 40) + '...', sentiment: m.sentiment })))
+          
+          return NextResponse.json({ 
+            success: true,
+            mock: true,
+            demo: true,
+            mentions: formattedMentions
+          })
+        } else if (!error && mentions && mentions.length === 0) {
+          console.log(`ℹ️ No mentions found in database for ${userId} - returning empty array`)
+          return NextResponse.json({ 
+            success: true,
+            mock: true,
+            demo: true,
+            mentions: []
+          })
+        }
+      } catch (dbError) {
+        console.error('❌ Error fetching demo mentions from database:', dbError)
+        console.error('DB Error details:', JSON.stringify(dbError, null, 2))
+      }
+      
+      // Fallback to mock mentions if no database mentions
+      console.log('📊 Falling back to mock mentions')
       return NextResponse.json({ 
         success: true,
         mock: true,
@@ -21,17 +103,26 @@ export async function GET(request: NextRequest) {
 
     const credentials = result.credentials
 
-    // Prefer Bearer token first
-    if (credentials.bearerToken && !credentials.bearerToken.includes('demo_')) {
+    // Convert unified credentials format to Twitter API format
+    const twitterCredentials = {
+      apiKey: credentials.apiKey,
+      apiSecret: credentials.apiKeySecret,
+      accessToken: credentials.accessToken,
+      accessSecret: credentials.accessTokenSecret,
+      bearerToken: undefined // X API doesn't use bearer token in this format
+    }
+
+    // Prefer Bearer token first (if available in future)
+    if (twitterCredentials.bearerToken && !twitterCredentials.bearerToken.includes('demo_')) {
       try {
         const meResp = await fetch('https://api.twitter.com/2/users/me', {
-          headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+          headers: { Authorization: `Bearer ${twitterCredentials.bearerToken}` },
         })
         if (meResp.ok) {
           const me = await meResp.json()
           const params = new URLSearchParams({ 'tweet.fields': 'created_at,public_metrics,author_id', 'user.fields': 'username,name,profile_image_url,public_metrics', expansions: 'author_id', 'max_results': '50' })
           const res = await fetch(`https://api.twitter.com/2/users/${me.data.id}/mentions?${params.toString()}`, {
-            headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+            headers: { Authorization: `Bearer ${twitterCredentials.bearerToken}` },
           })
           if (res.ok) {
             const data = await res.json()
@@ -75,10 +166,10 @@ export async function GET(request: NextRequest) {
     // Fallback to OAuth 1.0a
     try {
       const client = new TwitterApi({
-        appKey: credentials.apiKey,
-        appSecret: credentials.apiSecret,
-        accessToken: credentials.accessToken,
-        accessSecret: credentials.accessSecret,
+        appKey: twitterCredentials.apiKey,
+        appSecret: twitterCredentials.apiSecret,
+        accessToken: twitterCredentials.accessToken,
+        accessSecret: twitterCredentials.accessSecret,
       })
 
       const me = await client.v2.me()
@@ -112,11 +203,81 @@ export async function GET(request: NextRequest) {
       })
     } catch (apiError: any) {
       const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
-      console.log('⚠️ Twitter API error, falling back to enhanced mock:', errorInfo)
+      console.log('⚠️ Twitter API error, checking database for demo mentions before fallback:', errorInfo)
       ;(globalThis as any).__last_mentions_error = errorInfo
     }
 
-    // Enhanced mock data
+    // Check if credentials are real (not demo) before falling back to database
+    const isRealCredentials = twitterCredentials.apiKey && 
+      !twitterCredentials.apiKey.includes('demo_') && 
+      !twitterCredentials.apiSecret?.includes('demo_') &&
+      !twitterCredentials.accessToken?.includes('demo_') &&
+      !twitterCredentials.accessSecret?.includes('demo_')
+    
+    if (result.migrated) {
+      console.log('✅ Credentials migrated from Twitter to X API format');
+    }
+
+    // Before falling back to mock data, check database for demo mentions
+    // BUT only if we don't have real credentials (to avoid mixing demo and real data)
+    if (!isRealCredentials) {
+      console.log(`🔍 Checking database for demo mentions (user: ${userId}) before mock fallback`)
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase')
+        const { data: mentions, error } = await supabaseAdmin
+          .from('mentions')
+          .select('*')
+          .eq('user_id', userId)
+          .like('tweet_id', 'demo-%') // Only get demo mentions
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (!error && mentions && mentions.length > 0) {
+          console.log(`✅ Found ${mentions.length} demo mentions in database - returning them instead of mock data`)
+          // Convert database mentions to expected format
+          const formattedMentions = mentions.map(mention => ({
+            id: mention.tweet_id || mention.id,
+            text: mention.text,
+            created_at: mention.created_at,
+            username: mention.author_username,
+            name: mention.author_name || mention.author_username,
+            profile_image_url: '/placeholder.svg?height=40&width=40',
+            public_metrics: {
+              followers_count: Math.floor(Math.random() * 5000) + 100, // Random followers for demo
+              following_count: Math.floor(Math.random() * 1000) + 50,
+            },
+            sentiment: mention.sentiment || 'neutral',
+          }))
+          
+          // Log sentiment distribution for debugging
+          const sentimentCounts = formattedMentions.reduce((acc, m) => {
+            const sent = m.sentiment || 'neutral'
+            acc[sent] = (acc[sent] || 0) + 1
+            return acc
+          }, {} as Record<string, number>)
+          console.log(`📊 Sentiment distribution (API fallback):`, sentimentCounts)
+          console.log(`📊 Sample sentiments (first 5):`, formattedMentions.slice(0, 5).map(m => ({ text: m.text.substring(0, 40) + '...', sentiment: m.sentiment })))
+          
+          return NextResponse.json({ 
+            success: true,
+            mock: true,
+            demo: true,
+            mentions: formattedMentions,
+            note: 'Twitter API call failed; returning demo mentions from database'
+          })
+        } else if (!error && mentions && mentions.length === 0) {
+          console.log(`ℹ️ No demo mentions in database for ${userId} - will fall back to mock data`)
+        } else if (error) {
+          console.error('❌ Database error while checking for demo mentions:', error)
+        }
+      } catch (dbError) {
+        console.error('❌ Error checking database for demo mentions:', dbError)
+      }
+    } else {
+      console.log('🔒 Real credentials detected - skipping demo mentions from database to avoid mixing demo and real data')
+    }
+
+    // Enhanced mock data (only if no database mentions found)
     console.log('📊 Using enhanced mock data with real credentials')
     return NextResponse.json({
       success: true,
