@@ -317,9 +317,9 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
                 </div>
                 <p className="mt-1">{apifyTestResult.message}</p>
                 {apifyTestResult.success && apifyTestResult.actorCount !== undefined && (
-                  <p className="mt-1 text-sm">
+                  <div className="mt-1 text-sm">
                     Available actors: <Badge variant="secondary">{apifyTestResult.actorCount}</Badge>
-                  </p>
+                  </div>
                 )}
               </AlertDescription>
             </Alert>
@@ -422,9 +422,9 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
                 </div>
                 <p className="mt-1">{xApiTestResult.message}</p>
                 {xApiTestResult.success && xApiTestResult.user && (
-                  <p className="mt-1 text-sm">
+                  <div className="mt-1 text-sm">
                     Connected as: <Badge variant="secondary">@{xApiTestResult.user.username}</Badge>
-                  </p>
+                  </div>
                 )}
               </AlertDescription>
             </Alert>

@@ -39,14 +39,31 @@ export class TokenManagementService {
    */
   async validateApifyToken(): Promise<TokenValidationResult> {
     try {
-      const { data, error } = await supabase
-        .from('credentials')
+      const { supabaseAdmin } = await import('./supabase');
+      const { data, error } = await supabaseAdmin
+        .from('user_credentials')
         .select('*')
         .eq('user_id', this.userId)
         .eq('credential_type', 'apify')
         .single();
 
-      if (error || !data) {
+      if (error) {
+        // Check if it's a table not found error
+        if (error.message?.includes('Could not find the table') || 
+            error.message?.includes('does not exist') ||
+            error.code === '42P01') {
+          return {
+            isValid: false,
+            error: 'The credentials table does not exist. Please run the database setup migration.',
+          };
+        }
+        return {
+          isValid: false,
+          error: 'No Apify credentials found',
+        };
+      }
+      
+      if (!data) {
         return {
           isValid: false,
           error: 'No Apify credentials found',
@@ -55,7 +72,12 @@ export class TokenManagementService {
 
       // For Apify, we validate by testing the connection
       const { ApifyService } = await import('./apify-service');
-      const credentials = await this.decryptApifyCredentials(data.encrypted_credentials);
+      const { decrypt } = await import('./encryption');
+      const decryptedApiKey = await decrypt(data.encrypted_api_key);
+      const credentials: ApifyCredentials = {
+        apiKey: decryptedApiKey,
+        userId: this.userId,
+      };
       const apifyService = new ApifyService(credentials);
       
       try {
@@ -82,14 +104,31 @@ export class TokenManagementService {
    */
   async validateXApiToken(): Promise<TokenValidationResult> {
     try {
-      const { data, error } = await supabase
-        .from('credentials')
+      const { supabaseAdmin } = await import('./supabase');
+      const { data, error } = await supabaseAdmin
+        .from('user_credentials')
         .select('*')
         .eq('user_id', this.userId)
         .eq('credential_type', 'x-api')
         .single();
 
-      if (error || !data) {
+      if (error) {
+        // Check if it's a table not found error
+        if (error.message?.includes('Could not find the table') || 
+            error.message?.includes('does not exist') ||
+            error.code === '42P01') {
+          return {
+            isValid: false,
+            error: 'The credentials table does not exist. Please run the database setup migration.',
+          };
+        }
+        return {
+          isValid: false,
+          error: 'No X API credentials found',
+        };
+      }
+      
+      if (!data) {
         return {
           isValid: false,
           error: 'No X API credentials found',
@@ -98,7 +137,18 @@ export class TokenManagementService {
 
       // For X API, we validate by testing the connection
       const { XApiService } = await import('./x-api-service');
-      const credentials = await this.decryptXApiCredentials(data.encrypted_credentials);
+      const { decrypt } = await import('./encryption');
+      const decryptedApiKey = await decrypt(data.encrypted_api_key);
+      const decryptedApiKeySecret = await decrypt(data.encrypted_api_secret);
+      const decryptedAccessToken = await decrypt(data.encrypted_access_token);
+      const decryptedAccessTokenSecret = await decrypt(data.encrypted_access_secret);
+      const credentials: XApiCredentials = {
+        apiKey: decryptedApiKey,
+        apiKeySecret: decryptedApiKeySecret,
+        accessToken: decryptedAccessToken,
+        accessTokenSecret: decryptedAccessTokenSecret,
+        userId: this.userId,
+      };
       const xApiService = new XApiService(credentials);
       
       try {
@@ -232,37 +282,6 @@ export class TokenManagementService {
     return apifyStatus.isValid;
   }
 
-  /**
-   * Decrypt Apify credentials from stored data
-   */
-  private async decryptApifyCredentials(encryptedData: string): Promise<ApifyCredentials> {
-    const parsed = JSON.parse(encryptedData);
-    const decryptedApiKey = await decrypt(parsed.apiKey);
-    
-    return {
-      apiKey: decryptedApiKey,
-      userId: parsed.userId,
-    };
-  }
-
-  /**
-   * Decrypt X API credentials from stored data
-   */
-  private async decryptXApiCredentials(encryptedData: string): Promise<XApiCredentials> {
-    const parsed = JSON.parse(encryptedData);
-    const decryptedApiKey = await decrypt(parsed.apiKey);
-    const decryptedApiKeySecret = await decrypt(parsed.apiKeySecret);
-    const decryptedAccessToken = await decrypt(parsed.accessToken);
-    const decryptedAccessTokenSecret = await decrypt(parsed.accessTokenSecret);
-    
-    return {
-      apiKey: decryptedApiKey,
-      apiKeySecret: decryptedApiKeySecret,
-      accessToken: decryptedAccessToken,
-      accessTokenSecret: decryptedAccessTokenSecret,
-      userId: parsed.userId,
-    };
-  }
 }
 
 /**

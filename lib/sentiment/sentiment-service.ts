@@ -35,17 +35,31 @@ export class SentimentService {
     const result = this.analyzer.analyze(text);
     
     // Determine sentiment category
+    // Using slightly more lenient thresholds to reduce neutral classifications
+    // Original: 0.1/-0.1, New: 0.05/-0.05
     let sentiment: SentimentResult = 'neutral';
-    if (result.comparative > 0.1) {
+    if (result.comparative > 0.05) {
       sentiment = 'positive';
-    } else if (result.comparative < -0.1) {
+    } else if (result.comparative < -0.05) {
       sentiment = 'negative';
     }
 
     // Calculate confidence (0-1) based on comparative score
     // Map comparative range (-5 to 5) to confidence (0 to 1)
+    // Use a more nuanced mapping that gives higher confidence for stronger signals
     const normalizedScore = Math.abs(result.comparative);
-    const confidence = Math.min(normalizedScore / 5, 1);
+    // Scale: 0.05 -> ~0.1 confidence, 0.5 -> ~0.5 confidence, 2.0 -> 1.0 confidence
+    const confidence = Math.min(Math.max(normalizedScore * 0.5, 0.1), 1);
+
+    // Log analysis for debugging (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[SentimentService] Analyzed: "${text.substring(0, 50)}..."`, {
+        sentiment,
+        confidence: confidence.toFixed(2),
+        comparative: result.comparative.toFixed(3),
+        score: result.score,
+      });
+    }
 
     return {
       sentiment,

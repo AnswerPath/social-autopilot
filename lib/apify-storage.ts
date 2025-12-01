@@ -1,8 +1,6 @@
 import { encrypt, decrypt } from './encryption';
-import { getSupabaseClient } from './build-utils';
+import { supabaseAdmin } from './supabase';
 import { ApifyCredentials } from './apify-service';
-
-const supabase = getSupabaseClient();
 
 export interface StoredApifyCredentials extends ApifyCredentials {
   id: string;
@@ -24,19 +22,26 @@ export async function storeApifyCredentials(
     // Encrypt the API key before storing
     const encryptedApiKey = await encrypt(credentials.apiKey);
 
-    const { data, error } = await supabase
-      .from('credentials')
-      .upsert({
-        user_id: userId,
-        credential_type: 'apify',
-        encrypted_credentials: JSON.stringify({
-          apiKey: encryptedApiKey,
-          userId: credentials.userId,
-        }),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+    // For Apify, we only need to store the API key
+    // We'll use encrypted_api_key and leave other fields null
+    const encryptedData = {
+      user_id: userId,
+      credential_type: 'apify',
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: null, // Not used for Apify
+      encrypted_access_token: null, // Not used for Apify
+      encrypted_access_secret: null, // Not used for Apify
+      encrypted_bearer_token: null, // Not used for Apify
+      encryption_version: 1,
+      is_valid: false, // Will be validated separately
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .upsert(encryptedData, {
+        onConflict: 'user_id,credential_type'
       })
-      .select()
+      .select('id')
       .single();
 
     if (error) {
@@ -70,8 +75,8 @@ export async function getApifyCredentials(
   try {
     console.log('🔍 Retrieving Apify credentials for user:', userId);
 
-    const { data, error } = await supabase
-      .from('credentials')
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
       .select('*')
       .eq('user_id', userId)
       .eq('credential_type', 'apify')
@@ -92,7 +97,7 @@ export async function getApifyCredentials(
       };
     }
 
-    if (!data.encrypted_credentials) {
+    if (!data.encrypted_api_key) {
       return {
         success: false,
         error: 'Invalid encrypted credentials found. Please re-add your Apify API key.',
@@ -100,12 +105,11 @@ export async function getApifyCredentials(
     }
 
     try {
-      const encryptedData = JSON.parse(data.encrypted_credentials);
-      const decryptedApiKey = await decrypt(encryptedData.apiKey);
+      const decryptedApiKey = await decrypt(data.encrypted_api_key);
 
       const credentials: ApifyCredentials = {
         apiKey: decryptedApiKey,
-        userId: encryptedData.userId,
+        userId: userId,
       };
 
       console.log('✅ Apify credentials retrieved successfully');
@@ -138,8 +142,8 @@ export async function deleteApifyCredentials(
   try {
     console.log('🗑️ Deleting Apify credentials for user:', userId);
 
-    const { error } = await supabase
-      .from('credentials')
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
       .delete()
       .eq('user_id', userId)
       .eq('credential_type', 'apify');
@@ -178,14 +182,12 @@ export async function updateApifyCredentials(
     // Encrypt the new API key
     const encryptedApiKey = await encrypt(credentials.apiKey);
 
-    const { error } = await supabase
-      .from('credentials')
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
       .update({
-        encrypted_credentials: JSON.stringify({
-          apiKey: encryptedApiKey,
-          userId: credentials.userId,
-        }),
-        updated_at: new Date().toISOString(),
+        encrypted_api_key: encryptedApiKey,
+        encryption_version: 1,
+        is_valid: false, // Will be validated separately
       })
       .eq('user_id', userId)
       .eq('credential_type', 'apify');
@@ -218,8 +220,8 @@ export async function hasApifyCredentials(
   userId: string
 ): Promise<{ success: boolean; hasCredentials: boolean; error?: string }> {
   try {
-    const { data, error } = await supabase
-      .from('credentials')
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
       .select('id')
       .eq('user_id', userId)
       .eq('credential_type', 'apify')
@@ -262,8 +264,8 @@ export async function getAllApifyCredentials(): Promise<{
   error?: string;
 }> {
   try {
-    const { data, error } = await supabase
-      .from('credentials')
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
       .select('*')
       .eq('credential_type', 'apify')
       .order('created_at', { ascending: false });

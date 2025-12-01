@@ -28,6 +28,7 @@ interface AutoReplyRule {
   };
   match_type: 'any' | 'all';
   sentiment_filter: string[];
+  matchCount?: number;
 }
 
 export function AutoReplyRules() {
@@ -71,7 +72,28 @@ export function AutoReplyRules() {
 
       const data = await response.json();
       if (data.success) {
-        setRules(data.rules);
+        const rulesWithCounts = await Promise.all(
+          (data.rules || []).map(async (rule: AutoReplyRule) => {
+            // Fetch match count for this rule
+            try {
+              const logsResponse = await fetch(`/api/auto-reply/analytics?type=metrics`, {
+                headers: {
+                  'x-user-id': 'demo-user',
+                },
+              });
+              if (logsResponse.ok) {
+                const logsData = await logsResponse.json();
+                // Count matches for this specific rule from logs
+                const matchCount = await fetchRuleMatchCount(rule.id);
+                return { ...rule, matchCount };
+              }
+            } catch (error) {
+              console.error('Error fetching match count:', error);
+            }
+            return rule;
+          })
+        );
+        setRules(rulesWithCounts);
       }
     } catch (error) {
       console.error('Error fetching rules:', error);
@@ -82,6 +104,59 @@ export function AutoReplyRules() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRuleMatchCount = async (ruleId: string): Promise<number> => {
+    try {
+      const response = await fetch(`/api/auto-reply/logs?ruleId=${ruleId}`, {
+        headers: {
+          'x-user-id': 'demo-user',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return data.count || 0;
+      }
+    } catch (error) {
+      console.error('Error fetching rule match count:', error);
+    }
+    return 0;
+  };
+
+  const handleToggleActive = async (rule: AutoReplyRule) => {
+    const newActiveState = !rule.is_active;
+    try {
+      const response = await fetch('/api/auto-reply/rules', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': 'demo-user',
+        },
+        body: JSON.stringify({
+          id: rule.id,
+          is_active: newActiveState,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Update local state immediately
+        setRules(rules.map(r => r.id === rule.id ? { ...r, is_active: newActiveState } : r));
+        toast({
+          title: 'Success',
+          description: `Rule ${newActiveState ? 'activated' : 'deactivated'}`,
+        });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('Error toggling rule:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update rule status',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -261,11 +336,20 @@ export function AutoReplyRules() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-semibold">{rule.rule_name}</h3>
-                        <Badge variant={rule.is_active ? 'default' : 'secondary'}>
-                          {rule.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={rule.is_active}
+                            onCheckedChange={() => handleToggleActive(rule)}
+                          />
+                          <Badge variant={rule.is_active ? 'default' : 'secondary'}>
+                            {rule.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
                         <Badge variant="outline">Priority: {rule.priority}</Badge>
                         <Badge variant="outline">{rule.match_type === 'any' ? 'Any Match' : 'All Match'}</Badge>
+                        {rule.matchCount !== undefined && (
+                          <Badge variant="secondary">{rule.matchCount} matches</Badge>
+                        )}
                       </div>
                       <div className="space-y-1 text-sm">
                         {rule.keywords.length > 0 && (
@@ -370,25 +454,61 @@ export function AutoReplyRules() {
               </div>
               <div>
                 <Label>Keywords (comma-separated)</Label>
-                <Input
+                <Textarea
                   value={formData.keywords?.join(', ') || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    keywords: e.target.value.split(',').map(k => k.trim()).filter(Boolean),
-                  })}
-                  placeholder="help, support, question"
+                  onChange={(e) => {
+                    const value = e.target.value
+                    // Allow typing freely, split on blur or when saving
+                    setFormData({
+                      ...formData,
+                      keywords: value.split(',').map(k => k.trim()).filter(Boolean),
+                    })
+                  }}
+                  onBlur={(e) => {
+                    // Ensure proper formatting on blur
+                    const value = e.target.value
+                    const keywords = value.split(',').map(k => k.trim()).filter(Boolean)
+                    setFormData({
+                      ...formData,
+                      keywords,
+                    })
+                  }}
+                  placeholder="help, support, question, issue"
+                  rows={2}
+                  className="font-mono text-sm"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter keywords separated by commas. Spaces and commas are allowed.
+                </p>
               </div>
               <div>
                 <Label>Phrases (comma-separated)</Label>
-                <Input
+                <Textarea
                   value={formData.phrases?.join(', ') || ''}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    phrases: e.target.value.split(',').map(p => p.trim()).filter(Boolean),
-                  })}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    // Allow typing freely, split on blur or when saving
+                    setFormData({
+                      ...formData,
+                      phrases: value.split(',').map(p => p.trim()).filter(Boolean),
+                    })
+                  }}
+                  onBlur={(e) => {
+                    // Ensure proper formatting on blur
+                    const value = e.target.value
+                    const phrases = value.split(',').map(p => p.trim()).filter(Boolean)
+                    setFormData({
+                      ...formData,
+                      phrases,
+                    })
+                  }}
                   placeholder="need help, how do I, can you help"
+                  rows={2}
+                  className="font-mono text-sm"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter phrases separated by commas. Spaces and commas are allowed.
+                </p>
               </div>
               <div>
                 <Label>Response Template</Label>

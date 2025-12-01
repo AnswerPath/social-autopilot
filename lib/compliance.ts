@@ -72,12 +72,11 @@ export class ComplianceService {
       console.log('Processing deletion request:', request);
       
       // Delete all user data
-      const { getSupabaseClient } = await import('./build-utils');
-      const supabase = getSupabaseClient();
+      const { supabaseAdmin } = await import('./supabase');
       
       // Delete credentials
-      await supabase
-        .from('credentials')
+      await supabaseAdmin
+        .from('user_credentials')
         .delete()
         .eq('user_id', request.userId);
 
@@ -111,12 +110,11 @@ export class ComplianceService {
    */
   static async exportUserData(userId: string): Promise<any> {
     try {
-      const { getSupabaseClient } = await import('./build-utils');
-      const supabase = getSupabaseClient();
+      const { supabaseAdmin } = await import('./supabase');
       
       // Get user credentials
-      const { data: credentials } = await supabase
-        .from('credentials')
+      const { data: credentials } = await supabaseAdmin
+        .from('user_credentials')
         .select('*')
         .eq('user_id', userId);
 

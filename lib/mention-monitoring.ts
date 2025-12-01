@@ -230,6 +230,23 @@ export class MentionMonitoringService {
 
       console.log(`Mention captured: @${mention.author_username} [${sentimentAnalysis.sentiment}] - ${mention.text.substring(0, 50)}...`);
 
+      // Process auto-reply for this mention
+      try {
+        const { createAutoReplyService } = await import('./auto-reply/service');
+        const autoReplyService = createAutoReplyService({ userId: this.userId });
+        await autoReplyService.initialize();
+        const autoReplyResult = await autoReplyService.processMention(storedMention as Mention);
+        
+        if (autoReplyResult.success) {
+          console.log(`Auto-reply sent for mention ${storedMention.id}: ${autoReplyResult.responseText?.substring(0, 50)}...`);
+        } else if (autoReplyResult.error && autoReplyResult.error !== 'No matching rule found') {
+          console.log(`Auto-reply processing result: ${autoReplyResult.error}`);
+        }
+      } catch (autoReplyError) {
+        console.error('Error processing auto-reply for mention:', autoReplyError);
+        // Continue even if auto-reply fails
+      }
+
       // Call onMention callback if provided
       if (this.onMention && storedMention) {
         await this.onMention(storedMention as Mention);
