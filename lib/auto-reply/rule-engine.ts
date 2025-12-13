@@ -37,7 +37,8 @@ export interface ThrottleStatus {
  */
 export class RuleEngine {
   private rules: AutoReplyRule[] = [];
-  private throttleCache: Map<string, { count: number; lastReply: Date }> = new Map();
+  // Sliding window: store array of reply timestamps for time-based throttling
+  private throttleCache: Map<string, { replyTimes: Date[] }> = new Map();
 
   /**
    * Load rules into the engine
@@ -55,14 +56,20 @@ export class RuleEngine {
   matchMention(mentionText: string, sentiment?: string): RuleMatchResult {
     const lowerText = mentionText.toLowerCase();
     let bestMatch: RuleMatchResult | null = null;
+    let bestScore = -1;
 
     for (const rule of this.rules) {
       const match = this.matchRule(rule, lowerText, sentiment);
       
       if (match.matched) {
-        // If no best match yet, or this rule has higher priority/confidence
-        if (!bestMatch || match.confidence > bestMatch.confidence || rule.priority > (bestMatch.rule?.priority || 0)) {
+        // Weighted score: confidence (0-1) + normalized priority (0-0.5)
+        // Higher priority rules get more weight, but confidence still matters
+        const maxPriority = Math.max(...this.rules.map(r => r.priority), 1);
+        const score = match.confidence + (rule.priority / maxPriority) * 0.5;
+        
+        if (score > bestScore) {
           bestMatch = match;
+          bestScore = score;
         }
       }
     }
@@ -88,8 +95,9 @@ export class RuleEngine {
    */
   private matchRule(rule: AutoReplyRule, lowerText: string, sentiment?: string): RuleMatchResult {
     // Check sentiment filter if specified
-    if (rule.sentiment_filter.length > 0 && sentiment) {
-      if (!rule.sentiment_filter.includes(sentiment)) {
+    // Rules with sentiment_filter require a computed sentiment to match
+    if (rule.sentiment_filter.length > 0) {
+      if (!sentiment || !rule.sentiment_filter.includes(sentiment)) {
         return {
           matched: false,
           rule,
@@ -171,12 +179,26 @@ export class RuleEngine {
       return { canReply: true };
     }
 
-    const timeSinceLastReply = now.getTime() - cached.lastReply.getTime();
+    // Remove replies older than 1 day to keep sliding window manageable
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    cached.replyTimes = cached.replyTimes.filter(t => t > oneDayAgo);
+
+    // Get the most recent reply for cooldown check
+    const lastReply = cached.replyTimes.length > 0 
+      ? cached.replyTimes[cached.replyTimes.length - 1] 
+      : null;
+
+    if (!lastReply) {
+      // No recent replies, allow it
+      return { canReply: true };
+    }
+
+    const timeSinceLastReply = now.getTime() - lastReply.getTime();
     const cooldownMs = rule.throttle_settings.cooldown_minutes * 60 * 1000;
 
     // Check cooldown
     if (timeSinceLastReply < cooldownMs) {
-      const nextAvailable = new Date(cached.lastReply.getTime() + cooldownMs);
+      const nextAvailable = new Date(lastReply.getTime() + cooldownMs);
       return {
         canReply: false,
         reason: 'cooldown',
@@ -184,10 +206,14 @@ export class RuleEngine {
       };
     }
 
-    // Check hourly limit
+    // Check hourly limit (sliding window: replies within last hour)
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    if (cached.lastReply > oneHourAgo && cached.count >= rule.throttle_settings.max_per_hour) {
-      const nextAvailable = new Date(cached.lastReply.getTime() + 60 * 60 * 1000);
+    const repliesLastHour = cached.replyTimes.filter(t => t > oneHourAgo).length;
+    if (repliesLastHour >= rule.throttle_settings.max_per_hour) {
+      const oldestInWindow = cached.replyTimes.find(t => t > oneHourAgo);
+      const nextAvailable = oldestInWindow 
+        ? new Date(oldestInWindow.getTime() + 60 * 60 * 1000)
+        : new Date(now.getTime() + 60 * 60 * 1000);
       return {
         canReply: false,
         reason: 'hourly_limit',
@@ -195,9 +221,10 @@ export class RuleEngine {
       };
     }
 
-    // Check daily limit (simplified - would need more sophisticated tracking in production)
-    if (cached.count >= rule.throttle_settings.max_per_day) {
-      const nextDay = new Date(now);
+    // Check daily limit (total replies in last 24 hours)
+    if (cached.replyTimes.length >= rule.throttle_settings.max_per_day) {
+      const oldestReply = cached.replyTimes[0];
+      const nextDay = new Date(oldestReply);
       nextDay.setDate(nextDay.getDate() + 1);
       nextDay.setHours(0, 0, 0, 0);
       return {
@@ -217,15 +244,15 @@ export class RuleEngine {
   recordReply(rule: AutoReplyRule, userId: string): void {
     const cacheKey = `${rule.id}:${userId}`;
     const cached = this.throttleCache.get(cacheKey);
+    const now = new Date();
     
-    if (cached) {
-      cached.count += 1;
-      cached.lastReply = new Date();
+    if (!cached) {
+      this.throttleCache.set(cacheKey, { replyTimes: [now] });
     } else {
-      this.throttleCache.set(cacheKey, {
-        count: 1,
-        lastReply: new Date(),
-      });
+      // Add new reply timestamp and prune old entries (older than 1 day)
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      cached.replyTimes = cached.replyTimes.filter(t => t > oneDayAgo);
+      cached.replyTimes.push(now);
     }
   }
 

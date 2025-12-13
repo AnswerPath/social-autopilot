@@ -129,61 +129,9 @@ export async function GET(request: NextRequest) {
       apiSecret: credentials.apiKeySecret,
       accessToken: credentials.accessToken,
       accessSecret: credentials.accessTokenSecret,
-      bearerToken: undefined // X API doesn't use bearer token in this format
     }
 
-    // Prefer Bearer token first (if available in future)
-    if (twitterCredentials.bearerToken && !twitterCredentials.bearerToken.includes('demo_')) {
-      try {
-        const meResp = await fetch('https://api.twitter.com/2/users/me', {
-          headers: { Authorization: `Bearer ${twitterCredentials.bearerToken}` },
-        })
-        if (meResp.ok) {
-          const me = await meResp.json()
-          const params = new URLSearchParams({ 'tweet.fields': 'created_at,public_metrics,author_id', 'user.fields': 'username,name,profile_image_url,public_metrics', expansions: 'author_id', 'max_results': '50' })
-          const res = await fetch(`https://api.twitter.com/2/users/${me.data.id}/mentions?${params.toString()}`, {
-            headers: { Authorization: `Bearer ${twitterCredentials.bearerToken}` },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const users = data.includes?.users || []
-            const mapped = (data.data || []).map((mention: any) => {
-              const author = users.find((u: any) => u.id === mention.author_id)
-              return {
-                id: mention.id,
-                text: mention.text,
-                created_at: mention.created_at,
-                username: author?.username || 'unknown',
-                name: author?.name || 'Twitter User',
-                profile_image_url: author?.profile_image_url || '/placeholder.svg?height=40&width=40',
-                public_metrics: {
-                  followers_count: author?.public_metrics?.followers_count || 0,
-                  following_count: author?.public_metrics?.following_count || 0,
-                }
-              }
-            })
-            console.log('✅ Real mentions fetched (Bearer)')
-            return NextResponse.json({ success: true, mock: false, mentions: mapped })
-          } else {
-            const err = await res.json().catch(() => ({}))
-            const errorInfo = { status: res.status, error: err }
-            console.log('⚠️ Bearer mentions failed, trying OAuth 1.0a:', errorInfo)
-            ;(globalThis as any).__last_mentions_error = errorInfo
-          }
-        } else {
-          const err = await meResp.json().catch(() => ({}))
-          const errorInfo = { status: meResp.status, error: err }
-          console.log('⚠️ Bearer me failed, trying OAuth 1.0a:', errorInfo)
-          ;(globalThis as any).__last_mentions_error = errorInfo
-        }
-      } catch (e: any) {
-        const errorInfo = { message: e?.message || 'Unknown bearer error' }
-        console.log('⚠️ Bearer mentions error, trying OAuth 1.0a:', errorInfo)
-        ;(globalThis as any).__last_mentions_error = errorInfo
-      }
-    }
-
-    // Fallback to OAuth 1.0a
+    // Use OAuth 1.0a (Bearer token support removed as X API doesn't use it in this format)
     try {
       const client = new TwitterApi({
         appKey: twitterCredentials.apiKey,

@@ -2,7 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUnifiedCredentials } from '@/lib/unified-credentials';
 import { createMentionMonitoringService } from '@/lib/mention-monitoring';
 
-// Store active monitoring services per user
+/**
+ * Store active monitoring services per user
+ * 
+ * ⚠️ SERVERLESS LIMITATION: This Map is in-memory and will NOT persist across
+ * serverless cold starts (e.g., Vercel Edge, AWS Lambda). Each instance maintains
+ * its own state. On cold starts, active monitors will be lost and need to be
+ * restarted. This is acceptable for ephemeral monitoring but means:
+ * - Monitors are per-instance, not globally shared
+ * - No cross-instance coordination
+ * - Users may need to restart monitoring after cold starts
+ * 
+ * For production with distributed monitoring, consider using:
+ * - Redis/DynamoDB for shared state
+ * - Database-backed monitor registration
+ * - External monitoring service
+ */
 export const activeMonitors = new Map<string, any>();
 
 export async function GET(request: NextRequest) {
@@ -252,7 +267,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const status = monitor.getStatus();
+    // Handle demo monitors vs real monitors
+    if (monitor.type === 'demo') {
+      return NextResponse.json(
+        { 
+          success: true, 
+          status: { 
+            running: true, 
+            mode: 'demo',
+            interval: monitor.interval ? 'active' : 'inactive'
+          } 
+        },
+        { status: 200 }
+      );
+    }
+
+    // Real monitors have getStatus() method
+    const status = monitor.getStatus?.() || { running: true };
     return NextResponse.json(
       { success: true, status },
       { status: 200 }
