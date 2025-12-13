@@ -8,6 +8,10 @@ export const runtime = 'nodejs'
  * Format a database mention to the expected API format
  */
 function formatMentionFromDb(mention: any) {
+  // Deterministic hash-based metrics (same mention always gets same values)
+  const seed = String(mention.tweet_id || mention.id || '');
+  const hash = [...seed].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  
   return {
     id: mention.tweet_id || mention.id,
     text: mention.text,
@@ -16,8 +20,8 @@ function formatMentionFromDb(mention: any) {
     name: mention.author_name || mention.author_username,
     profile_image_url: '/placeholder.svg?height=40&width=40',
     public_metrics: {
-      followers_count: Math.floor(Math.random() * 5000) + 100, // Random followers for demo
-      following_count: Math.floor(Math.random() * 1000) + 50,
+      followers_count: (hash % 5000) + 100,
+      following_count: (hash % 1000) + 50,
     },
     sentiment: mention.sentiment || 'neutral',
   };
@@ -25,6 +29,11 @@ function formatMentionFromDb(mention: any) {
 
 /**
  * Fetch demo mentions from database and format them
+ * 
+ * SECURITY NOTE: userId should be derived from server-side auth context (session/JWT)
+ * and NOT from client-controlled headers when using supabaseAdmin (service role).
+ * This function currently accepts userId as a parameter, but callers must ensure
+ * it comes from authenticated session, not request headers.
  */
 async function fetchDemoMentionsFromDb(userId: string): Promise<{ mentions: any[]; found: boolean }> {
   try {
@@ -38,8 +47,11 @@ async function fetchDemoMentionsFromDb(userId: string): Promise<{ mentions: any[
       .limit(50);
 
     if (error) {
-      console.error('❌ Database error fetching mentions:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      // Only log sanitized error metadata, not full error objects or user content
+      console.error('❌ Database error fetching mentions');
+      if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MENTIONS === '1') {
+        console.error('Error message:', error.message);
+      }
       return { mentions: [], found: false };
     }
 
@@ -47,38 +59,39 @@ async function fetchDemoMentionsFromDb(userId: string): Promise<{ mentions: any[
       return { mentions: [], found: false };
     }
 
-    // Log sentiment distribution in raw database data
+    // Log sentiment distribution in raw database data (only in debug mode)
     const rawSentimentCounts = mentions.reduce((acc, m) => {
       const sent = m.sentiment || 'NULL';
       acc[sent] = (acc[sent] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    console.log('📊 Raw database sentiment counts:', rawSentimentCounts);
-    if (mentions.length > 0) {
-      console.log('Sample mention (raw):', {
-        text: mentions[0].text?.substring(0, 50) + '...',
-        sentiment: mentions[0].sentiment,
-        sentiment_confidence: mentions[0].sentiment_confidence
-      });
+    
+    if (process.env.DEBUG_MENTIONS === '1') {
+      console.log('📊 Raw database sentiment counts:', rawSentimentCounts);
     }
 
     // Convert database mentions to expected format
     const formattedMentions = mentions.map(formatMentionFromDb);
 
-    // Log sentiment distribution for debugging
-    const sentimentCounts = formattedMentions.reduce((acc, m) => {
-      const sent = m.sentiment || 'neutral';
-      acc[sent] = (acc[sent] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    console.log(`✅ Found ${formattedMentions.length} formatted mentions from database`);
-    console.log(`📊 Sentiment distribution:`, sentimentCounts);
-    console.log(`📊 Sample sentiments (first 5):`, formattedMentions.slice(0, 5).map(m => ({ text: m.text.substring(0, 40) + '...', sentiment: m.sentiment })));
+    // Log sentiment distribution for debugging (only in debug mode, no user content)
+    if (process.env.DEBUG_MENTIONS === '1') {
+      const sentimentCounts = formattedMentions.reduce((acc, m) => {
+        const sent = m.sentiment || 'neutral';
+        acc[sent] = (acc[sent] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log(`✅ Found ${formattedMentions.length} formatted mentions from database`);
+      console.log(`📊 Sentiment distribution:`, sentimentCounts);
+    }
 
     return { mentions: formattedMentions, found: true };
   } catch (dbError) {
-    console.error('❌ Error fetching demo mentions from database:', dbError);
-    console.error('DB Error details:', JSON.stringify(dbError, null, 2));
+    // Only log sanitized error metadata
+    console.error('❌ Error fetching demo mentions from database');
+    if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MENTIONS === '1') {
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
+      console.error('Error message:', errorMessage);
+    }
     return { mentions: [], found: false };
   }
 }
@@ -87,7 +100,12 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching mentions...')
     
-    const userId = request.headers.get('x-user-id') || 'demo-user'
+    // TODO: SECURITY - Derive userId from server-side auth context (session/JWT)
+    // Do not trust client-controlled headers when using supabaseAdmin (service role)
+    // This is a temporary implementation - replace with actual auth integration
+    // For now, using 'demo-user' as a safe default instead of trusting headers
+    const userId = 'demo-user'; // TODO: Replace with authenticated user ID from session
+    
     const result = await getUnifiedCredentials(userId)
     
     if (!result.success || !result.credentials) {
@@ -170,9 +188,11 @@ export async function GET(request: NextRequest) {
         }) || []
       })
     } catch (apiError: any) {
-      const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
-      console.log('⚠️ Twitter API error, checking database for demo mentions before fallback:', errorInfo)
-      ;(globalThis as any).__last_mentions_error = errorInfo
+      // Log sanitized error only, don't store on globalThis
+      const errorMessage = apiError?.message || 'Unknown error';
+      if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MENTIONS === '1') {
+        console.log('⚠️ Twitter API error, checking database for demo mentions before fallback:', errorMessage);
+      }
     }
 
     // Check if credentials are real (not demo) before falling back to database
@@ -188,8 +208,11 @@ export async function GET(request: NextRequest) {
 
     // Before falling back to mock data, check database for demo mentions
     // BUT only if we don't have real credentials (to avoid mixing demo and real data)
+    // NOTE: userId here should come from authenticated session, not client headers
     if (!isRealCredentials) {
-      console.log(`🔍 Checking database for demo mentions (user: ${userId}) before mock fallback`)
+      if (process.env.DEBUG_MENTIONS === '1') {
+        console.log(`🔍 Checking database for demo mentions before mock fallback`);
+      }
       const { mentions, found } = await fetchDemoMentionsFromDb(userId);
       
       if (found) {
@@ -209,18 +232,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Enhanced mock data (only if no database mentions found)
-    console.log('📊 Using enhanced mock data with real credentials')
+    if (process.env.DEBUG_MENTIONS === '1') {
+      console.log('📊 Using enhanced mock data with real credentials');
+    }
     return NextResponse.json({
       success: true,
       mock: true,
       enhanced: true,
       mentions: generateMockMentions(true),
-      note: 'Twitter API call failed; returning enhanced mock data',
-      error: (globalThis as any).__last_mentions_error
+      note: 'Twitter API call failed; returning enhanced mock data'
+      // Avoid returning internal error objects to clients
     })
 
   } catch (error) {
-    console.error('❌ Mentions fetch error:', error)
+    // Log sanitized error only
+    console.error('❌ Mentions fetch error');
+    if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MENTIONS === '1') {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error message:', errorMessage);
+    }
     return NextResponse.json({ 
       success: false,
       error: 'Failed to fetch mentions',

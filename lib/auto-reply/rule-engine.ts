@@ -97,7 +97,10 @@ export class RuleEngine {
     // Check sentiment filter if specified
     // Rules with sentiment_filter require a computed sentiment to match
     if (rule.sentiment_filter.length > 0) {
-      if (!sentiment || !rule.sentiment_filter.includes(sentiment)) {
+      // Normalize sentiment for case-insensitive comparison
+      const normalizedSentiment = sentiment?.toLowerCase().trim();
+      const normalizedFilters = rule.sentiment_filter.map(s => s.toLowerCase().trim());
+      if (!normalizedSentiment || !normalizedFilters.includes(normalizedSentiment)) {
         return {
           matched: false,
           rule,
@@ -224,13 +227,12 @@ export class RuleEngine {
     // Check daily limit (total replies in last 24 hours)
     if (cached.replyTimes.length >= rule.throttle_settings.max_per_day) {
       const oldestReply = cached.replyTimes[0];
-      const nextDay = new Date(oldestReply);
-      nextDay.setDate(nextDay.getDate() + 1);
-      nextDay.setHours(0, 0, 0, 0);
+      // Set nextAvailableAt to exactly 24 hours after the oldest reply
+      const nextAvailableAt = new Date(oldestReply.getTime() + 24 * 60 * 60 * 1000);
       return {
         canReply: false,
         reason: 'daily_limit',
-        nextAvailableAt: nextDay,
+        nextAvailableAt,
       };
     }
 
