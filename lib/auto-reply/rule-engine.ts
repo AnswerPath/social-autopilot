@@ -161,10 +161,10 @@ export class RuleEngine {
   generateResponse(rule: AutoReplyRule, mention: { text: string; author_username: string; author_name?: string }): string {
     let response = rule.response_template;
 
-    // Replace variables in template
-    response = response.replace(/\{\{author_username\}\}/g, mention.author_username);
-    response = response.replace(/\{\{author_name\}\}/g, mention.author_name || mention.author_username);
-    response = response.replace(/\{\{mention_text\}\}/g, mention.text.substring(0, 100)); // Limit to 100 chars
+    // Replace variables in template (use function replacement to prevent $ expansion)
+    response = response.replace(/\{\{author_username\}\}/g, () => mention.author_username);
+    response = response.replace(/\{\{author_name\}\}/g, () => mention.author_name || mention.author_username);
+    response = response.replace(/\{\{mention_text\}\}/g, () => mention.text.substring(0, 100)); // Limit to 100 chars
 
     return response;
   }
@@ -210,22 +210,26 @@ export class RuleEngine {
     }
 
     // Check hourly limit (sliding window: replies within last hour)
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const repliesLastHour = cached.replyTimes.filter(t => t > oneHourAgo).length;
-    if (repliesLastHour >= rule.throttle_settings.max_per_hour) {
-      const oldestInWindow = cached.replyTimes.find(t => t > oneHourAgo);
-      const nextAvailable = oldestInWindow 
-        ? new Date(oldestInWindow.getTime() + 60 * 60 * 1000)
-        : new Date(now.getTime() + 60 * 60 * 1000);
-      return {
-        canReply: false,
-        reason: 'hourly_limit',
-        nextAvailableAt: nextAvailable,
-      };
+    // Treat max_per_hour <= 0 as disabled/unlimited
+    if (rule.throttle_settings.max_per_hour > 0) {
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const repliesLastHour = cached.replyTimes.filter(t => t > oneHourAgo).length;
+      if (repliesLastHour >= rule.throttle_settings.max_per_hour) {
+        const oldestInWindow = cached.replyTimes.find(t => t > oneHourAgo);
+        const nextAvailable = oldestInWindow 
+          ? new Date(oldestInWindow.getTime() + 60 * 60 * 1000)
+          : new Date(now.getTime() + 60 * 60 * 1000);
+        return {
+          canReply: false,
+          reason: 'hourly_limit',
+          nextAvailableAt: nextAvailable,
+        };
+      }
     }
 
     // Check daily limit (total replies in last 24 hours)
-    if (cached.replyTimes.length >= rule.throttle_settings.max_per_day) {
+    // Treat max_per_day <= 0 as disabled/unlimited
+    if (rule.throttle_settings.max_per_day > 0 && cached.replyTimes.length >= rule.throttle_settings.max_per_day) {
       const oldestReply = cached.replyTimes[0];
       // Set nextAvailableAt to exactly 24 hours after the oldest reply
       const nextAvailableAt = new Date(oldestReply.getTime() + 24 * 60 * 60 * 1000);
