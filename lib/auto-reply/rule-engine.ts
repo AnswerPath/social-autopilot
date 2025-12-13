@@ -58,13 +58,15 @@ export class RuleEngine {
     let bestMatch: RuleMatchResult | null = null;
     let bestScore = -1;
 
+    // Compute maxPriority once before the loop to avoid O(n²) complexity
+    const maxPriority = Math.max(...this.rules.map(r => r.priority), 1);
+
     for (const rule of this.rules) {
       const match = this.matchRule(rule, lowerText, sentiment);
       
       if (match.matched) {
         // Weighted score: confidence (0-1) + normalized priority (0-0.5)
         // Higher priority rules get more weight, but confidence still matters
-        const maxPriority = Math.max(...this.rules.map(r => r.priority), 1);
         const score = match.confidence + (rule.priority / maxPriority) * 0.5;
         
         if (score > bestScore) {
