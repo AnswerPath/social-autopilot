@@ -5,18 +5,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MessageSquare, Heart, AlertTriangle, TrendingUp, Settings, Plus, Reply, ExternalLink, Clock } from 'lucide-react'
+import { MessageSquare, Heart, AlertTriangle, TrendingUp, Settings, Plus, Reply, ExternalLink, Clock, RefreshCw } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
+import { AutoReplyRules } from '@/components/engagement/auto-reply-rules'
 
 export function EngagementMonitor() {
-  const [showAutoReplyForm, setShowAutoReplyForm] = useState(false)
   const [realMentions, setRealMentions] = useState<any[]>([])
   const [isLoadingMentions, setIsLoadingMentions] = useState(true)
+  const [isMonitoring, setIsMonitoring] = useState(false)
+  const [filterValue, setFilterValue] = useState('all')
+  const [isStopping, setIsStopping] = useState(false)
+  const [stats, setStats] = useState({
+    newMentions: 0,
+    avgResponseTime: '0m',
+    sentimentScore: 0,
+    autoReplies: 0,
+    newMentionsToday: 0,
+    responseTimeChange: '0m',
+    sentimentChange: 0,
+    autoRepliesPercent: 0,
+  })
+  const { toast } = useToast()
 
   const mentions = [
     {
@@ -65,50 +77,135 @@ export function EngagementMonitor() {
     }
   ]
 
-  const autoReplyRules = [
-    {
-      id: 1,
-      name: "Password Reset Help",
-      trigger: "password reset, forgot password, login issue",
-      response: "Hi! For password reset help, please visit our support page: help.company.com/password-reset or DM us for personalized assistance. 🔐",
-      enabled: true,
-      matches: 12
-    },
-    {
-      id: 2,
-      name: "Positive Feedback",
-      trigger: "love, great, awesome, amazing",
-      response: "Thank you so much for the kind words! We're thrilled you're enjoying our product. 😊",
-      enabled: true,
-      matches: 28
-    },
-    {
-      id: 3,
-      name: "General Support",
-      trigger: "help, support, issue, problem",
-      response: "We're here to help! Please DM us with more details about your issue, or visit our support center: help.company.com 🛠️",
-      enabled: false,
-      matches: 45
-    }
-  ]
 
-  const sentimentStats = {
-    positive: 68,
-    neutral: 24,
-    negative: 8
-  }
+  // Calculate stats from mentions data
+  useEffect(() => {
+    const calculateStats = async () => {
+      try {
+        // Fetch mentions for stats calculation
+        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=100', {
+          headers: {
+            'x-user-id': 'demo-user',
+          },
+        })
+        if (!mentionsResponse.ok) return
+        
+        const mentionsData = await mentionsResponse.json()
+        const allMentions = mentionsData.mentions || []
+        
+        // Calculate new mentions (last 24 hours)
+        const now = new Date()
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        const newMentions = allMentions.filter((m: any) => {
+          const createdAt = new Date(m.created_at || m.createdAt || 0)
+          return createdAt >= yesterday
+        })
+        const newMentionsToday = newMentions.length
+        
+        // Calculate average response time
+        const repliedMentions = allMentions.filter((m: any) => m.is_replied || m.replied)
+        let avgResponseTime = 0
+        if (repliedMentions.length > 0) {
+          const responseTimes = repliedMentions
+            .map((m: any) => {
+              const created = new Date(m.created_at || m.createdAt || 0)
+              const replied = m.processed_at ? new Date(m.processed_at) : null
+              if (!replied) return null
+              return (replied.getTime() - created.getTime()) / (1000 * 60) // minutes
+            })
+            .filter((t: number | null) => t !== null) as number[]
+          
+          if (responseTimes.length > 0) {
+            avgResponseTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+          }
+        }
+        const avgResponseTimeFormatted = avgResponseTime < 60 
+          ? `${Math.round(avgResponseTime)}m` 
+          : `${Math.round(avgResponseTime / 60)}h`
+        
+        // Calculate sentiment score (weighted: positive=1, neutral=0.5, negative=0)
+        const sentimentCounts = allMentions.reduce((acc: Record<string, number>, m: any) => {
+          const sent = m.sentiment || 'neutral'
+          acc[sent] = (acc[sent] || 0) + 1
+          return acc
+        }, {} as Record<string, number>)
+        const total = allMentions.length
+        const sentimentScore = total > 0
+          ? ((sentimentCounts.positive || 0) * 1 + (sentimentCounts.neutral || 0) * 0.5 + (sentimentCounts.negative || 0) * 0) / total * 10
+          : 0
+        
+        // Calculate auto replies
+        const autoReplies = repliedMentions.length
+        const autoRepliesPercent = total > 0 ? Math.round((autoReplies / total) * 100) : 0
+        
+        // Fetch auto-reply logs for match counting
+        const logsResponse = await fetch('/api/auto-reply/logs', {
+          headers: {
+            'x-user-id': 'demo-user',
+          },
+        })
+        let autoRepliesFromLogs = autoReplies
+        if (logsResponse.ok) {
+          const logsData = await logsResponse.json()
+          if (logsData.success && logsData.count !== undefined) {
+            autoRepliesFromLogs = logsData.count
+          }
+        }
+        
+        setStats({
+          newMentions: total,
+          avgResponseTime: avgResponseTimeFormatted,
+          sentimentScore: Math.round(sentimentScore * 10) / 10,
+          autoReplies: autoRepliesFromLogs,
+          newMentionsToday: newMentionsToday,
+          responseTimeChange: '-2m improved', // TODO: Calculate from historical data
+          sentimentChange: 0.3, // TODO: Calculate from historical data
+          autoRepliesPercent,
+        })
+      } catch (error) {
+        console.error('[EngagementMonitor] Error calculating stats:', error)
+      }
+    }
+    
+    calculateStats()
+    // Refresh stats every 30 seconds when monitoring, or on mount
+    const interval = setInterval(calculateStats, 30000)
+    return () => clearInterval(interval)
+  }, [isMonitoring])
 
   useEffect(() => {
     const fetchMentions = async () => {
       setIsLoadingMentions(true)
       try {
-        const response = await fetch('/api/twitter/mentions?maxResults=50')
+        const response = await fetch('/api/twitter/mentions?maxResults=50', {
+          headers: {
+            'x-user-id': 'demo-user',
+          },
+        })
         if (response.ok) {
           const data = await response.json()
+          console.log('[EngagementMonitor] Fetched mentions on mount/refresh:', data.mentions?.length || 0, data)
+          
+          // Log sentiment distribution from fetched mentions
+          if (data.mentions && data.mentions.length > 0) {
+            const sentimentCounts = data.mentions.reduce((acc: Record<string, number>, m: any) => {
+              const sent = m.sentiment || 'null/undefined'
+              acc[sent] = (acc[sent] || 0) + 1
+              return acc
+            }, {} as Record<string, number>)
+            console.log('[EngagementMonitor] Sentiment distribution on mount:', sentimentCounts)
+          }
+          
           setRealMentions(data.mentions || [])
+          // Trigger stats recalculation when mentions update
+          if (data.mentions && data.mentions.length > 0) {
+            // Stats will auto-update via the stats useEffect
+          }
+        } else {
+          console.error('[EngagementMonitor] Failed to fetch mentions:', response.status, await response.text())
         }
       } catch (error) {
-        console.error('Error fetching mentions:', error)
+        console.error('[EngagementMonitor] Error fetching mentions:', error)
       } finally {
         setIsLoadingMentions(false)
       }
@@ -116,10 +213,88 @@ export function EngagementMonitor() {
 
     fetchMentions()
     
-    // Refresh mentions every 5 minutes
-    const interval = setInterval(fetchMentions, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
+    // Refresh mentions more frequently if monitoring (every 30 seconds for demo mode)
+    if (isMonitoring) {
+      const interval = setInterval(fetchMentions, 30000) // 30 seconds
+      return () => clearInterval(interval)
+    }
+  }, [isMonitoring])
+
+  const handleStartMonitoring = async () => {
+    try {
+      const response = await fetch('/api/mentions/stream', {
+        method: 'GET',
+        headers: {
+          'x-user-id': 'demo-user',
+        },
+      })
+      const data = await response.json()
+      if (data.success) {
+        setIsMonitoring(true)
+        // If in demo mode, generate initial demo mentions
+        if (data.mode === 'demo') {
+          await fetch('/api/mentions/demo', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': 'demo-user',
+            },
+            body: JSON.stringify({ count: 5 }),
+          })
+          // Refresh mentions list
+          const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
+            headers: {
+              'x-user-id': 'demo-user',
+            },
+          })
+          if (mentionsResponse.ok) {
+            const mentionsData = await mentionsResponse.json()
+            setRealMentions(mentionsData.mentions || [])
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error starting monitoring:', error)
+    }
+  }
+
+  const handleStopMonitoring = async () => {
+    if (isStopping) return; // Prevent double-clicks
+    
+    setIsStopping(true)
+    try {
+      const response = await fetch('/api/mentions/stream', {
+        method: 'DELETE',
+        headers: {
+          'x-user-id': 'demo-user',
+        },
+      })
+      const data = await response.json()
+      if (data.success) {
+        setIsMonitoring(false)
+        // Refresh mentions list after stopping
+        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
+          headers: {
+            'x-user-id': 'demo-user',
+          },
+        })
+        if (mentionsResponse.ok) {
+          const mentionsData = await mentionsResponse.json()
+          setRealMentions(mentionsData.mentions || [])
+        }
+      } else {
+        console.error('Failed to stop monitoring:', data.error)
+        // Still update state even if API call fails
+        setIsMonitoring(false)
+      }
+    } catch (error) {
+      console.error('Error stopping monitoring:', error)
+      // Still set monitoring to false even if request fails
+      setIsMonitoring(false)
+    } finally {
+      setIsStopping(false)
+    }
+  }
 
   const handleReply = async (tweetId: string, replyText: string) => {
     try {
@@ -142,18 +317,66 @@ export function EngagementMonitor() {
     }
   }
 
-  const displayMentions = realMentions.map(mention => ({
-    id: mention.id,
-    user: `@${mention.username}`,
-    content: mention.text,
-    sentiment: mention.sentiment,
-    time: new Date(mention.created_at).toLocaleString(),
-    platform: "twitter",
-    followers: mention.public_metrics?.followers_count || 0,
-    replied: false, // You'd track this in your database
-    priority: mention.sentiment === 'negative' ? 'high' : 
-             mention.public_metrics?.followers_count > 1000 ? 'medium' : 'low'
-  }))
+  const displayMentions = realMentions.map(mention => {
+    // Handle both API format and database format
+    const username = mention.username || mention.author_username || 'unknown'
+    const text = mention.text || mention.content || ''
+    const createdAt = mention.created_at || mention.createdAt || new Date().toISOString()
+    const sentiment = mention.sentiment || 'neutral'
+    const followers = mention.public_metrics?.followers_count || 
+                     (mention.public_metrics?.followers_count) || 
+                     Math.floor(Math.random() * 5000) + 100 // Random for demo
+    
+    // Determine priority based on sentiment and other factors
+    let priority = 'low'
+    if (sentiment === 'negative') {
+      priority = 'high'
+    } else if (followers > 1000 || sentiment === 'positive') {
+      priority = 'medium'
+    }
+    
+    return {
+      id: mention.id || mention.tweet_id || `mention-${Math.random()}`,
+      user: `@${username}`,
+      content: text,
+      sentiment: sentiment,
+      time: new Date(createdAt).toLocaleString(),
+      platform: "twitter",
+      followers: followers,
+      replied: mention.is_replied || mention.replied || false,
+      priority: priority
+    }
+  })
+
+  // Calculate sentiment stats dynamically from actual mentions
+  const sentimentStats = (() => {
+    if (displayMentions.length === 0) {
+      return { positive: 0, neutral: 0, negative: 0 }
+    }
+    
+    const counts = displayMentions.reduce((acc, mention) => {
+      const sentiment = mention.sentiment || 'neutral'
+      acc[sentiment] = (acc[sentiment] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+    
+    const total = displayMentions.length
+    const stats = {
+      positive: Math.round((counts.positive || 0) / total * 100),
+      neutral: Math.round((counts.neutral || 0) / total * 100),
+      negative: Math.round((counts.negative || 0) / total * 100),
+    }
+    
+    // Log for debugging
+    console.log('[EngagementMonitor] Sentiment stats calculated:', {
+      total,
+      counts,
+      percentages: stats,
+      sampleMentions: displayMentions.slice(0, 5).map(m => ({ text: m.content.substring(0, 30) + '...', sentiment: m.sentiment }))
+    })
+    
+    return stats
+  })()
 
   const getSentimentColor = (sentiment: string) => {
     switch (sentiment) {
@@ -182,11 +405,11 @@ export function EngagementMonitor() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">New Mentions</p>
-                <p className="text-2xl font-bold">24</p>
+                <p className="text-2xl font-bold">{stats.newMentions}</p>
               </div>
               <MessageSquare className="h-8 w-8 text-blue-600" />
             </div>
-            <Badge variant="secondary" className="mt-2">+12 today</Badge>
+            <Badge variant="secondary" className="mt-2">+{stats.newMentionsToday} today</Badge>
           </CardContent>
         </Card>
         
@@ -195,11 +418,11 @@ export function EngagementMonitor() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Avg Response Time</p>
-                <p className="text-2xl font-bold">8m</p>
+                <p className="text-2xl font-bold">{stats.avgResponseTime}</p>
               </div>
               <Clock className="h-8 w-8 text-green-600" />
             </div>
-            <Badge variant="secondary" className="mt-2">-2m improved</Badge>
+            <Badge variant="secondary" className="mt-2">{stats.responseTimeChange}</Badge>
           </CardContent>
         </Card>
 
@@ -208,11 +431,11 @@ export function EngagementMonitor() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Sentiment Score</p>
-                <p className="text-2xl font-bold">8.2</p>
+                <p className="text-2xl font-bold">{stats.sentimentScore.toFixed(1)}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-green-600" />
             </div>
-            <Badge variant="secondary" className="mt-2">+0.3 this week</Badge>
+            <Badge variant="secondary" className="mt-2">+{stats.sentimentChange.toFixed(1)} this week</Badge>
           </CardContent>
         </Card>
 
@@ -221,11 +444,11 @@ export function EngagementMonitor() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Auto Replies</p>
-                <p className="text-2xl font-bold">156</p>
+                <p className="text-2xl font-bold">{stats.autoReplies}</p>
               </div>
               <Settings className="h-8 w-8 text-purple-600" />
             </div>
-            <Badge variant="secondary" className="mt-2">85% automated</Badge>
+            <Badge variant="secondary" className="mt-2">{stats.autoRepliesPercent}% automated</Badge>
           </CardContent>
         </Card>
       </div>
@@ -238,115 +461,413 @@ export function EngagementMonitor() {
         </TabsList>
 
         <TabsContent value="mentions" className="space-y-4">
-          {/* Filters */}
-          <div className="flex items-center gap-4">
-            <Select defaultValue="all">
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Mentions</SelectItem>
-                <SelectItem value="unread">Unread Only</SelectItem>
-                <SelectItem value="high">High Priority</SelectItem>
-                <SelectItem value="negative">Negative Sentiment</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline">
-              <Settings className="h-4 w-4 mr-2" />
-              Filters
-            </Button>
+          {/* Monitoring Controls */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {!isMonitoring ? (
+                <Button onClick={handleStartMonitoring} disabled={isLoadingMentions || isStopping}>
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Start Monitoring
+                </Button>
+              ) : (
+                <Button 
+                  variant="destructive" 
+                  onClick={handleStopMonitoring}
+                  disabled={isLoadingMentions || isStopping}
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  {isStopping ? 'Stopping...' : 'Stop Monitoring'}
+                </Button>
+              )}
+              {isMonitoring && (
+                <Badge variant="default" className="bg-green-500">
+                  Monitoring Active
+                </Badge>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    setIsLoadingMentions(true)
+                    const response = await fetch('/api/mentions/demo', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': 'demo-user',
+                      },
+                      body: JSON.stringify({ count: 5 }),
+                    })
+                    
+                    if (!response.ok) {
+                      const errorText = await response.text()
+                      throw new Error(`HTTP ${response.status}: ${errorText}`)
+                    }
+                    
+                    const data = await response.json()
+                    if (data.success) {
+                      toast({
+                        title: 'Success',
+                        description: data.message || `Generated ${data.mentions?.length || 0} demo mentions`,
+                      })
+                      // Wait a moment for database to be ready, then refresh mentions list
+                      setTimeout(async () => {
+                        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
+                          headers: {
+                            'x-user-id': 'demo-user',
+                          },
+                        })
+          if (mentionsResponse.ok) {
+            const mentionsData = await mentionsResponse.json()
+            console.log('[EngagementMonitor] Fetched mentions:', mentionsData.mentions?.length || 0)
+            console.log('[EngagementMonitor] Mentions data:', mentionsData)
+            
+            // Log sentiment distribution from fetched mentions
+            if (mentionsData.mentions && mentionsData.mentions.length > 0) {
+              const sentimentCounts = mentionsData.mentions.reduce((acc: Record<string, number>, m: any) => {
+                const sent = m.sentiment || 'null/undefined'
+                acc[sent] = (acc[sent] || 0) + 1
+                return acc
+              }, {} as Record<string, number>)
+              console.log('[EngagementMonitor] Sentiment distribution in fetched data:', sentimentCounts)
+              console.log('[EngagementMonitor] First 5 mentions with sentiment:', mentionsData.mentions.slice(0, 5).map((m: any) => ({
+                text: (m.text || '').substring(0, 40) + '...',
+                sentiment: m.sentiment || 'MISSING',
+                id: m.id
+              })))
+            }
+            
+            setRealMentions(mentionsData.mentions || [])
+                        } else {
+                          console.error('[EngagementMonitor] Failed to fetch mentions:', mentionsResponse.status)
+                        }
+                      }, 500) // Small delay to ensure DB write is complete
+                    } else {
+                      console.error('Failed to generate demo mentions:', data.error)
+                      toast({
+                        title: 'Error',
+                        description: data.error || 'Failed to generate demo mentions',
+                        variant: 'destructive',
+                      })
+                    }
+                  } catch (error) {
+                    console.error('Error generating demo mentions:', error)
+                    toast({
+                      title: 'Error',
+                      description: error instanceof Error ? error.message : 'Failed to generate demo mentions',
+                      variant: 'destructive',
+                    })
+                  } finally {
+                    setIsLoadingMentions(false)
+                  }
+                }}
+                disabled={isLoadingMentions}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {isLoadingMentions ? 'Generating...' : 'Generate Demo Mentions'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setIsLoadingMentions(true)
+                  try {
+                    // First, stop monitoring if it's active (especially if in demo mode)
+                    if (isMonitoring) {
+                      try {
+                        await fetch('/api/mentions/stream', {
+                          method: 'DELETE',
+                          headers: {
+                            'x-user-id': 'demo-user',
+                          },
+                        })
+                        setIsMonitoring(false)
+                        console.log('🛑 Stopped monitoring before cleanup')
+                      } catch (stopError) {
+                        console.warn('Warning: Could not stop monitoring:', stopError)
+                        // Continue with cleanup anyway
+                      }
+                    }
+                    
+                    // Now clean up demo mentions
+                    const response = await fetch('/api/mentions/cleanup-demo', {
+                      method: 'POST',
+                      headers: {
+                        'x-user-id': 'demo-user',
+                      },
+                    })
+                    const data = await response.json()
+                    if (data.success) {
+                      toast({
+                        title: 'Success',
+                        description: data.message || `Cleaned up ${data.deletedCount || 0} demo mentions${data.demoMonitoringStopped ? ' and stopped demo monitoring' : ''}`,
+                      })
+                      // Refresh mentions list after cleanup
+                      setTimeout(async () => {
+                        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
+                          headers: {
+                            'x-user-id': 'demo-user',
+                          },
+                        })
+                        if (mentionsResponse.ok) {
+                          const mentionsData = await mentionsResponse.json()
+                          setRealMentions(mentionsData.mentions || [])
+                        }
+                      }, 500)
+                    } else {
+                      toast({
+                        title: 'Error',
+                        description: data.error || 'Failed to clean up demo mentions',
+                        variant: 'destructive',
+                      })
+                    }
+                  } catch (error) {
+                    console.error('Error cleaning up demo mentions:', error)
+                    toast({
+                      title: 'Error',
+                      description: error instanceof Error ? error.message : 'Failed to clean up demo mentions',
+                      variant: 'destructive',
+                    })
+                  } finally {
+                    setIsLoadingMentions(false)
+                  }
+                }}
+                disabled={isLoadingMentions}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Clean Up Demo Mentions
+              </Button>
+            </div>
+            {/* Filters */}
+            <div className="flex items-center gap-4">
+              <Select value={filterValue} onValueChange={setFilterValue}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Mentions</SelectItem>
+                  <SelectItem value="unread">Unread Only</SelectItem>
+                  <SelectItem value="high">High Priority</SelectItem>
+                  <SelectItem value="negative">Negative Sentiment</SelectItem>
+                  <SelectItem value="positive">Positive Sentiment</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setIsLoadingMentions(true)
+                  try {
+                    const response = await fetch('/api/twitter/mentions?maxResults=50', {
+                      headers: {
+                        'x-user-id': 'demo-user',
+                      },
+                    })
+                    if (response.ok) {
+                      const data = await response.json()
+                      console.log('[EngagementMonitor] Manual refresh - mentions:', data.mentions?.length || 0, data)
+                      
+                      // Log sentiment distribution
+                      if (data.mentions && data.mentions.length > 0) {
+                        const sentimentCounts = data.mentions.reduce((acc: Record<string, number>, m: any) => {
+                          const sent = m.sentiment || 'null/undefined'
+                          acc[sent] = (acc[sent] || 0) + 1
+                          return acc
+                        }, {} as Record<string, number>)
+                        console.log('[EngagementMonitor] Sentiment distribution on manual refresh:', sentimentCounts)
+                        console.log('[EngagementMonitor] First 5 mentions:', data.mentions.slice(0, 5).map((m: any) => ({
+                          text: (m.text || '').substring(0, 40) + '...',
+                          sentiment: m.sentiment || 'MISSING'
+                        })))
+                      }
+                      
+                      setRealMentions(data.mentions || [])
+                    } else {
+                      console.error('[EngagementMonitor] Refresh failed:', response.status)
+                    }
+                  } catch (error) {
+                    console.error('[EngagementMonitor] Refresh error:', error)
+                  } finally {
+                    setIsLoadingMentions(false)
+                  }
+                }}
+                disabled={isLoadingMentions}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingMentions ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {/* Mentions List */}
           <div className="space-y-4">
-            {displayMentions.map((mention) => (
-              <Card key={mention.id} className={`${getPriorityColor(mention.priority)}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback>{mention.user[1].toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-medium">{mention.user}</span>
-                        <Badge className={getSentimentColor(mention.sentiment)}>
-                          {mention.sentiment}
-                        </Badge>
-                        <Badge variant="outline">
-                          {mention.priority} priority
-                        </Badge>
-                        <span className="text-sm text-gray-500">{mention.followers.toLocaleString()} followers</span>
-                      </div>
-                      <p className="text-gray-900 mb-2">{mention.content}</p>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span>{mention.time}</span>
-                        {mention.replied && (
-                          <Badge variant="outline" className="text-green-600">
-                            ✓ Replied
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        View
-                      </Button>
-                      {!mention.replied && (
-                        <Button size="sm">
-                          <Reply className="h-4 w-4 mr-2" />
-                          Reply
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+            {isLoadingMentions ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <p className="text-muted-foreground">Loading mentions...</p>
                 </CardContent>
               </Card>
-            ))}
+            ) : displayMentions.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-muted-foreground mb-2">No mentions found</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {isMonitoring 
+                      ? 'Monitoring is active. Mentions will appear here when they are captured.'
+                      : 'Click "Generate Demo Mentions" to create test mentions, or start monitoring to capture real mentions.'}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      setIsLoadingMentions(true)
+                      const response = await fetch('/api/twitter/mentions?maxResults=50', {
+                        headers: {
+                          'x-user-id': 'demo-user',
+                        },
+                      })
+                      if (response.ok) {
+                        const data = await response.json()
+                        console.log('[EngagementMonitor] Manual refresh - mentions:', data.mentions?.length || 0)
+                        setRealMentions(data.mentions || [])
+                      }
+                      setIsLoadingMentions(false)
+                    }}
+                  >
+                    Refresh Mentions
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {displayMentions
+                  .filter((mention) => {
+                    if (filterValue === 'all') return true
+                    if (filterValue === 'unread') return !mention.replied
+                    if (filterValue === 'high') return mention.priority === 'high'
+                    if (filterValue === 'negative') return mention.sentiment === 'negative'
+                    if (filterValue === 'positive') return mention.sentiment === 'positive'
+                    return true
+                  })
+                  .map((mention) => (
+                    <Card key={mention.id} className={`${getPriorityColor(mention.priority)}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>{mention.user[1].toUpperCase()}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-medium">{mention.user}</span>
+                              <Badge className={getSentimentColor(mention.sentiment)}>
+                                {mention.sentiment}
+                              </Badge>
+                              <Badge variant="outline">
+                                {mention.priority} priority
+                              </Badge>
+                              <span className="text-sm text-gray-500">{mention.followers.toLocaleString()} followers</span>
+                            </div>
+                            <p className="text-gray-900 mb-2">{mention.content}</p>
+                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                              <span>{mention.time}</span>
+                              {mention.replied && (
+                                <Badge variant="outline" className="text-green-600">
+                                  ✓ Replied
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline">
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                            {!mention.replied && (
+                              <Button size="sm">
+                                <Reply className="h-4 w-4 mr-2" />
+                                Reply
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </>
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="automation" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium">Auto-Reply Rules</h3>
-              <p className="text-gray-600">Automatically respond to common questions and mentions</p>
-            </div>
-            <Button onClick={() => setShowAutoReplyForm(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Rule
-            </Button>
-          </div>
-
-          <div className="space-y-4">
-            {autoReplyRules.map((rule) => (
-              <Card key={rule.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h4 className="font-medium">{rule.name}</h4>
-                        <Switch checked={rule.enabled} />
-                        <Badge variant="secondary">{rule.matches} matches</Badge>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        <strong>Triggers:</strong> {rule.trigger}
-                      </p>
-                      <p className="text-sm text-gray-900 bg-gray-50 p-2 rounded">
-                        {rule.response}
-                      </p>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Edit
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <AutoReplyRules />
         </TabsContent>
 
         <TabsContent value="sentiment" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium">Sentiment Analysis</h3>
+              <p className="text-gray-600">Analyze sentiment of mentions</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                setIsLoadingMentions(true)
+                try {
+                  const response = await fetch('/api/mentions/sentiment', {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-user-id': 'demo-user',
+                    },
+                    body: JSON.stringify({ analyzeAll: false, limit: 100 }),
+                  })
+                  if (response.ok) {
+                    const data = await response.json()
+                    console.log('[EngagementMonitor] Re-analyzed mentions:', data)
+                    toast({
+                      title: 'Sentiment Analysis Complete',
+                      description: `Analyzed ${data.analyzed} mentions. Distribution: ${data.distribution.positive} positive, ${data.distribution.neutral} neutral, ${data.distribution.negative} negative`,
+                    })
+                    // Refresh mentions after re-analysis
+                    setTimeout(async () => {
+                      const refreshResponse = await fetch('/api/twitter/mentions?maxResults=50', {
+                        headers: {
+                          'x-user-id': 'demo-user',
+                        },
+                      })
+                      if (refreshResponse.ok) {
+                        const refreshData = await refreshResponse.json()
+                        setRealMentions(refreshData.mentions || [])
+                      }
+                    }, 500)
+                  } else {
+                    const errorData = await response.json().catch(() => ({}))
+                    console.error('[EngagementMonitor] Re-analysis failed:', response.status, errorData)
+                    toast({
+                      title: 'Error',
+                      description: errorData.error || 'Failed to re-analyze mentions',
+                      variant: 'destructive',
+                    })
+                  }
+                } catch (error) {
+                  console.error('[EngagementMonitor] Re-analysis error:', error)
+                  toast({
+                    title: 'Error',
+                    description: error instanceof Error ? error.message : 'Failed to re-analyze mentions',
+                    variant: 'destructive',
+                  })
+                } finally {
+                  setIsLoadingMentions(false)
+                }
+              }}
+              disabled={isLoadingMentions}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingMentions ? 'animate-spin' : ''}`} />
+              Re-analyze Sentiment
+            </Button>
+          </div>
           <Card>
             <CardHeader>
               <CardTitle>Sentiment Distribution</CardTitle>
@@ -395,7 +916,7 @@ export function EngagementMonitor() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {mentions.filter(m => m.sentiment === "negative" && !m.replied).map((mention) => (
+                {displayMentions.filter(m => m.sentiment === "negative" && !m.replied).map((mention) => (
                   <div key={mention.id} className="flex items-center justify-between p-3 border-l-4 border-red-500 bg-red-50 rounded">
                     <div>
                       <span className="font-medium">{mention.user}</span>
@@ -408,62 +929,15 @@ export function EngagementMonitor() {
                     </Button>
                   </div>
                 ))}
+                {displayMentions.filter(m => m.sentiment === "negative" && !m.replied).length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">No negative mentions requiring urgent attention</p>
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Auto-Reply Form Modal */}
-      {showAutoReplyForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl">
-            <CardHeader>
-              <CardTitle>Create Auto-Reply Rule</CardTitle>
-              <CardDescription>Set up automated responses for common mentions</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="ruleName">Rule Name</Label>
-                <Input id="ruleName" placeholder="e.g., Password Reset Help" />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="triggers">Trigger Keywords</Label>
-                <Input id="triggers" placeholder="password, reset, login, help (comma separated)" />
-                <p className="text-xs text-gray-500">Messages containing these keywords will trigger this auto-reply</p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="response">Auto-Reply Message</Label>
-                <Textarea 
-                  id="response" 
-                  placeholder="Hi! For password reset help, please visit our support page..."
-                  className="min-h-[100px]"
-                />
-                <p className="text-xs text-gray-500">Keep it helpful and on-brand. Include links to resources when possible.</p>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <Label>Enable Rule</Label>
-                  <p className="text-sm text-gray-600">Start using this rule immediately</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setShowAutoReplyForm(false)}>
-                  Cancel
-                </Button>
-                <Button>
-                  Create Rule
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   )
 }
