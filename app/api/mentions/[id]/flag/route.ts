@@ -7,11 +7,11 @@ export const runtime = 'nodejs';
 // POST - Manually flag a mention
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = request.headers.get('x-user-id') || 'demo-user';
-    const mentionId = params.id;
+    const { id: mentionId } = await params;
 
     // Fetch mention
     const { data: mention, error: fetchError } = await supabaseAdmin
@@ -61,11 +61,26 @@ export async function POST(
 // DELETE - Unflag a mention
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = request.headers.get('x-user-id') || 'demo-user';
-    const mentionId = params.id;
+    const { id: mentionId } = await params;
+
+    // Verify mention belongs to user
+    const { data: mention, error: fetchError } = await supabaseAdmin
+      .from('mentions')
+      .select('id')
+      .eq('id', mentionId)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !mention) {
+      return NextResponse.json(
+        { success: false, error: 'Mention not found' },
+        { status: 404 }
+      );
+    }
 
     const flaggingService = createFlaggingService();
     await flaggingService.unflagMention(mentionId);

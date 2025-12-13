@@ -3,6 +3,17 @@ import { createEngagementAnalyticsService } from '@/lib/analytics/engagement-ana
 
 export const runtime = 'nodejs';
 
+/**
+ * Escape CSV values to prevent injection attacks and malformed output
+ */
+function escapeCSV(value: unknown): string {
+  const str = String(value ?? '');
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 // GET - Export analytics data as CSV
 export async function GET(request: NextRequest) {
   try {
@@ -19,17 +30,17 @@ export async function GET(request: NextRequest) {
       // Convert to CSV
       const headers = ['Date', 'Mentions', 'Replies', 'Flagged', 'Positive', 'Negative', 'Neutral'];
       const rows = timeSeries.map(d => [
-        d.date,
-        d.mentions,
-        d.replies,
-        d.flagged,
-        d.positive,
-        d.negative,
-        d.neutral,
+        escapeCSV(d.date),
+        escapeCSV(d.mentions),
+        escapeCSV(d.replies),
+        escapeCSV(d.flagged),
+        escapeCSV(d.positive),
+        escapeCSV(d.negative),
+        escapeCSV(d.neutral),
       ]);
 
       const csv = [
-        headers.join(','),
+        headers.map(escapeCSV).join(','),
         ...rows.map(row => row.join(',')),
       ].join('\n');
 

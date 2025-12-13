@@ -4,6 +4,85 @@ import { TwitterApi } from 'twitter-api-v2'
 
 export const runtime = 'nodejs'
 
+/**
+ * Format a database mention to the expected API format
+ */
+function formatMentionFromDb(mention: any) {
+  return {
+    id: mention.tweet_id || mention.id,
+    text: mention.text,
+    created_at: mention.created_at,
+    username: mention.author_username,
+    name: mention.author_name || mention.author_username,
+    profile_image_url: '/placeholder.svg?height=40&width=40',
+    public_metrics: {
+      followers_count: Math.floor(Math.random() * 5000) + 100, // Random followers for demo
+      following_count: Math.floor(Math.random() * 1000) + 50,
+    },
+    sentiment: mention.sentiment || 'neutral',
+  };
+}
+
+/**
+ * Fetch demo mentions from database and format them
+ */
+async function fetchDemoMentionsFromDb(userId: string): Promise<{ mentions: any[]; found: boolean }> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase');
+    const { data: mentions, error } = await supabaseAdmin
+      .from('mentions')
+      .select('*')
+      .eq('user_id', userId)
+      .like('tweet_id', 'demo-%')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('❌ Database error fetching mentions:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      return { mentions: [], found: false };
+    }
+
+    if (!mentions || mentions.length === 0) {
+      return { mentions: [], found: false };
+    }
+
+    // Log sentiment distribution in raw database data
+    const rawSentimentCounts = mentions.reduce((acc, m) => {
+      const sent = m.sentiment || 'NULL';
+      acc[sent] = (acc[sent] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log('📊 Raw database sentiment counts:', rawSentimentCounts);
+    if (mentions.length > 0) {
+      console.log('Sample mention (raw):', {
+        text: mentions[0].text?.substring(0, 50) + '...',
+        sentiment: mentions[0].sentiment,
+        sentiment_confidence: mentions[0].sentiment_confidence
+      });
+    }
+
+    // Convert database mentions to expected format
+    const formattedMentions = mentions.map(formatMentionFromDb);
+
+    // Log sentiment distribution for debugging
+    const sentimentCounts = formattedMentions.reduce((acc, m) => {
+      const sent = m.sentiment || 'neutral';
+      acc[sent] = (acc[sent] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(`✅ Found ${formattedMentions.length} formatted mentions from database`);
+    console.log(`📊 Sentiment distribution:`, sentimentCounts);
+    console.log(`📊 Sample sentiments (first 5):`, formattedMentions.slice(0, 5).map(m => ({ text: m.text.substring(0, 40) + '...', sentiment: m.sentiment })));
+
+    return { mentions: formattedMentions, found: true };
+  } catch (dbError) {
+    console.error('❌ Error fetching demo mentions from database:', dbError);
+    console.error('DB Error details:', JSON.stringify(dbError, null, 2));
+    return { mentions: [], found: false };
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching mentions...')
@@ -14,82 +93,23 @@ export async function GET(request: NextRequest) {
     if (!result.success || !result.credentials) {
       console.log(`❌ No credentials found for user ${userId}, checking for demo mentions in database`)
       // Try to get mentions from database (demo mode)
-      // Only return demo mentions (tweet_id starts with 'demo-')
-      try {
-        const { supabaseAdmin } = await import('@/lib/supabase')
-        const { data: mentions, error } = await supabaseAdmin
-          .from('mentions')
-          .select('*')
-          .eq('user_id', userId)
-          .like('tweet_id', 'demo-%') // Only get demo mentions
-          .order('created_at', { ascending: false })
-          .limit(50)
-        
-        if (error) {
-          console.error('❌ Database error fetching mentions:', error)
-          console.error('Error details:', JSON.stringify(error, null, 2))
-        } else {
-          console.log(`✅ Found ${mentions?.length || 0} mentions in database for ${userId}`)
-          if (mentions && mentions.length > 0) {
-            // Check sentiment distribution in raw database data
-            const rawSentimentCounts = mentions.reduce((acc, m) => {
-              const sent = m.sentiment || 'NULL'
-              acc[sent] = (acc[sent] || 0) + 1
-              return acc
-            }, {} as Record<string, number>)
-            console.log('📊 Raw database sentiment counts:', rawSentimentCounts)
-            console.log('Sample mention (raw):', {
-              text: mentions[0].text?.substring(0, 50) + '...',
-              sentiment: mentions[0].sentiment,
-              sentiment_confidence: mentions[0].sentiment_confidence
-            })
-          }
-        }
-        
-        if (!error && mentions && mentions.length > 0) {
-          // Convert database mentions to expected format
-          const formattedMentions = mentions.map(mention => ({
-            id: mention.tweet_id || mention.id,
-            text: mention.text,
-            created_at: mention.created_at,
-            username: mention.author_username,
-            name: mention.author_name || mention.author_username,
-            profile_image_url: '/placeholder.svg?height=40&width=40',
-            public_metrics: {
-              followers_count: Math.floor(Math.random() * 5000) + 100, // Random followers for demo
-              following_count: Math.floor(Math.random() * 1000) + 50,
-            },
-            sentiment: mention.sentiment || 'neutral',
-          }))
-          
-          // Log sentiment distribution for debugging
-          const sentimentCounts = formattedMentions.reduce((acc, m) => {
-            const sent = m.sentiment || 'neutral'
-            acc[sent] = (acc[sent] || 0) + 1
-            return acc
-          }, {} as Record<string, number>)
-          console.log(`✅ Returning ${formattedMentions.length} formatted mentions from database`)
-          console.log(`📊 Sentiment distribution:`, sentimentCounts)
-          console.log(`📊 Sample sentiments (first 5):`, formattedMentions.slice(0, 5).map(m => ({ text: m.text.substring(0, 40) + '...', sentiment: m.sentiment })))
-          
-          return NextResponse.json({ 
-            success: true,
-            mock: true,
-            demo: true,
-            mentions: formattedMentions
-          })
-        } else if (!error && mentions && mentions.length === 0) {
-          console.log(`ℹ️ No mentions found in database for ${userId} - returning empty array`)
-          return NextResponse.json({ 
-            success: true,
-            mock: true,
-            demo: true,
-            mentions: []
-          })
-        }
-      } catch (dbError) {
-        console.error('❌ Error fetching demo mentions from database:', dbError)
-        console.error('DB Error details:', JSON.stringify(dbError, null, 2))
+      const { mentions, found } = await fetchDemoMentionsFromDb(userId);
+      
+      if (found) {
+        return NextResponse.json({ 
+          success: true,
+          mock: true,
+          demo: true,
+          mentions
+        });
+      } else {
+        console.log(`ℹ️ No mentions found in database for ${userId} - returning empty array`)
+        return NextResponse.json({ 
+          success: true,
+          mock: true,
+          demo: true,
+          mentions: []
+        });
       }
       
       // Fallback to mock mentions if no database mentions
@@ -222,56 +242,19 @@ export async function GET(request: NextRequest) {
     // BUT only if we don't have real credentials (to avoid mixing demo and real data)
     if (!isRealCredentials) {
       console.log(`🔍 Checking database for demo mentions (user: ${userId}) before mock fallback`)
-      try {
-        const { supabaseAdmin } = await import('@/lib/supabase')
-        const { data: mentions, error } = await supabaseAdmin
-          .from('mentions')
-          .select('*')
-          .eq('user_id', userId)
-          .like('tweet_id', 'demo-%') // Only get demo mentions
-          .order('created_at', { ascending: false })
-          .limit(50)
-        
-        if (!error && mentions && mentions.length > 0) {
-          console.log(`✅ Found ${mentions.length} demo mentions in database - returning them instead of mock data`)
-          // Convert database mentions to expected format
-          const formattedMentions = mentions.map(mention => ({
-            id: mention.tweet_id || mention.id,
-            text: mention.text,
-            created_at: mention.created_at,
-            username: mention.author_username,
-            name: mention.author_name || mention.author_username,
-            profile_image_url: '/placeholder.svg?height=40&width=40',
-            public_metrics: {
-              followers_count: Math.floor(Math.random() * 5000) + 100, // Random followers for demo
-              following_count: Math.floor(Math.random() * 1000) + 50,
-            },
-            sentiment: mention.sentiment || 'neutral',
-          }))
-          
-          // Log sentiment distribution for debugging
-          const sentimentCounts = formattedMentions.reduce((acc, m) => {
-            const sent = m.sentiment || 'neutral'
-            acc[sent] = (acc[sent] || 0) + 1
-            return acc
-          }, {} as Record<string, number>)
-          console.log(`📊 Sentiment distribution (API fallback):`, sentimentCounts)
-          console.log(`📊 Sample sentiments (first 5):`, formattedMentions.slice(0, 5).map(m => ({ text: m.text.substring(0, 40) + '...', sentiment: m.sentiment })))
-          
-          return NextResponse.json({ 
-            success: true,
-            mock: true,
-            demo: true,
-            mentions: formattedMentions,
-            note: 'Twitter API call failed; returning demo mentions from database'
-          })
-        } else if (!error && mentions && mentions.length === 0) {
-          console.log(`ℹ️ No demo mentions in database for ${userId} - will fall back to mock data`)
-        } else if (error) {
-          console.error('❌ Database error while checking for demo mentions:', error)
-        }
-      } catch (dbError) {
-        console.error('❌ Error checking database for demo mentions:', dbError)
+      const { mentions, found } = await fetchDemoMentionsFromDb(userId);
+      
+      if (found) {
+        console.log(`✅ Found ${mentions.length} demo mentions in database - returning them instead of mock data`)
+        return NextResponse.json({ 
+          success: true,
+          mock: true,
+          demo: true,
+          mentions,
+          note: 'Twitter API call failed; returning demo mentions from database'
+        });
+      } else {
+        console.log(`ℹ️ No demo mentions in database for ${userId} - will fall back to mock data`)
       }
     } else {
       console.log('🔒 Real credentials detected - skipping demo mentions from database to avoid mixing demo and real data')

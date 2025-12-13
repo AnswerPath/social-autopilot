@@ -7,11 +7,11 @@ export const runtime = 'nodejs';
 // POST - Record human response to a flagged mention
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = request.headers.get('x-user-id') || 'demo-user';
-    const mentionId = params.id;
+    const { id: mentionId } = await params;
     const body = await request.json();
     const { action, notes, responseText } = body;
 

@@ -324,7 +324,7 @@ export class AutoReplyService {
    * Test a rule against sample text
    */
   async testRule(rule: AutoReplyRule, testText: string, sentiment?: string): Promise<RuleMatchResult> {
-    return this.ruleEngine.matchMention(testText, sentiment);
+    return this.ruleEngine.testRule(rule, testText, sentiment);
   }
 }
 

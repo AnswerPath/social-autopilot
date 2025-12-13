@@ -131,6 +131,13 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
+      // Handle "no rows" case - Supabase .single() returns PGRST116 when no rows match
+      if (error.code === 'PGRST116') {
+        return NextResponse.json(
+          { success: false, error: 'Rule not found' },
+          { status: 404 }
+        );
+      }
       console.error('Error updating auto-reply rule:', error);
       return NextResponse.json(
         { success: false, error: error.message },

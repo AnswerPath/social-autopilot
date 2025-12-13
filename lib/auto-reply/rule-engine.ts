@@ -77,6 +77,13 @@ export class RuleEngine {
   }
 
   /**
+   * Test a single rule against mention text (public method for testing)
+   */
+  testRule(rule: AutoReplyRule, mentionText: string, sentiment?: string): RuleMatchResult {
+    return this.matchRule(rule, mentionText.toLowerCase(), sentiment);
+  }
+
+  /**
    * Match a single rule against mention text
    */
   private matchRule(rule: AutoReplyRule, lowerText: string, sentiment?: string): RuleMatchResult {
@@ -160,11 +167,7 @@ export class RuleEngine {
     const cached = this.throttleCache.get(cacheKey);
 
     if (!cached) {
-      // First reply, allow it
-      this.throttleCache.set(cacheKey, {
-        count: 1,
-        lastReply: now,
-      });
+      // First reply, allow it (recordReply will initialize the cache)
       return { canReply: true };
     }
 
@@ -204,12 +207,7 @@ export class RuleEngine {
       };
     }
 
-    // Update cache
-    this.throttleCache.set(cacheKey, {
-      count: cached.count + 1,
-      lastReply: now,
-    });
-
+    // All checks passed - can reply (recordReply will update the cache)
     return { canReply: true };
   }
 

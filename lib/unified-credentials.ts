@@ -6,7 +6,6 @@
 
 import { getXApiCredentials, storeXApiCredentials, XApiCredentials } from './x-api-storage';
 import { getTwitterCredentials, storeTwitterCredentials, deleteTwitterCredentials, TwitterCredentials } from './database-storage';
-import { decrypt } from './encryption';
 
 export interface UnifiedCredentials extends XApiCredentials {}
 
@@ -32,11 +31,16 @@ export async function getUnifiedCredentials(
     if (twitterResult.success && twitterResult.credentials) {
       console.log('🔄 Found legacy Twitter credentials, migrating to X API credentials...');
       
-      // Decrypt Twitter credentials
-      const apiKey = await decrypt(twitterResult.credentials.encrypted_api_key);
-      const apiSecret = await decrypt(twitterResult.credentials.encrypted_api_secret);
-      const accessToken = await decrypt(twitterResult.credentials.encrypted_access_token);
-      const accessSecret = await decrypt(twitterResult.credentials.encrypted_access_secret);
+      // Credentials are already decrypted by getTwitterCredentials
+      const { apiKey, apiSecret, accessToken, accessSecret } = twitterResult.credentials;
+
+      // Check if any required credential field is missing
+      if (!apiKey || !apiSecret || !accessToken || !accessSecret) {
+        return {
+          success: false,
+          error: 'No valid credentials found'
+        };
+      }
 
       // Check if these are demo credentials
       if (apiKey.includes('demo_') || apiSecret.includes('demo_') ||

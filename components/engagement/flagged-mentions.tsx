@@ -179,6 +179,19 @@ export function FlaggedMentions() {
     }
   };
 
+  const getPriorityBorderColor = (level: string) => {
+    switch (level) {
+      case 'critical':
+        return 'border-l-red-500';
+      case 'high':
+        return 'border-l-orange-500';
+      case 'medium':
+        return 'border-l-yellow-500';
+      default:
+        return 'border-l-blue-500';
+    }
+  };
+
   const getSentimentColor = (sentiment?: string) => {
     switch (sentiment) {
       case 'positive':
@@ -218,7 +231,7 @@ export function FlaggedMentions() {
         ) : (
           <div className="space-y-4">
             {mentions.map((mention) => (
-              <Card key={mention.id} className="border-l-4" style={{ borderLeftColor: getPriorityColor(mention.priority_level).replace('bg-', '') }}>
+              <Card key={mention.id} className={`border-l-4 ${getPriorityBorderColor(mention.priority_level)}`}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
