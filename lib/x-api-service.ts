@@ -179,12 +179,21 @@ export class XApiService {
   /**
    * Get user's own tweets
    */
-  async getUserTweets(userId: string, limit: number = 50): Promise<any> {
+  async getUserTweets(userId: string, limit: number = 50, startTime?: Date, endTime?: Date): Promise<any> {
     try {
-      const tweets = await this.client.v2.userTimeline(userId, {
-        max_results: limit,
-        'tweet.fields': ['created_at', 'public_metrics', 'entities'],
-      });
+      const options: any = {
+        max_results: Math.min(limit, 100), // X API max is 100 per request
+        'tweet.fields': ['created_at', 'public_metrics', 'entities', 'text', 'id'],
+      };
+
+      if (startTime) {
+        options.start_time = startTime.toISOString();
+      }
+      if (endTime) {
+        options.end_time = endTime.toISOString();
+      }
+
+      const tweets = await this.client.v2.userTimeline(userId, options);
 
       return {
         success: true,
@@ -196,6 +205,215 @@ export class XApiService {
       return {
         success: false,
         tweets: [],
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * Get analytics for a specific tweet
+   * Note: X API v2 provides public_metrics in the tweet object, but detailed analytics
+   * require Twitter API v2 with Academic Research access or Twitter Analytics API
+   */
+  async getTweetAnalytics(tweetId: string): Promise<{
+    success: boolean;
+    analytics?: {
+      tweetId: string;
+      impressions?: number;
+      likes: number;
+      retweets: number;
+      replies: number;
+      quotes: number;
+      engagementRate?: number;
+    };
+    error?: string;
+  }> {
+    return this.circuitBreaker.execute(async () => {
+      return ApiErrorHandler.executeWithRetry(
+        async () => {
+          try {
+            // Fetch tweet with public_metrics
+            const tweet = await this.client.v2.singleTweet(tweetId, {
+              'tweet.fields': ['public_metrics', 'created_at', 'text'],
+            });
+
+            if (!tweet.data) {
+              return {
+                success: false,
+                error: 'Tweet not found',
+              };
+            }
+
+            const metrics = tweet.data.public_metrics || {};
+            const totalEngagements = (metrics.like_count || 0) + 
+                                    (metrics.retweet_count || 0) + 
+                                    (metrics.reply_count || 0) + 
+                                    (metrics.quote_count || 0);
+
+            // Note: Impressions are not available in public_metrics without Analytics API access
+            // We'll calculate engagement rate based on available metrics
+            const engagementRate = totalEngagements > 0 ? 
+              (totalEngagements / Math.max(1, metrics.impression_count || 1)) * 100 : 0;
+
+            return {
+              success: true,
+              analytics: {
+                tweetId: tweet.data.id,
+                impressions: metrics.impression_count || undefined, // May be undefined without Analytics API
+                likes: metrics.like_count || 0,
+                retweets: metrics.retweet_count || 0,
+                replies: metrics.reply_count || 0,
+                quotes: metrics.quote_count || 0,
+                engagementRate: engagementRate,
+              },
+            };
+          } catch (error) {
+            throw ApiErrorHandler.normalizeError(error, 'x-api', {
+              endpoint: 'tweet-analytics',
+              userId: this.credentials.userId,
+            });
+          }
+        },
+        'x-api',
+        undefined,
+        { endpoint: 'tweet-analytics', userId: this.credentials.userId }
+      );
+    });
+  }
+
+  /**
+   * Get user-level analytics (follower metrics)
+   */
+  async getUserAnalytics(userId?: string): Promise<{
+    success: boolean;
+    analytics?: {
+      followerCount: number;
+      followingCount: number;
+      tweetCount: number;
+    };
+    error?: string;
+  }> {
+    try {
+      // Get current user's profile (me) or specified user
+      const user = userId 
+        ? await this.client.v2.user(userId, {
+            'user.fields': ['public_metrics'],
+          })
+        : await this.client.v2.me({
+            'user.fields': ['public_metrics'],
+          });
+
+      if (!user.data) {
+        return {
+          success: false,
+          error: 'User not found',
+        };
+      }
+
+      const metrics = user.data.public_metrics || {};
+
+      return {
+        success: true,
+        analytics: {
+          followerCount: metrics.followers_count || 0,
+          followingCount: metrics.following_count || 0,
+          tweetCount: metrics.tweet_count || 0,
+        },
+      };
+    } catch (error) {
+      console.error('X API get user analytics error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * Fetch ALL user tweets with their analytics
+   * CRITICAL: Fetches from user's X timeline, NOT from scheduled_posts table
+   */
+  async getTweetsWithAnalytics(
+    userId: string, 
+    limit: number = 50, 
+    startTime?: Date, 
+    endTime?: Date
+  ): Promise<{
+    success: boolean;
+    tweets?: Array<{
+      id: string;
+      text: string;
+      created_at?: string;
+      analytics: {
+        likes: number;
+        retweets: number;
+        replies: number;
+        quotes: number;
+        impressions?: number;
+        engagementRate?: number;
+      };
+    }>;
+    meta?: any;
+    error?: string;
+  }> {
+    try {
+      const result = await this.getUserTweets(userId, limit, startTime, endTime);
+      
+      if (!result.success || !result.tweets) {
+        return {
+          success: false,
+          error: result.error || 'Failed to fetch tweets',
+        };
+      }
+
+      // Fetch analytics for each tweet
+      const tweetsWithAnalytics = [];
+      for (const tweet of result.tweets) {
+        try {
+          const analyticsResult = await this.getTweetAnalytics(tweet.id);
+          
+          if (analyticsResult.success && analyticsResult.analytics) {
+            tweetsWithAnalytics.push({
+              id: tweet.id,
+              text: tweet.text || '',
+              created_at: tweet.created_at,
+              analytics: analyticsResult.analytics,
+            });
+          } else {
+            // If analytics fetch fails, still include tweet with basic metrics from public_metrics
+            const metrics = tweet.public_metrics || {};
+            tweetsWithAnalytics.push({
+              id: tweet.id,
+              text: tweet.text || '',
+              created_at: tweet.created_at,
+              analytics: {
+                likes: metrics.like_count || 0,
+                retweets: metrics.retweet_count || 0,
+                replies: metrics.reply_count || 0,
+                quotes: metrics.quote_count || 0,
+                impressions: metrics.impression_count,
+                engagementRate: undefined,
+              },
+            });
+          }
+
+          // Add small delay to respect rate limits
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error(`Error fetching analytics for tweet ${tweet.id}:`, error);
+          // Continue with next tweet even if one fails
+        }
+      }
+
+      return {
+        success: true,
+        tweets: tweetsWithAnalytics,
+        meta: result.meta,
+      };
+    } catch (error) {
+      console.error('X API get tweets with analytics error:', error);
+      return {
+        success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }

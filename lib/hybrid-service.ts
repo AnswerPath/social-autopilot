@@ -236,6 +236,10 @@ export class HybridService {
 
   /**
    * Get analytics data using the best available service
+   * 
+   * Note: For detailed post analytics and follower growth tracking,
+   * use the XApiAnalyticsProcessor from @/lib/analytics/x-api-analytics-processor
+   * which provides comprehensive ETL pipeline for X API analytics data.
    */
   async getAnalytics(username: string): Promise<HybridAnalyticsResult> {
     try {
