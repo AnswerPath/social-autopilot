@@ -46,7 +46,7 @@ export async function enqueueJob(postId: string): Promise<{ success: boolean; er
     const { error } = await supabaseAdmin
       .from('scheduled_posts')
       .update({
-        status: 'scheduled',
+        status: 'approved',
         retry_count: 0
       })
       .eq('id', postId)
@@ -73,11 +73,12 @@ export async function processQueue(): Promise<{
   const nowIso = now.toISOString()
 
   try {
-    // Find jobs that are due (scheduled_at <= now) and in scheduled/approved status
+    // Find jobs that are due (scheduled_at <= now) and in approved status
+    // Also include pending_approval posts that are past due (for auto-approval in dev/demo mode)
     const { data: dueJobs, error: fetchError } = await supabaseAdmin
       .from('scheduled_posts')
       .select('*')
-      .in('status', ['scheduled', 'approved'])
+      .in('status', ['approved', 'pending_approval'])
       .lte('scheduled_at', nowIso)
       .order('scheduled_at', { ascending: true })
       .limit(50) // Process up to 50 jobs at a time
@@ -96,12 +97,13 @@ export async function processQueue(): Promise<{
     for (const job of dueJobs) {
       try {
         // Mark as processing (lock the job) - use conditional update to prevent race conditions
-        // Only update if status is 'scheduled' or 'approved' to prevent concurrent claims
+        // Only update if status is 'approved' or 'pending_approval' to prevent concurrent claims
+        // For pending_approval posts past due, auto-approve them
         const { data: lockedJob, error: lockError } = await supabaseAdmin
           .from('scheduled_posts')
           .update({ status: 'processing' })
           .eq('id', job.id)
-          .in('status', ['scheduled', 'approved'])
+          .in('status', ['approved', 'pending_approval'])
           .select('id')
           .single()
 
@@ -129,9 +131,14 @@ export async function processQueue(): Promise<{
         }
 
         // Post the tweet
+        // Only pass media_urls if it's a non-empty array
+        const mediaIds = job.media_urls && job.media_urls.length > 0 
+          ? job.media_urls 
+          : undefined
+        
         const postResult = await postTweet(
           job.content,
-          job.media_urls || undefined,
+          mediaIds,
           job.user_id
         )
 
@@ -163,7 +170,7 @@ export async function processQueue(): Promise<{
             await supabaseAdmin
               .from('scheduled_posts')
               .update({
-                status: 'scheduled',
+                status: 'approved',
                 retry_count: retryCount,
                 last_retry_at: now.toISOString(),
                 scheduled_at: retryTime.toISOString(),
@@ -207,7 +214,7 @@ export async function processQueue(): Promise<{
           await supabaseAdmin
             .from('scheduled_posts')
             .update({
-              status: 'scheduled',
+              status: 'approved',
               retry_count: retryCount,
               last_retry_at: now.toISOString(),
               scheduled_at: retryTime.toISOString(),
@@ -276,7 +283,7 @@ export async function getQueueMetrics(): Promise<QueueMetrics> {
     }
 
     statusCounts?.forEach((job: JobStatusRow) => {
-      if (job.status === 'scheduled' || job.status === 'approved' || job.status === 'pending_approval') {
+      if (job.status === 'approved' || job.status === 'pending_approval') {
         counts.pending++
       } else if (job.status === 'processing') {
         counts.processing++
@@ -291,7 +298,7 @@ export async function getQueueMetrics(): Promise<QueueMetrics> {
     const { data: oldestPending } = await supabaseAdmin
       .from('scheduled_posts')
       .select('scheduled_at')
-      .in('status', ['scheduled', 'approved', 'pending_approval'])
+      .in('status', ['approved', 'pending_approval'])
       .order('scheduled_at', { ascending: true })
       .limit(1)
       .single()
@@ -352,7 +359,7 @@ export async function retryFailedJob(postId: string): Promise<{ success: boolean
     const { error: updateError } = await supabaseAdmin
       .from('scheduled_posts')
       .update({
-        status: 'scheduled',
+        status: 'approved',
         retry_count: nextRetryCount,
         last_retry_at: new Date().toISOString(),
         scheduled_at: retryTime.toISOString(),

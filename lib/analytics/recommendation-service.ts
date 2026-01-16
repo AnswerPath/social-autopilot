@@ -215,13 +215,9 @@ export class RecommendationService {
       slot.averageEngagementRate =
         slot.posts.reduce((sum, p) => sum + p.engagementRate, 0) / slot.postCount;
 
-      // Weighted average (by impressions)
-      const totalWeightedRate = slot.posts.reduce(
-        (sum, p) => sum + p.engagementRate * p.impressions,
-        0
-      );
-      slot.weightedEngagementRate =
-        slot.totalImpressions > 0 ? totalWeightedRate / slot.totalImpressions : 0;
+      // Since engagement rate is now based on likes only, use simple average
+      // (weighted by impressions no longer makes sense)
+      slot.weightedEngagementRate = slot.averageEngagementRate;
 
       slots.push(slot);
     });

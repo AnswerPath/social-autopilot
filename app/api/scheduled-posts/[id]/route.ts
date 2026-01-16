@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { SchedulingService } from '@/lib/scheduling-service'
 import { recordRevision } from '@/lib/approval/revisions'
+import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
 
 export const runtime = 'nodejs'
 
@@ -56,9 +57,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body.postedTweetId) update.posted_tweet_id = body.postedTweetId
     if (body.error) update.error = body.error
 
+    // Handle submitForApproval flag (convert to status if needed)
+    if (body.submitForApproval === true && !update.status) {
+      update.status = 'pending_approval'
+      update.requires_approval = true
+    } else if (body.submitForApproval === true) {
+      // If status is already set, ensure it's pending_approval
+      update.status = 'pending_approval'
+      update.requires_approval = true
+    } else if (body.submitForApproval === false) {
+      update.requires_approval = false
+    }
+
     // Handle approval workflow updates
-    if (body.status === 'pending_approval') {
+    if (update.status === 'pending_approval' || body.status === 'pending_approval') {
       update.submitted_for_approval_at = new Date().toISOString()
+      if (!update.requires_approval) update.requires_approval = true
     } else if (body.status === 'approved') {
       update.approved_at = new Date().toISOString()
       update.approved_by = body.approvedBy || userId
@@ -115,7 +129,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       // Intentionally non-fatal: main update already succeeded.
     }
 
-    return NextResponse.json({ success: true, post: data })
+    // If this post requires approval, attach it to a workflow so that
+    // it appears in the Approvals dashboard and can progress through steps.
+    if (data.requires_approval || update.requires_approval) {
+      try {
+        await ensureWorkflowAssignment(data.id, userId)
+      } catch (workflowError) {
+        console.error('Failed to ensure workflow assignment for scheduled post update', workflowError)
+        // Do not fail the main request – approvals UI may be limited but post update succeeded.
+      }
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      post: data,
+      requiresApproval: data.requires_approval || false,
+      message: data.requires_approval ? 'Post updated and submitted for approval' : 'Post updated successfully'
+    })
   } catch (error: any) {
     return NextResponse.json({ 
       success: false, 

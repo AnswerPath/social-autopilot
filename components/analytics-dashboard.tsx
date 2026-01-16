@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import { PerformanceHeatmap } from "./analytics/performance-heatmap"
 import { DateRangeSelector, type DateRange } from "./analytics/date-range-selector"
 import { PostingRecommendations } from "./analytics/posting-recommendations"
 import { format } from 'date-fns'
+import { useAuth } from "@/hooks/use-auth"
 
 interface SummaryMetrics {
   totalImpressions: number
@@ -62,24 +63,102 @@ interface EngagementDataPoint {
 }
 
 export function AnalyticsDashboard() {
+  const { user, loading: authLoading } = useAuth()
+  
+  // Don't use demo-user fallback - require actual authentication
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-gray-600">Loading analytics...</p>
+      </div>
+    )
+  }
+  
+  if (!user || !user.id) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <p className="text-lg font-semibold text-gray-900">Authentication Required</p>
+          <p className="text-gray-600 mt-2">Please log in to view analytics.</p>
+        </div>
+      </div>
+    )
+  }
+  
+  // Memoize userId to prevent unnecessary recreations - use ref to track if it actually changed
+  const userIdRef = useRef<string | null>(null)
+  const userId = useMemo(() => {
+    const newUserId = user.id
+    if (userIdRef.current !== newUserId) {
+      userIdRef.current = newUserId
+    }
+    return newUserId
+  }, [user.id])
+  
+  // Track render count to debug re-renders
+  const renderCountRef = useRef(0)
+  renderCountRef.current += 1
+  if (renderCountRef.current > 1 && renderCountRef.current % 10 === 0) {
+    console.warn(`⚠️ AnalyticsDashboard re-rendered ${renderCountRef.current} times - this may indicate a performance issue`)
+  }
+  
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null)
   const [postAnalytics, setPostAnalytics] = useState<PostAnalyticsData[]>([])
   const [followerAnalytics, setFollowerAnalytics] = useState<FollowerAnalyticsData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    // Initialize with last 7 days
+  // Initialize date range with useMemo to prevent recreation on every render
+  const initialDateRange = useMemo(() => {
     const endDate = new Date()
     endDate.setHours(23, 59, 59, 999)
     const startDate = new Date()
     startDate.setDate(endDate.getDate() - 7)
     startDate.setHours(0, 0, 0, 0)
     return { from: startDate, to: endDate }
-  })
+  }, [])
+  
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(initialDateRange)
   const [contentTypeFilter, setContentTypeFilter] = useState<string>('all')
   const [lengthFilter, setLengthFilter] = useState<string>('all')
   const { toast } = useToast()
+  
+  // Memoized handler to prevent unnecessary date range updates
+  // Use a ref to track the last set date range to prevent unnecessary updates
+  const lastSetDateRangeRef = useRef<{ from: number | null; to: number | null }>({ from: null, to: null })
+  
+  const handleDateRangeChange = useCallback((range: DateRange | undefined) => {
+    if (!range?.from || !range?.to) {
+      // Only update if we're actually clearing the range (not just receiving undefined temporarily)
+      if (!range && dateRange) {
+        console.log('📅 Clearing date range')
+        lastSetDateRangeRef.current = { from: null, to: null }
+        setDateRange(range)
+      }
+      return
+    }
+    
+    // Only update if the actual dates have changed from what we last set
+    const newFromTime = range.from.getTime()
+    const newToTime = range.to.getTime()
+    const lastFromTime = lastSetDateRangeRef.current.from
+    const lastToTime = lastSetDateRangeRef.current.to
+    
+    // Compare with what we last SET, not what's in state (to avoid unnecessary updates)
+    if (newFromTime !== lastFromTime || newToTime !== lastToTime) {
+      console.log('📅 Date range updated by user:', { 
+        newFromTime, 
+        newToTime, 
+        lastFromTime, 
+        lastToTime
+      })
+      lastSetDateRangeRef.current = { from: newFromTime, to: newToTime }
+      setDateRange(range)
+    } else {
+      // Dates are the same as what we last set, don't update state
+      console.log('⏭️ Date range unchanged from last set, skipping state update')
+    }
+  }, [dateRange])
 
   // Convert DateRange to ISO date strings
   const getDateRangeStrings = useCallback((range: DateRange | undefined) => {
@@ -103,11 +182,13 @@ export function AnalyticsDashboard() {
   // Fetch summary metrics
   const fetchSummaryMetrics = useCallback(async (startDate: string, endDate: string) => {
     try {
+      // Removed console.log to reduce noise
       const response = await fetch(
         `/api/analytics/summary?startDate=${startDate}&endDate=${endDate}`,
         {
+          credentials: 'include', // Include cookies for authentication
           headers: {
-            'x-user-id': 'demo-user'
+            'x-user-id': userId
           }
         }
       )
@@ -122,31 +203,100 @@ export function AnalyticsDashboard() {
       console.error('Error fetching summary metrics:', err)
       setSummaryMetrics(null)
     }
-  }, [])
+  }, [userId])
 
   // Fetch post analytics
-  const fetchPostAnalytics = useCallback(async (startDate: string, endDate: string) => {
+  const fetchPostAnalytics = useCallback(async (startDate: string, endDate: string, fetchFromApi: boolean = false) => {
     try {
-      const response = await fetch(
-        `/api/analytics/posts?startDate=${startDate}&endDate=${endDate}`,
-        {
-          headers: {
-            'x-user-id': 'demo-user'
-          }
+      setError(null)
+      // Removed console.log to reduce noise
+      const url = `/api/analytics/posts?startDate=${startDate}&endDate=${endDate}${fetchFromApi ? '&fetchFromApi=true' : ''}`
+      const response = await fetch(url, {
+        credentials: 'include', // Include cookies for authentication
+        headers: {
+          'x-user-id': userId
         }
-      )
+      })
       
       const data = await response.json()
-      if (data.success && data.data) {
-        setPostAnalytics(data.data)
+      if (data.success) {
+        setPostAnalytics(data.data || [])
+        
+        // Display warnings if present
+        if (data.warning) {
+          const warningMessage = data.warning
+          setError(warningMessage)
+          
+          // Show toast for important warnings
+          if (warningMessage.includes('Rate limit') || warningMessage.includes('credentials')) {
+            toast({
+              title: 'Analytics Fetch Warning',
+              description: warningMessage,
+              variant: 'destructive'
+            })
+          } else if (data.fetchedFromApi) {
+            const source = data.source || 'x-api'
+            const sourceName = source === 'apify' ? 'Apify' : 'X API'
+            toast({
+              title: 'Analytics Updated',
+              description: `Fetched ${data.data?.length || 0} posts from ${sourceName}`,
+            })
+          }
+        } else if (data.fetchedFromApi && data.data && data.data.length > 0) {
+          // Successfully fetched from API
+          const source = data.source || 'x-api'
+          const sourceName = source === 'apify' ? 'Apify' : 'X API'
+          toast({
+            title: 'Analytics Fetched',
+            description: `Successfully fetched ${data.data.length} posts from ${sourceName}`,
+          })
+          
+          // Show helpful tip if using X API
+          if (source === 'x-api') {
+            toast({
+              title: '💡 Tip',
+              description: 'Configure Apify credentials in Settings to use Apify for analytics and avoid X API rate limits.',
+              duration: 5000,
+            })
+          }
+        }
       } else {
-        setPostAnalytics([])
+        // If there's stored data, show it even if there's an error
+        setPostAnalytics(data.data || [])
+        const errorMessage = data.error || 'Failed to fetch post analytics'
+        
+        // Only show as error if there's no data at all
+        if (!data.data || data.data.length === 0) {
+          setError(errorMessage)
+          toast({
+            title: 'Error',
+            description: errorMessage,
+            variant: 'destructive'
+          })
+        } else {
+          // If we have data, show warning instead
+          setError(data.warning || errorMessage)
+          if (data.warning) {
+            toast({
+              title: 'Warning',
+              description: data.warning,
+              variant: 'default'
+            })
+          }
+        }
       }
     } catch (err) {
       console.error('Error fetching post analytics:', err)
       setPostAnalytics([])
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch post analytics'
+      setError(errorMessage)
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive'
+      })
     }
-  }, [])
+  }, [toast, userId])
 
   // Fetch follower analytics
   const fetchFollowerAnalytics = useCallback(async (startDate: string, endDate: string) => {
@@ -155,7 +305,7 @@ export function AnalyticsDashboard() {
         `/api/analytics/followers?startDate=${startDate}&endDate=${endDate}`,
         {
           headers: {
-            'x-user-id': 'demo-user'
+            'x-user-id': userId
           }
         }
       )
@@ -170,18 +320,61 @@ export function AnalyticsDashboard() {
       console.error('Error fetching follower analytics:', err)
       setFollowerAnalytics([])
     }
-  }, [])
+  }, [userId])
 
-  // Fetch all data
-  const fetchAllData = useCallback(async () => {
+  // Fetch all data - use ref to track if we're already fetching to prevent loops
+  const isFetchingRef = useRef(false)
+  // Store fetch functions in refs to avoid dependency issues
+  const fetchFunctionsRef = useRef<{
+    fetchSummaryMetrics: typeof fetchSummaryMetrics
+    fetchPostAnalytics: typeof fetchPostAnalytics
+    fetchFollowerAnalytics: typeof fetchFollowerAnalytics
+    getDateRangeStrings: typeof getDateRangeStrings
+  }>()
+  
+  // Store current dateRange in a ref to avoid dependency on dateRange object
+  const dateRangeRef = useRef(dateRange)
+  useEffect(() => {
+    dateRangeRef.current = dateRange
+  }, [dateRange])
+  
+  // Update refs when functions change
+  useEffect(() => {
+    fetchFunctionsRef.current = {
+      fetchSummaryMetrics,
+      fetchPostAnalytics,
+      fetchFollowerAnalytics,
+      getDateRangeStrings
+    }
+  }, [fetchSummaryMetrics, fetchPostAnalytics, fetchFollowerAnalytics, getDateRangeStrings])
+  
+  const fetchAllData = useCallback(async (fetchFromApi: boolean = false, customDateRange?: DateRange) => {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      console.log('⏸️ Fetch already in progress, skipping...')
+      return
+    }
+    
+    const functions = fetchFunctionsRef.current
+    if (!functions) {
+      console.error('Fetch functions not ready')
+      return
+    }
+    
     try {
+      isFetchingRef.current = true
       setError(null)
-      const { startDate, endDate } = getDateRangeStrings(dateRange)
+      setLoading(true)
+      // Use customDateRange if provided, otherwise use ref to avoid dependency
+      const rangeToUse = customDateRange ?? dateRangeRef.current
+      const { startDate, endDate } = functions.getDateRangeStrings(rangeToUse)
+      
+      console.log('🔄 Fetching analytics data...', { fetchFromApi, startDate, endDate, timestamp: new Date().toISOString() })
       
       await Promise.all([
-        fetchSummaryMetrics(startDate, endDate),
-        fetchPostAnalytics(startDate, endDate),
-        fetchFollowerAnalytics(startDate, endDate)
+        functions.fetchSummaryMetrics(startDate, endDate),
+        functions.fetchPostAnalytics(startDate, endDate, fetchFromApi),
+        functions.fetchFollowerAnalytics(startDate, endDate)
       ])
     } catch (err) {
       console.error('Error fetching analytics data:', err)
@@ -193,8 +386,14 @@ export function AnalyticsDashboard() {
       })
     } finally {
       setLoading(false)
+      isFetchingRef.current = false
     }
-  }, [dateRange, getDateRangeStrings, fetchSummaryMetrics, fetchPostAnalytics, fetchFollowerAnalytics, toast])
+  }, [toast]) // Removed dateRange dependency - use ref instead
+
+  // Update fetchAllDataRef after fetchAllData is defined
+  useEffect(() => {
+    fetchAllDataRef.current = fetchAllData
+  }, [fetchAllData])
 
   // Handle export
   const handleExport = useCallback(async () => {
@@ -215,7 +414,7 @@ export function AnalyticsDashboard() {
         `/api/analytics/export?startDate=${startDate}&endDate=${endDate}&format=csv`,
         {
           headers: {
-            'x-user-id': 'demo-user'
+            'x-user-id': userId
           }
         }
       )
@@ -250,33 +449,124 @@ export function AnalyticsDashboard() {
     }
   }, [dateRange, getDateRangeStrings, toast])
 
-  // Initial fetch and polling setup
+  // Track if initial fetch has been done
+  const hasInitialFetch = useRef(false)
+  
+  // Track previous date range values to prevent unnecessary re-fetches
+  const prevDateRangeRef = useRef<{ from: number | null; to: number | null }>({ from: null, to: null })
+  
+  // Track if we're in the middle of a fetch to prevent loops
+  const isFetchingInEffect = useRef(false)
+  
+  // Track last fetch time to prevent rapid successive fetches
+  const lastFetchTimeRef = useRef<number>(0)
+  const MIN_FETCH_INTERVAL = 60000 // Minimum 60 seconds (1 minute) between automatic fetches
+  
+  // Store the latest fetchAllData function in a ref to avoid dependency issues
+  // Initialize as null and update in useEffect after fetchAllData is defined
+  const fetchAllDataRef = useRef<typeof fetchAllData | null>(null)
+  
+  // Initial fetch ONLY - no automatic reloading
+  // Use a separate ref to track if we've done the initial fetch to prevent re-runs
+  const initialFetchDoneRef = useRef(false)
+  
   useEffect(() => {
-    fetchAllData()
+    // Only fetch once on initial mount - use ref to ensure this
+    if (initialFetchDoneRef.current) {
+      return
+    }
     
-    // Set up polling every 45 seconds
-    const interval = setInterval(() => {
-      fetchAllData()
-    }, 45000)
+    if (!dateRange?.from || !dateRange?.to) {
+      return
+    }
     
-    return () => clearInterval(interval)
-  }, [dateRange]) // Re-fetch when date range changes
+    // Mark as done IMMEDIATELY to prevent any re-runs
+    initialFetchDoneRef.current = true
+    hasInitialFetch.current = true
+    
+    const fromTime = dateRange.from.getTime()
+    const toTime = dateRange.to.getTime()
+    prevDateRangeRef.current = { from: fromTime, to: toTime }
+    lastFetchTimeRef.current = Date.now()
+    
+    // Set flag to prevent concurrent runs
+    isFetchingInEffect.current = true
+    
+    // Use the ref to call fetchAllData
+    const fetchFn = fetchAllDataRef.current
+    if (!fetchFn) {
+      // fetchAllData not ready yet, wait for next render
+      initialFetchDoneRef.current = false
+      hasInitialFetch.current = false
+      isFetchingInEffect.current = false
+      return
+    }
+    fetchFn(false, dateRange).finally(() => {
+      isFetchingInEffect.current = false
+    })
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // ONLY run on mount - never again automatically
+
+  // Separate effect to handle date range changes (only when user explicitly changes it)
+  useEffect(() => {
+    // Skip if initial fetch hasn't happened yet
+    if (!hasInitialFetch.current || !initialFetchDoneRef.current) {
+      return
+    }
+    
+    // Don't run if already fetching
+    if (isFetchingInEffect.current) {
+      return
+    }
+    
+    if (!dateRange?.from || !dateRange?.to) {
+      return
+    }
+    
+    const fromTime = dateRange.from.getTime()
+    const toTime = dateRange.to.getTime()
+    
+    // CRITICAL: Only fetch if dates have ACTUALLY changed from what we last fetched
+    if (prevDateRangeRef.current.from === fromTime && prevDateRangeRef.current.to === toTime) {
+      // Dates haven't changed, do nothing
+      return
+    }
+    
+    // Update the previous date range reference BEFORE fetching
+    prevDateRangeRef.current = { from: fromTime, to: toTime }
+    lastFetchTimeRef.current = Date.now()
+    
+    // Set flag to prevent concurrent runs
+    isFetchingInEffect.current = true
+    
+    // Use the ref to call fetchAllData
+    const fetchFn = fetchAllDataRef.current
+    if (!fetchFn) {
+      isFetchingInEffect.current = false
+      return
+    }
+    fetchFn(false, dateRange).finally(() => {
+      isFetchingInEffect.current = false
+    })
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange?.from?.getTime(), dateRange?.to?.getTime()]) // Only when dates actually change
 
   // Calculate KPI metrics
   const calculateMetrics = () => {
     if (!summaryMetrics) {
       return {
-        engagementRate: { value: "0%", change: "0%", trend: "neutral" as const },
+        engagementRate: { value: "0", change: "0", trend: "neutral" as const },
         totalReach: { value: "0", change: "0%", trend: "neutral" as const },
         followerGrowth: { value: "0", change: "0%", trend: "neutral" as const },
         avgReplies: { value: "0", change: "0%", trend: "neutral" as const }
       }
     }
 
-    // Engagement Rate: (likes + retweets + replies) / impressions * 100
-    const totalEngagement = summaryMetrics.totalLikes + summaryMetrics.totalRetweets + summaryMetrics.totalReplies
-    const engagementRate = summaryMetrics.totalImpressions > 0
-      ? (totalEngagement / summaryMetrics.totalImpressions) * 100
+    // Engagement Rate: average likes per post (based on likes, not impressions)
+    const engagementRate = summaryMetrics.totalPosts > 0
+      ? summaryMetrics.totalLikes / summaryMetrics.totalPosts
       : 0
     
     // Total Reach (using impressions as proxy)
@@ -297,8 +587,8 @@ export function AnalyticsDashboard() {
 
     return {
       engagementRate: {
-        value: `${engagementRate.toFixed(2)}%`,
-        change: summaryMetrics.averageEngagementRate > 0 ? `+${summaryMetrics.averageEngagementRate.toFixed(2)}%` : "0%",
+        value: `${engagementRate.toFixed(2)}`,
+        change: summaryMetrics.averageEngagementRate > 0 ? `+${summaryMetrics.averageEngagementRate.toFixed(2)}` : "0",
         trend: engagementRate > 0 ? "up" as const : "neutral" as const
       },
       totalReach: {
@@ -353,13 +643,15 @@ export function AnalyticsDashboard() {
       }
     })
 
-    // Convert to array and sort by date
+    // Convert to array, sort by original ISO date string (not formatted), then format for display
     return Array.from(dailyMap.entries())
       .map(([date, data]) => ({
-        date: formatDate(date),
+        dateISO: date, // Keep original ISO date for sorting
+        date: formatDate(date), // Format for display
         ...data
       }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .sort((a, b) => a.dateISO.localeCompare(b.dateISO)) // Sort by ISO date string (YYYY-MM-DD format)
+      .map(({ dateISO, ...rest }) => rest) // Remove dateISO, keep only formatted date for display
   }
 
   // Transform follower analytics for chart
@@ -419,10 +711,8 @@ export function AnalyticsDashboard() {
       .filter(post => post.latest)
       .map(post => {
         const latest = post.latest!
-        const totalEngagement = latest.likes + latest.retweets + latest.replies
-        const engagementRate = latest.impressions && latest.impressions > 0
-          ? (totalEngagement / latest.impressions) * 100
-          : 0
+        // Engagement rate is now based on likes only (average likes per post)
+        const engagementRate = latest.likes || 0
 
         return {
           id: post.postId,
@@ -487,16 +777,24 @@ export function AnalyticsDashboard() {
       <div className="flex items-center justify-between">
         <DateRangeSelector
           dateRange={dateRange}
-          onDateRangeChange={setDateRange}
+          onDateRangeChange={handleDateRangeChange}
         />
         <div className="flex gap-2">
           <Button 
             variant="outline" 
-            onClick={fetchAllData}
+            onClick={() => fetchAllData(false, dateRange)}
             disabled={loading}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
+          </Button>
+          <Button 
+            variant="default" 
+            onClick={() => fetchAllData(true, dateRange)}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh Analytics
           </Button>
           <Button 
             variant="outline"
@@ -509,11 +807,38 @@ export function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Error State */}
+      {/* Error/Warning State */}
       {error && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className={error.includes('Rate limit') || error.includes('credentials') || error.includes('Failed') 
+          ? "border-red-200 bg-red-50" 
+          : "border-yellow-200 bg-yellow-50"}>
           <CardContent className="pt-6">
-            <p className="text-sm text-red-800">{error}</p>
+            <div className="flex items-start gap-2">
+              {error.includes('Rate limit') || error.includes('credentials') || error.includes('Failed') ? (
+                <span className="text-red-600">⚠️</span>
+              ) : (
+                <span className="text-yellow-600">ℹ️</span>
+              )}
+              <div className="flex-1">
+                <p className={`text-sm font-medium ${
+                  error.includes('Rate limit') || error.includes('credentials') || error.includes('Failed')
+                    ? 'text-red-800' 
+                    : 'text-yellow-800'
+                }`}>
+                  {error}
+                </p>
+                {error.includes('Rate limit') && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Please wait a few minutes before trying again.
+                  </p>
+                )}
+                {error.includes('credentials') && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Please check your X API credentials in Settings.
+                  </p>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -693,10 +1018,7 @@ export function AnalyticsDashboard() {
                     </div>
                   </div>
                   <Badge variant="secondary">
-                    {post.impressions > 0 
-                      ? `${post.engagementRate.toFixed(1)}% ER`
-                      : 'N/A'
-                    }
+                    {post.engagementRate.toFixed(1)} ER
                   </Badge>
                 </div>
               ))}
@@ -759,3 +1081,4 @@ export function AnalyticsDashboard() {
     </div>
   )
 }
+

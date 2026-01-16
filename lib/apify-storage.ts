@@ -18,6 +18,8 @@ export async function storeApifyCredentials(
 ): Promise<{ success: boolean; error?: string; id?: string }> {
   try {
     console.log('🔐 Storing Apify credentials for user:', userId);
+    console.log('   User ID type:', typeof userId);
+    console.log('   User ID length:', userId?.length);
 
     // Encrypt the API key before storing
     const encryptedApiKey = await encrypt(credentials.apiKey);
@@ -35,6 +37,19 @@ export async function storeApifyCredentials(
       encryption_version: 1,
       is_valid: false, // Will be validated separately
     };
+
+    // Check if there's an existing entry with x_username that we should preserve
+    const { data: existing } = await supabaseAdmin
+      .from('user_credentials')
+      .select('x_username')
+      .eq('user_id', userId)
+      .eq('credential_type', 'apify')
+      .single();
+
+    // Preserve existing username if it exists
+    if (existing?.x_username) {
+      (encryptedData as any).x_username = existing.x_username;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
@@ -74,6 +89,18 @@ export async function getApifyCredentials(
 ): Promise<{ success: boolean; credentials?: ApifyCredentials; error?: string }> {
   try {
     console.log('🔍 Retrieving Apify credentials for user:', userId);
+    console.log('   User ID type:', typeof userId);
+    console.log('   User ID length:', userId?.length);
+
+    // Diagnostic: Check all Apify credentials in the database
+    const { data: allApifyCreds } = await supabaseAdmin
+      .from('user_credentials')
+      .select('user_id, credential_type, created_at')
+      .eq('credential_type', 'apify');
+    console.log(`   Found ${allApifyCreds?.length || 0} total Apify credentials in database`);
+    if (allApifyCreds && allApifyCreds.length > 0) {
+      console.log('   Existing Apify credential user IDs:', allApifyCreds.map(c => c.user_id));
+    }
 
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
@@ -85,6 +112,8 @@ export async function getApifyCredentials(
     if (error) {
       if (error.code === 'PGRST116') {
         // No credentials found
+        console.error(`❌ No Apify credentials found for user ID: ${userId}`);
+        console.error(`   Searched for user_id="${userId}" and credential_type="apify"`);
         return {
           success: false,
           error: 'No Apify credentials found for this user',
@@ -126,6 +155,142 @@ export async function getApifyCredentials(
     }
   } catch (error) {
     console.error('❌ Error retrieving Apify credentials:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * Store X username for a user (to avoid rate limit issues)
+ */
+export async function storeXUsername(
+  userId: string,
+  username: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('💾 Storing X username for user:', userId, 'username:', username);
+    
+    // Remove @ if present
+    const cleanUsername = username.replace(/^@/, '').trim();
+    
+    if (!cleanUsername) {
+      return {
+        success: false,
+        error: 'Username cannot be empty',
+      };
+    }
+
+    // Update or insert the username in the user_credentials table
+    // We'll store it with the apify credential type, or create a new entry
+    const { data: existingCreds } = await supabaseAdmin
+      .from('user_credentials')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('credential_type', 'apify')
+      .single();
+
+    if (existingCreds) {
+      // Update existing Apify credentials with username
+      const { error } = await supabaseAdmin
+        .from('user_credentials')
+        .update({ x_username: cleanUsername })
+        .eq('user_id', userId)
+        .eq('credential_type', 'apify');
+
+      if (error) {
+        console.error('❌ Failed to update X username:', error);
+        return {
+          success: false,
+          error: `Database error: ${error.message}`,
+        };
+      }
+    } else {
+      // Create a minimal entry just for the username
+      // We'll use null for encrypted fields since we're just storing username
+      const { error } = await supabaseAdmin
+        .from('user_credentials')
+        .insert({
+          user_id: userId,
+          credential_type: 'apify',
+          encrypted_api_key: '', // Placeholder - will be filled when Apify credentials are saved
+          encrypted_api_secret: null,
+          encrypted_access_token: null,
+          encrypted_access_secret: null,
+          encrypted_bearer_token: null,
+          x_username: cleanUsername,
+          encryption_version: 1,
+          is_valid: false,
+        });
+
+      if (error) {
+        console.error('❌ Failed to store X username:', error);
+        return {
+          success: false,
+          error: `Database error: ${error.message}`,
+        };
+      }
+    }
+
+    console.log('✅ X username stored successfully');
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error('❌ Error storing X username:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * Get stored X username for a user
+ */
+export async function getXUsername(
+  userId: string
+): Promise<{ success: boolean; username?: string; error?: string }> {
+  try {
+    console.log('🔍 Retrieving X username for user:', userId);
+
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .select('x_username')
+      .eq('user_id', userId)
+      .eq('credential_type', 'apify')
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No credentials found
+        return {
+          success: false,
+          error: 'No X username found for this user',
+        };
+      }
+      console.error('❌ Database error retrieving X username:', error);
+      return {
+        success: false,
+        error: `Database error: ${error.message}`,
+      };
+    }
+
+    if (!data.x_username) {
+      return {
+        success: false,
+        error: 'No X username stored for this user',
+      };
+    }
+
+    console.log('✅ X username retrieved successfully:', data.x_username);
+    return {
+      success: true,
+      username: data.x_username,
+    };
+  } catch (error) {
+    console.error('❌ Error retrieving X username:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',

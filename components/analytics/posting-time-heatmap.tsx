@@ -148,7 +148,7 @@ export function PostingTimeHeatmap({ data, loading = false }: PostingTimeHeatmap
                                   {dayName}, {HOUR_LABELS[hour]}
                                 </div>
                                 <div className="text-muted-foreground mt-1">
-                                  Engagement Rate: {rate > 0 ? `${rate.toFixed(2)}%` : 'No data'}
+                                  Engagement Rate: {rate > 0 ? `${rate.toFixed(2)}` : 'No data'}
                                 </div>
                               </div>
                             </TooltipContent>

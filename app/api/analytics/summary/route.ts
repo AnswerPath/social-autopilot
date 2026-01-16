@@ -18,17 +18,39 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     
     if (startDate && endDate) {
-      console.log(`   Date range: ${startDate} to ${endDate}`);
+      console.log(`   Raw date range from URL: ${startDate} to ${endDate}`);
     }
 
     const analyticsService = createPostAnalyticsService();
 
-    const dateRange = startDate && endDate
+    // Parse dates correctly - if in YYYY-MM-DD format, append time to ensure UTC parsing
+    let parsedStartDate: Date | undefined;
+    let parsedEndDate: Date | undefined;
+    
+    if (startDate) {
+      // If date is in YYYY-MM-DD format, append T00:00:00.000Z for UTC parsing
+      const dateStr = startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`;
+      parsedStartDate = new Date(dateStr);
+      console.log(`   Parsed startDate: ${startDate} -> ${parsedStartDate.toISOString()}`);
+    }
+    
+    if (endDate) {
+      // If date is in YYYY-MM-DD format, append T23:59:59.999Z for end of day in UTC
+      const dateStr = endDate.includes('T') ? endDate : `${endDate}T23:59:59.999Z`;
+      parsedEndDate = new Date(dateStr);
+      console.log(`   Parsed endDate: ${endDate} -> ${parsedEndDate.toISOString()}`);
+    }
+    
+    const dateRange = parsedStartDate && parsedEndDate
       ? {
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
+          startDate: parsedStartDate,
+          endDate: parsedEndDate,
         }
       : undefined;
+
+    if (dateRange) {
+      console.log(`   Final date range: ${dateRange.startDate.toISOString()} to ${dateRange.endDate.toISOString()}`);
+    }
 
     const summaryResult = await analyticsService.getAnalyticsSummary(userId, dateRange);
     
@@ -59,3 +81,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

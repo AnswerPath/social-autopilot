@@ -8,7 +8,7 @@ export interface CalendarPost {
   id: string
   content: string
   scheduledAt: string
-  status: 'draft' | 'scheduled' | 'pending_approval' | 'approved' | 'rejected' | 'changes_requested' | 'published' | 'failed'
+  status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'changes_requested' | 'published' | 'failed'
   timezone?: string
   mediaUrls?: string[]
 }
@@ -27,7 +27,7 @@ export function getStatusColor(status: CalendarPost['status']): string {
   switch (status) {
     case 'draft':
       return 'bg-gray-100 border-gray-300 text-gray-700'
-    case 'scheduled':
+    case 'approved':
       return 'bg-blue-50 border-blue-400 text-blue-700'
     case 'pending_approval':
       return 'bg-yellow-50 border-yellow-400 text-yellow-700'
@@ -51,7 +51,7 @@ export function getStatusColor(status: CalendarPost['status']): string {
  */
 export function getStatusBadgeVariant(status: CalendarPost['status']): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
-    case 'scheduled':
+    case 'approved':
       return 'default'
     case 'pending_approval':
       return 'secondary'

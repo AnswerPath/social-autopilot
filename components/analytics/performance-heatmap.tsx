@@ -52,25 +52,23 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
         const dateKey = date.toISOString().split('T')[0]
         
         const latest = post.latest!
-        const totalEngagement = latest.likes + latest.retweets + latest.replies
-        const engagementRate = latest.impressions && latest.impressions > 0
-          ? (totalEngagement / latest.impressions) * 100
-          : 0
+        // Engagement rate is now based on likes only (average likes per post)
+        const engagementRate = latest.likes || 0
 
         const existing = dayMap.get(dateKey)
         if (existing) {
-          existing.totalEngagement += totalEngagement
+          existing.totalEngagement += latest.likes || 0
           existing.impressions += latest.impressions || 0
           existing.postCount += 1
-          // Recalculate average engagement rate
-          existing.engagementRate = existing.impressions > 0
-            ? (existing.totalEngagement / existing.impressions) * 100
+          // Recalculate average engagement rate (average likes per post for the day)
+          existing.engagementRate = existing.postCount > 0
+            ? existing.totalEngagement / existing.postCount
             : 0
         } else {
           dayMap.set(dateKey, {
             date,
             engagementRate,
-            totalEngagement,
+            totalEngagement: latest.likes || 0,
             impressions: latest.impressions || 0,
             postCount: 1,
             intensity: 0 // Will be calculated below
@@ -287,7 +285,7 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
                                 <div className="space-y-1">
                                   <div className="font-medium">{formatDate(day.date)}</div>
                                   <div className="text-xs space-y-0.5">
-                                    <div>Engagement Rate: {day.engagementRate.toFixed(2)}%</div>
+                                    <div>Engagement Rate: {day.engagementRate.toFixed(2)}</div>
                                     <div>Impressions: {day.impressions.toLocaleString()}</div>
                                     <div>Posts: {day.postCount}</div>
                                   </div>

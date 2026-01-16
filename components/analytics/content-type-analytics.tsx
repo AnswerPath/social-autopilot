@@ -68,15 +68,12 @@ export function ContentTypeAnalytics({ data, loading = false }: ContentTypeAnaly
     }
   }
 
-  // Calculate engagement rate for a post
+  // Calculate engagement rate for a post (based on likes, not impressions)
   const calculateEngagementRate = (post: PostAnalyticsData): number => {
     if (!post.latest) return 0
     const latest = post.latest
-    const totalEngagement = latest.likes + latest.retweets + latest.replies
-    if (latest.impressions && latest.impressions > 0) {
-      return (totalEngagement / latest.impressions) * 100
-    }
-    return 0
+    // Engagement rate is now based on likes only (average likes per post)
+    return latest.likes || 0
   }
 
   // Aggregate data by media type
@@ -245,7 +242,7 @@ export function ContentTypeAnalytics({ data, loading = false }: ContentTypeAnaly
                   dataKey="Avg Engagement Rate" 
                   fill="var(--color-avg-engagement-rate)" 
                   radius={4}
-                  name="Avg Engagement Rate (%)"
+                  name="Avg Engagement Rate"
                 />
                 <Bar 
                   yAxisId="right"
@@ -262,7 +259,7 @@ export function ContentTypeAnalytics({ data, loading = false }: ContentTypeAnaly
               {mediaTypeData.map(item => (
                 <div key={item.type} className="flex justify-between">
                   <span>{item.type}:</span>
-                  <span>{item.postCount} posts, {item.avgEngagementRate.toFixed(2)}% avg ER</span>
+                  <span>{item.postCount} posts, {item.avgEngagementRate.toFixed(2)} avg ER</span>
                 </div>
               ))}
             </div>
@@ -312,7 +309,7 @@ export function ContentTypeAnalytics({ data, loading = false }: ContentTypeAnaly
                   dataKey="Avg Engagement Rate" 
                   fill="var(--color-avg-engagement-rate)" 
                   radius={4}
-                  name="Avg Engagement Rate (%)"
+                  name="Avg Engagement Rate"
                 />
                 <Bar 
                   yAxisId="right"
@@ -329,7 +326,7 @@ export function ContentTypeAnalytics({ data, loading = false }: ContentTypeAnaly
               {lengthCategoryData.map(item => (
                 <div key={item.category} className="flex justify-between">
                   <span>{item.category} ({(item.category === 'Short' ? '0-100' : item.category === 'Medium' ? '101-200' : '201+')} chars):</span>
-                  <span>{item.postCount} posts, {item.avgEngagementRate.toFixed(2)}% avg ER</span>
+                  <span>{item.postCount} posts, {item.avgEngagementRate.toFixed(2)} avg ER</span>
                 </div>
               ))}
             </div>

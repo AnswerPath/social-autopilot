@@ -95,10 +95,8 @@ export function PostAnalyticsTable({ data, loading = false }: PostAnalyticsTable
       .filter(post => post.latest)
       .map(post => {
         const latest = post.latest!
-        const totalEngagement = latest.likes + latest.retweets + latest.replies
-        const engagementRate = latest.impressions && latest.impressions > 0
-          ? (totalEngagement / latest.impressions) * 100
-          : 0
+        // Engagement rate is now based on likes only (average likes per post)
+        const engagementRate = latest.likes || 0
 
         return {
           postId: post.postId,
@@ -256,10 +254,7 @@ export function PostAnalyticsTable({ data, loading = false }: PostAnalyticsTable
                 </TableCell>
                 <TableCell className="text-right">
                   <Badge variant="secondary">
-                    {row.impressions > 0 
-                      ? `${row.engagementRate.toFixed(2)}%`
-                      : 'N/A'
-                    }
+                    {row.engagementRate.toFixed(2)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right text-sm">

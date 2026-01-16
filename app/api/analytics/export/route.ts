@@ -38,10 +38,14 @@ export async function GET(request: NextRequest) {
 
     const analyticsService = createPostAnalyticsService();
 
+    // Parse dates correctly - if in YYYY-MM-DD format, append time to ensure UTC parsing
+    const startDateStr = startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`;
+    const endDateStr = endDate.includes('T') ? endDate : `${endDate}T23:59:59.999Z`;
+    
     // Fetch summary metrics
     const dateRange = {
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: new Date(startDateStr),
+      endDate: new Date(endDateStr),
     };
     const summaryResult = await analyticsService.getAnalyticsSummary(userId, dateRange);
     const summary = summaryResult.success ? summaryResult.summary : null;
@@ -157,3 +161,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

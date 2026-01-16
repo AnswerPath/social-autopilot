@@ -194,7 +194,7 @@ export function PostingRecommendations() {
                   <div className="flex items-center gap-4 text-xs">
                     <span className="text-muted-foreground">
                       Avg. Engagement Rate: <span className="font-semibold text-foreground">
-                        {rec.averageEngagementRate.toFixed(2)}%
+                        {rec.averageEngagementRate.toFixed(2)}
                       </span>
                     </span>
                     <span className="text-muted-foreground">

@@ -32,11 +32,10 @@ export function transformTweetAnalytics(raw: any): PostAnalytics {
                           (metrics.reply_count || 0) + 
                           (metrics.quote_count || 0);
 
-  // Calculate engagement rate if impressions are available
+  // Calculate engagement rate (based on likes only, not requiring impressions)
   const impressions = metrics.impression_count;
-  const engagementRate = impressions && impressions > 0
-    ? (totalEngagements / impressions) * 100
-    : undefined;
+  // Engagement rate is now based on likes only (average likes per post)
+  const engagementRate = metrics.like_count || 0;
 
   return {
     tweetId: raw.id || '',
@@ -67,7 +66,7 @@ export function transformUserMetrics(raw: any): FollowerAnalytics {
 
 /**
  * Calculate engagement rate from metrics
- * Formula: (likes + retweets + replies + quotes) / impressions * 100
+ * Formula: likes (average likes per post, not requiring impressions)
  */
 export function calculateEngagementRate(metrics: {
   likes: number;
@@ -76,12 +75,9 @@ export function calculateEngagementRate(metrics: {
   quotes: number;
   impressions?: number;
 }): number | undefined {
-  if (!metrics.impressions || metrics.impressions === 0) {
-    return undefined;
-  }
-
-  const totalEngagements = metrics.likes + metrics.retweets + metrics.replies + metrics.quotes;
-  return (totalEngagements / metrics.impressions) * 100;
+  // Engagement rate is now based on likes only (average likes per post)
+  // This allows calculation even when impressions are not available
+  return metrics.likes;
 }
 
 /**

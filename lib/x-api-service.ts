@@ -133,16 +133,62 @@ export class XApiService {
   /**
    * Test the X API connection and credentials validity
    */
-  async testConnection(): Promise<{ success: boolean; error?: string; user?: any }> {
+  async testConnection(): Promise<{ success: boolean; error?: string; user?: any; rateLimit?: any }> {
     try {
       // Test the connection by getting user info
       const user = await this.client.v2.me();
-      return { success: true, user: user.data };
-    } catch (error) {
+      
+      // Extract rate limit info if available
+      const rateLimitInfo = this.extractRateLimitInfo(user);
+      
+      return { 
+        success: true, 
+        user: user.data,
+        rateLimit: rateLimitInfo,
+      };
+    } catch (error: any) {
       console.error('X API connection test failed:', error);
+      
+      // Extract rate limit info from error if available
+      const rateLimitInfo = this.extractRateLimitInfoFromError(error);
+      
+      // Extract more detailed error information
+      let errorMessage = 'Unknown error occurred';
+      let errorCode = null;
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error?.data) {
+        // Twitter API v2 error format
+        errorMessage = error.data.detail || error.data.title || error.message || 'Unknown error';
+        errorCode = error.data.type || error.status;
+      } else if (error?.response) {
+        // HTTP error response
+        errorMessage = error.response.data?.detail || error.response.data?.title || error.message || 'Unknown error';
+        errorCode = error.response.status;
+      }
+      
+      // Provide more helpful error messages
+      if (errorCode === 401 || errorMessage.includes('Unauthorized') || errorMessage.includes('Invalid')) {
+        errorMessage = 'Invalid X API credentials. Please check your API keys, secrets, access token, and access token secret in Settings.';
+      } else if (errorCode === 403 || errorMessage.includes('Forbidden')) {
+        errorMessage = 'X API access forbidden. Your credentials may not have the required permissions.';
+      } else if (errorCode === 429 || errorMessage.includes('rate limit') || errorMessage.includes('Rate limit')) {
+        if (rateLimitInfo) {
+          const resetTime = new Date(rateLimitInfo.resetAt * 1000);
+          const minutesUntilReset = Math.ceil((rateLimitInfo.resetAt * 1000 - Date.now()) / 1000 / 60);
+          errorMessage = `X API rate limit exceeded for user lookup endpoint. ${rateLimitInfo.remaining || 0} requests remaining. Reset in ${minutesUntilReset} minutes (${resetTime.toLocaleTimeString()}).`;
+        } else {
+          errorMessage = 'X API rate limit exceeded. Please wait a few minutes and try again.';
+        }
+      } else if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('ECONNREFUSED')) {
+        errorMessage = 'Network error connecting to X API. Please check your internet connection.';
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: errorMessage,
+        rateLimit: rateLimitInfo,
       };
     }
   }
@@ -179,244 +225,111 @@ export class XApiService {
   /**
    * Get user's own tweets
    */
-  async getUserTweets(userId: string, limit: number = 50, startTime?: Date, endTime?: Date): Promise<any> {
+  async getUserTweets(userId: string, limit: number = 50): Promise<any> {
     try {
-      const options: any = {
-        max_results: Math.min(limit, 100), // X API max is 100 per request
-        'tweet.fields': ['created_at', 'public_metrics', 'entities', 'text', 'id'],
-      };
+      const tweets = await this.client.v2.userTimeline(userId, {
+        max_results: limit,
+        'tweet.fields': ['created_at', 'public_metrics', 'entities'],
+      });
 
-      if (startTime) {
-        options.start_time = startTime.toISOString();
-      }
-      if (endTime) {
-        options.end_time = endTime.toISOString();
-      }
-
-      const tweets = await this.client.v2.userTimeline(userId, options);
+      // Extract rate limit info from response headers if available
+      const rateLimitInfo = this.extractRateLimitInfo(tweets);
 
       return {
         success: true,
         tweets: tweets.data.data || [],
         meta: tweets.data.meta,
+        rateLimit: rateLimitInfo,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('X API get user tweets error:', error);
+      
+      // Extract rate limit info from error if available
+      const rateLimitInfo = this.extractRateLimitInfoFromError(error);
+      
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      // Enhance error message for rate limits
+      if (errorMessage.includes('429') || errorMessage.includes('rate limit') || errorMessage.includes('Rate limit')) {
+        if (rateLimitInfo) {
+          const resetTime = new Date(rateLimitInfo.resetAt * 1000);
+          const minutesUntilReset = Math.ceil((rateLimitInfo.resetAt * 1000 - Date.now()) / 1000 / 60);
+          errorMessage = `X API rate limit exceeded for user timeline endpoint. Free tier allows 15 requests per 15 minutes. ${rateLimitInfo.remaining || 0} requests remaining. Reset in ${minutesUntilReset} minutes (${resetTime.toLocaleTimeString()}).`;
+        } else {
+          errorMessage = 'X API rate limit exceeded for user timeline endpoint. Free tier allows 15 requests per 15 minutes. Please wait 15 minutes before trying again.';
+        }
+      }
+      
       return {
         success: false,
         tweets: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error: errorMessage,
+        rateLimit: rateLimitInfo,
       };
     }
   }
 
   /**
-   * Get analytics for a specific tweet
-   * Note: X API v2 provides public_metrics in the tweet object, but detailed analytics
-   * require Twitter API v2 with Academic Research access or Twitter Analytics API
+   * Extract rate limit information from API response
    */
-  async getTweetAnalytics(tweetId: string): Promise<{
-    success: boolean;
-    analytics?: {
-      tweetId: string;
-      impressions?: number;
-      likes: number;
-      retweets: number;
-      replies: number;
-      quotes: number;
-      engagementRate?: number;
-    };
-    error?: string;
-  }> {
-    return this.circuitBreaker.execute(async () => {
-      return ApiErrorHandler.executeWithRetry(
-        async () => {
-          try {
-            // Fetch tweet with public_metrics
-            const tweet = await this.client.v2.singleTweet(tweetId, {
-              'tweet.fields': ['public_metrics', 'created_at', 'text'],
-            });
-
-            if (!tweet.data) {
-              return {
-                success: false,
-                error: 'Tweet not found',
-              };
-            }
-
-            const metrics = tweet.data.public_metrics || {};
-            const totalEngagements = (metrics.like_count || 0) + 
-                                    (metrics.retweet_count || 0) + 
-                                    (metrics.reply_count || 0) + 
-                                    (metrics.quote_count || 0);
-
-            // Note: Impressions are not available in public_metrics without Analytics API access
-            // We'll calculate engagement rate based on available metrics
-            const engagementRate = totalEngagements > 0 ? 
-              (totalEngagements / Math.max(1, metrics.impression_count || 1)) * 100 : 0;
-
-            return {
-              success: true,
-              analytics: {
-                tweetId: tweet.data.id,
-                impressions: metrics.impression_count || undefined, // May be undefined without Analytics API
-                likes: metrics.like_count || 0,
-                retweets: metrics.retweet_count || 0,
-                replies: metrics.reply_count || 0,
-                quotes: metrics.quote_count || 0,
-                engagementRate: engagementRate,
-              },
-            };
-          } catch (error) {
-            throw ApiErrorHandler.normalizeError(error, 'x-api', {
-              endpoint: 'tweet-analytics',
-              userId: this.credentials.userId,
-            });
-          }
-        },
-        'x-api',
-        undefined,
-        { endpoint: 'tweet-analytics', userId: this.credentials.userId }
-      );
-    });
-  }
-
-  /**
-   * Get user-level analytics (follower metrics)
-   */
-  async getUserAnalytics(userId?: string): Promise<{
-    success: boolean;
-    analytics?: {
-      followerCount: number;
-      followingCount: number;
-      tweetCount: number;
-    };
-    error?: string;
-  }> {
+  private extractRateLimitInfo(response: any): { limit: number; remaining: number; resetAt: number } | null {
     try {
-      // Get current user's profile (me) or specified user
-      const user = userId 
-        ? await this.client.v2.user(userId, {
-            'user.fields': ['public_metrics'],
-          })
-        : await this.client.v2.me({
-            'user.fields': ['public_metrics'],
-          });
-
-      if (!user.data) {
+      // twitter-api-v2 library stores rate limit info in response.rateLimit
+      if (response.rateLimit) {
         return {
-          success: false,
-          error: 'User not found',
+          limit: response.rateLimit.limit || 0,
+          remaining: response.rateLimit.remaining || 0,
+          resetAt: response.rateLimit.reset || Math.floor(Date.now() / 1000) + 900, // Default to 15 min from now
         };
       }
-
-      const metrics = user.data.public_metrics || {};
-
-      return {
-        success: true,
-        analytics: {
-          followerCount: metrics.followers_count || 0,
-          followingCount: metrics.following_count || 0,
-          tweetCount: metrics.tweet_count || 0,
-        },
-      };
-    } catch (error) {
-      console.error('X API get user analytics error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
-  }
-
-  /**
-   * Fetch ALL user tweets with their analytics
-   * CRITICAL: Fetches from user's X timeline, NOT from scheduled_posts table
-   */
-  async getTweetsWithAnalytics(
-    userId: string, 
-    limit: number = 50, 
-    startTime?: Date, 
-    endTime?: Date
-  ): Promise<{
-    success: boolean;
-    tweets?: Array<{
-      id: string;
-      text: string;
-      created_at?: string;
-      analytics: {
-        likes: number;
-        retweets: number;
-        replies: number;
-        quotes: number;
-        impressions?: number;
-        engagementRate?: number;
-      };
-    }>;
-    meta?: any;
-    error?: string;
-  }> {
-    try {
-      const result = await this.getUserTweets(userId, limit, startTime, endTime);
       
-      if (!result.success || !result.tweets) {
-        return {
-          success: false,
-          error: result.error || 'Failed to fetch tweets',
-        };
-      }
-
-      // Fetch analytics for each tweet
-      const tweetsWithAnalytics = [];
-      for (const tweet of result.tweets) {
-        try {
-          const analyticsResult = await this.getTweetAnalytics(tweet.id);
-          
-          if (analyticsResult.success && analyticsResult.analytics) {
-            tweetsWithAnalytics.push({
-              id: tweet.id,
-              text: tweet.text || '',
-              created_at: tweet.created_at,
-              analytics: analyticsResult.analytics,
-            });
-          } else {
-            // If analytics fetch fails, still include tweet with basic metrics from public_metrics
-            const metrics = tweet.public_metrics || {};
-            tweetsWithAnalytics.push({
-              id: tweet.id,
-              text: tweet.text || '',
-              created_at: tweet.created_at,
-              analytics: {
-                likes: metrics.like_count || 0,
-                retweets: metrics.retweet_count || 0,
-                replies: metrics.reply_count || 0,
-                quotes: metrics.quote_count || 0,
-                impressions: metrics.impression_count,
-                engagementRate: undefined,
-              },
-            });
-          }
-
-          // Add small delay to respect rate limits
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } catch (error) {
-          console.error(`Error fetching analytics for tweet ${tweet.id}:`, error);
-          // Continue with next tweet even if one fails
+      // Try to extract from headers if available
+      if (response.headers) {
+        const limit = parseInt(response.headers.get('x-rate-limit-limit') || '0');
+        const remaining = parseInt(response.headers.get('x-rate-limit-remaining') || '0');
+        const reset = parseInt(response.headers.get('x-rate-limit-reset') || '0');
+        
+        if (limit > 0) {
+          return { limit, remaining, resetAt: reset };
         }
       }
-
-      return {
-        success: true,
-        tweets: tweetsWithAnalytics,
-        meta: result.meta,
-      };
-    } catch (error) {
-      console.error('X API get tweets with analytics error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
+    } catch (e) {
+      // Ignore extraction errors
     }
+    
+    return null;
+  }
+
+  /**
+   * Extract rate limit information from error response
+   */
+  private extractRateLimitInfoFromError(error: any): { limit: number; remaining: number; resetAt: number } | null {
+    try {
+      // Check if error has rate limit info
+      if (error.rateLimit) {
+        return {
+          limit: error.rateLimit.limit || 0,
+          remaining: error.rateLimit.remaining || 0,
+          resetAt: error.rateLimit.reset || Math.floor(Date.now() / 1000) + 900,
+        };
+      }
+      
+      // Check error response headers
+      if (error.response?.headers) {
+        const headers = error.response.headers;
+        const limit = parseInt(headers.get('x-rate-limit-limit') || '0');
+        const remaining = parseInt(headers.get('x-rate-limit-remaining') || '0');
+        const reset = parseInt(headers.get('x-rate-limit-reset') || '0');
+        
+        if (limit > 0) {
+          return { limit, remaining, resetAt: reset };
+        }
+      }
+    } catch (e) {
+      // Ignore extraction errors
+    }
+    
+    return null;
   }
 
   /**

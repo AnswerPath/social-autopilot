@@ -12,8 +12,38 @@ import { TokenManagement } from "./token-management"
 import { ErrorMonitoring } from "./error-monitoring"
 import { ComplianceManagement } from "./compliance-management"
 import { Settings, Twitter, Bell, Shield, User, Bot } from 'lucide-react'
+import { useAuth } from "@/hooks/use-auth"
 
 export function SettingsPage() {
+  const { user, loading } = useAuth()
+  
+  // Don't use demo-user fallback - require actual authentication
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center justify-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (!user || !user.id) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-lg font-semibold text-gray-900">Authentication Required</p>
+            <p className="text-gray-600 mt-2">Please log in to access settings.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  const userId = user.id
+  console.log('🔧 Settings page - Authenticated user ID:', userId)
+  
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center gap-3">
@@ -49,7 +79,7 @@ export function SettingsPage() {
         </TabsList>
 
         <TabsContent value="integrations">
-          <HybridSettings userId="demo-user" />
+          <HybridSettings userId={userId} />
         </TabsContent>
 
         <TabsContent value="twitter">
@@ -67,9 +97,9 @@ export function SettingsPage() {
         <TabsContent value="security">
           <div className="space-y-6">
             <SecuritySettings />
-            <TokenManagement userId="demo-user" />
+            <TokenManagement userId={userId} />
             <ErrorMonitoring />
-            <ComplianceManagement userId="demo-user" />
+            <ComplianceManagement userId={userId} />
           </div>
         </TabsContent>
       </Tabs>

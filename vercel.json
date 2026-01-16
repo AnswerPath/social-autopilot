@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/scheduler/dispatch",
+      "schedule": "*/1 * * * *"
+    }
+  ]
+}
+

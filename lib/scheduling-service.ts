@@ -13,7 +13,7 @@ export interface SchedulePostInput {
   scheduledTime: string // HH:MM
   timezone?: string
   userId: string
-  status?: 'draft' | 'scheduled' | 'pending_approval' | 'approved'
+  status?: 'draft' | 'pending_approval' | 'approved'
   requiresApproval?: boolean
 }
 
@@ -87,7 +87,7 @@ export class SchedulingService {
         .eq('user_id', userId)
         .gte('scheduled_at', windowStart.toISOString())
         .lte('scheduled_at', windowEnd.toISOString())
-        .in('status', ['scheduled', 'pending_approval', 'approved'])
+        .in('status', ['approved', 'pending_approval'])
 
       if (excludePostId) {
         query = query.neq('id', excludePostId)
@@ -152,7 +152,9 @@ export class SchedulingService {
       }
 
       // Determine initial status
-      let initialStatus = input.status || 'scheduled'
+      // If no status provided and doesn't require approval, default to 'approved'
+      // If requires approval, use 'pending_approval'
+      let initialStatus = input.status || (input.requiresApproval ? 'pending_approval' : 'approved')
       let requiresApproval = input.requiresApproval ?? false
 
       // Check if approval is required based on content
