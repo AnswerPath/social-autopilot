@@ -245,6 +245,7 @@ export class ApifyService {
       const cleanUsername = username.replace('@', '');
       
       // Try to get actor input schema to see what parameters are expected
+      let inputSchema: any = null;
       try {
         const actor = this.client.actor(actorId);
         const actorInfo = await actor.get();
@@ -252,8 +253,12 @@ export class ApifyService {
           name: actorInfo.name,
           username: actorInfo.username,
           description: actorInfo.description?.substring(0, 200),
-          // inputSchema: actorInfo.inputSchema, // May contain input schema
         });
+        // Try to get the input schema if available
+        if ((actorInfo as any).inputSchema) {
+          inputSchema = (actorInfo as any).inputSchema;
+          console.log(`📋 Actor input schema:`, JSON.stringify(inputSchema, null, 2));
+        }
       } catch (schemaError) {
         console.log(`⚠️ Could not fetch actor info (this is optional):`, schemaError instanceof Error ? schemaError.message : String(schemaError));
       }
@@ -266,19 +271,20 @@ export class ApifyService {
         customMapFunction: '(object) => { return {...object} }',
         getAboutData: false,
         getReplies: false,
+        minReplyCount: 0, // Include minReplyCount as shown in example
       };
 
       // Add date range if provided
+      // Note: Only include dates if explicitly provided - don't default to current year
+      // as this might filter out older tweets unnecessarily
       if (options?.startDate) {
         // Format date as YYYY-MM-DD
         const startDate = options.startDate instanceof Date 
           ? options.startDate.toISOString().split('T')[0]
           : options.startDate;
         input.start = startDate;
-      } else {
-        // Default to start of current year
-        input.start = new Date().getFullYear() + '-01-01';
       }
+      // Don't set default start date - let actor decide or use its own defaults
 
       if (options?.endDate) {
         // Format date as YYYY-MM-DD
@@ -286,10 +292,8 @@ export class ApifyService {
           ? options.endDate.toISOString().split('T')[0]
           : options.endDate;
         input.end = endDate;
-      } else {
-        // Default to end of current year
-        input.end = new Date().getFullYear() + '-12-31';
       }
+      // Don't set default end date - let actor decide or use its own defaults
 
       // Add maxItems parameter (corresponds to maxPosts)
       if (options?.maxPosts) {
@@ -353,25 +357,57 @@ export class ApifyService {
       // Get the dataset items from the run
       const dataset = this.client.run(run.id).dataset();
       
+      // Get dataset info first to debug
+      const datasetInfo = await dataset.get();
+      console.log(`📊 Dataset info:`, {
+        id: datasetInfo.id,
+        itemCount: datasetInfo.itemCount,
+        createdAt: datasetInfo.createdAt,
+      });
+      
       // Try to get all items - check if pagination is needed
       let items = await dataset.listItems({ limit: 1000 }); // Request up to 1000 items
+      
+      console.log(`📊 Initial fetch:`, {
+        total: items.total,
+        count: items.items?.length || 0,
+        hasMore: items.total > (items.items?.length || 0),
+      });
       
       // If total indicates more items exist but we got empty array, try without limit
       if ((!items.items || items.items.length === 0) && items.total > 0) {
         console.log(`⚠️ Dataset shows ${items.total} total items but received 0. Trying to fetch all items...`);
         items = await dataset.listItems(); // Try without explicit limit
+        console.log(`📊 Fetch without limit:`, {
+          total: items.total,
+          count: items.items?.length || 0,
+        });
       }
       
-      // Also check run logs for rate limit warnings even if run succeeded
+      // Also check run logs for errors and warnings even if run succeeded
       try {
         const runLog = await this.client.run(run.id).log().get();
         const logText = runLog?.log || '';
-        if (logText.includes('Rate limit') || logText.includes('rate limit') || logText.includes('upgrade your plan')) {
-          console.warn(`⚠️ Rate limit warning detected in actor logs even though run succeeded`);
-          console.warn(`   This may explain why no posts were returned`);
+        
+        // Log a sample of the run log for debugging
+        if (logText) {
+          const logLines = logText.split('\n');
+          const last50Lines = logLines.slice(-50).join('\n');
+          console.log(`📋 Last 50 lines of actor run log:`, last50Lines);
+          
+          // Check for common issues
+          if (logText.includes('Rate limit') || logText.includes('rate limit') || logText.includes('upgrade your plan')) {
+            console.warn(`⚠️ Rate limit warning detected in actor logs`);
+          }
+          if (logText.includes('No tweets found') || logText.includes('no results') || logText.includes('empty')) {
+            console.warn(`⚠️ Actor logs indicate no tweets were found`);
+          }
+          if (logText.includes('error') || logText.includes('Error') || logText.includes('ERROR')) {
+            console.error(`❌ Errors detected in actor logs`);
+          }
         }
       } catch (logError) {
-        // Ignore log fetch errors
+        console.log(`⚠️ Could not fetch actor run logs:`, logError instanceof Error ? logError.message : String(logError));
       }
 
       console.log(`📊 Apify dataset retrieved. Total items: ${items.items?.length || 0}`);
