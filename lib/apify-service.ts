@@ -275,16 +275,19 @@ export class ApifyService {
       };
 
       // Add date range if provided
-      // Note: Only include dates if explicitly provided - don't default to current year
-      // as this might filter out older tweets unnecessarily
+      // The actor appears to require dates based on the example input
+      // Default to a range that includes 2025 and 2026 to capture recent tweets
       if (options?.startDate) {
         // Format date as YYYY-MM-DD
         const startDate = options.startDate instanceof Date 
           ? options.startDate.toISOString().split('T')[0]
           : options.startDate;
         input.start = startDate;
+      } else {
+        // Default to start of 2025 (matching the example input format)
+        // This ensures we capture tweets from 2025 and 2026
+        input.start = '2025-01-01';
       }
-      // Don't set default start date - let actor decide or use its own defaults
 
       if (options?.endDate) {
         // Format date as YYYY-MM-DD
@@ -292,8 +295,10 @@ export class ApifyService {
           ? options.endDate.toISOString().split('T')[0]
           : options.endDate;
         input.end = endDate;
+      } else {
+        // Default to end of 2026 (current year)
+        input.end = '2026-12-31';
       }
-      // Don't set default end date - let actor decide or use its own defaults
 
       // Add maxItems parameter (corresponds to maxPosts)
       if (options?.maxPosts) {
