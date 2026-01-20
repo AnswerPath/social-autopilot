@@ -211,7 +211,7 @@ export class ApifyService {
   }
 
   /**
-   * Fetch post analytics using scraper_one/x-profile-posts-scraper
+   * Fetch post analytics using dy7gIgPRMhrOrfW0f actor
    * Retrieves URLs, IDs, content, publication dates, text and engagement metrics
    */
   async getPostAnalytics(
@@ -239,7 +239,7 @@ export class ApifyService {
   }> {
     try {
       console.log(`🔍 Fetching post analytics from Apify for username: ${username}`);
-      const actorId = 'scraper_one/x-profile-posts-scraper';
+      const actorId = 'dy7gIgPRMhrOrfW0f';
       
       // Clean username (remove @ if present)
       const cleanUsername = username.replace('@', '');
@@ -258,22 +258,48 @@ export class ApifyService {
         console.log(`⚠️ Could not fetch actor info (this is optional):`, schemaError instanceof Error ? schemaError.message : String(schemaError));
       }
       
-      // Prepare input parameters for the actor
-      // The actor requires profileUrls as an array of profile URLs
+      // Prepare input parameters for the new actor
+      // The new actor uses startUrls, twitterHandles, start, end, maxItems, etc.
       const input: any = {
-        profileUrls: [`https://x.com/${cleanUsername}`], // Use x.com (current Twitter domain)
+        startUrls: [`https://x.com/${cleanUsername}/`],
+        twitterHandles: [cleanUsername],
+        customMapFunction: '(object) => { return {...object} }',
+        getAboutData: false,
+        getReplies: false,
       };
 
-      // Add optional parameters
-      // Note: The Apify actor doesn't support date filtering in input, so we filter after fetching
-      if (options?.maxPosts) {
-        input.maxPosts = options.maxPosts;
+      // Add date range if provided
+      if (options?.startDate) {
+        // Format date as YYYY-MM-DD
+        const startDate = options.startDate instanceof Date 
+          ? options.startDate.toISOString().split('T')[0]
+          : options.startDate;
+        input.start = startDate;
       } else {
-        input.maxPosts = 200; // Default to 200 posts
+        // Default to start of current year
+        input.start = new Date().getFullYear() + '-01-01';
+      }
+
+      if (options?.endDate) {
+        // Format date as YYYY-MM-DD
+        const endDate = options.endDate instanceof Date 
+          ? options.endDate.toISOString().split('T')[0]
+          : options.endDate;
+        input.end = endDate;
+      } else {
+        // Default to end of current year
+        input.end = new Date().getFullYear() + '-12-31';
+      }
+
+      // Add maxItems parameter (corresponds to maxPosts)
+      if (options?.maxPosts) {
+        input.maxItems = options.maxPosts;
+      } else {
+        input.maxItems = 1000; // Default to 1000 items (higher than old actor)
       }
       
       console.log(`📡 Apify input parameters:`, JSON.stringify(input, null, 2));
-      console.log(`📡 Calling Apify actor ${actorId} with input:`, { profileUrls: input.profileUrls, maxPosts: input.maxPosts });
+      console.log(`📡 Calling Apify actor ${actorId} with input:`, { startUrls: input.startUrls, twitterHandles: input.twitterHandles, maxItems: input.maxItems, start: input.start, end: input.end });
       
       // Call the actor
       const run = await this.client.actor(actorId).call(input);
@@ -423,6 +449,7 @@ export class ApifyService {
         const firstItem = items.items[0];
         console.log(`📋 First item author info:`, {
           hasAuthor: !!firstItem.author,
+          authorUserName: firstItem.author?.userName, // New actor uses userName (camelCase)
           authorScreenName: firstItem.author?.screenName,
           authorUsername: firstItem.author?.username,
           profileUrl: firstItem.profileUrl,
@@ -434,7 +461,16 @@ export class ApifyService {
       // Filter items by author to ensure we only process tweets from the requested user
       // Apify might return retweets, replies, or other content not authored by the profile owner
       const userItems = items.items.filter((item: any) => {
-        // Check author.screenName if available
+        // Check author.userName first (new actor uses camelCase userName)
+        if (item.author?.userName) {
+          const authorUserName = String(item.author.userName).toLowerCase().replace('@', '');
+          const matches = authorUserName === cleanUsernameLower;
+          if (!matches) {
+            console.log(`   🔍 Item ${item.postId || item.id} filtered: author userName "${authorUserName}" != "${cleanUsernameLower}"`);
+          }
+          return matches;
+        }
+        // Check author.screenName if available (old actor format)
         if (item.author?.screenName) {
           const authorScreenName = String(item.author.screenName).toLowerCase().replace('@', '');
           const matches = authorScreenName === cleanUsernameLower;
@@ -443,7 +479,7 @@ export class ApifyService {
           }
           return matches;
         }
-        // Check author.username as fallback
+        // Check author.username as fallback (alternative format)
         if (item.author?.username) {
           const authorUsername = String(item.author.username).toLowerCase().replace('@', '');
           const matches = authorUsername === cleanUsernameLower;
@@ -483,37 +519,54 @@ export class ApifyService {
       }
       
       // Transform the Apify output to our format
+      // New actor returns: id, type, url, twitterUrl, text, fullText, likeCount, retweetCount, replyCount, quoteCount, viewCount, createdAt, etc.
       const posts = userItems.map((item: any) => {
-        // The actor returns posts with engagement metrics
-        // Field names may vary, so we check multiple possibilities
-        // Apify actor returns: postId, postText, postUrl, timestamp (ms), replyCount, quoteCount, favouriteCount
-        const postId = item.postId || item.id || item.tweetId || item.url?.split('/').pop() || item.postUrl?.split('/').pop() || '';
-        const url = item.postUrl || item.url || item.tweetUrl || `https://x.com/${username}/status/${postId}`;
-        const text = item.postText || item.text || item.content || item.tweet || '';
+        // Extract tweet ID - new actor uses 'id' field
+        const postId = item.id || item.postId || item.tweetId || item.url?.split('/').pop() || item.postUrl?.split('/').pop() || '';
         
-        // Handle timestamp - Apify returns milliseconds, convert to ISO string
+        // Extract URL - new actor provides both url (x.com) and twitterUrl (twitter.com)
+        const url = item.url || item.twitterUrl || item.postUrl || item.tweetUrl || `https://x.com/${username}/status/${postId}`;
+        
+        // Extract text - new actor provides both 'text' and 'fullText' (use fullText if available, fallback to text)
+        const text = item.fullText || item.text || item.postText || item.content || item.tweet || '';
+        
+        // Handle timestamp - new actor returns createdAt as formatted date string
         let createdAt: string;
-        if (item.timestamp) {
-          // Convert milliseconds to ISO string
+        if (item.createdAt) {
+          // Parse the date string format: "Wed Sep 24 18:06:27 +0000 2025"
+          if (typeof item.createdAt === 'string') {
+            // Try to parse the Twitter date format
+            try {
+              const parsedDate = new Date(item.createdAt);
+              if (!isNaN(parsedDate.getTime())) {
+                createdAt = parsedDate.toISOString();
+              } else {
+                createdAt = item.createdAt; // Use as-is if parsing fails
+              }
+            } catch {
+              createdAt = item.createdAt; // Use as-is if parsing fails
+            }
+          } else {
+            createdAt = new Date(item.createdAt).toISOString();
+          }
+        } else if (item.timestamp) {
+          // Fallback: Convert milliseconds to ISO string
           createdAt = new Date(item.timestamp).toISOString();
-        } else if (item.createdAt) {
-          createdAt = typeof item.createdAt === 'string' ? item.createdAt : new Date(item.createdAt).toISOString();
         } else if (item.date) {
           createdAt = typeof item.date === 'string' ? item.date : new Date(item.date).toISOString();
-        } else if (item.publishedAt) {
-          createdAt = typeof item.publishedAt === 'string' ? item.publishedAt : new Date(item.publishedAt).toISOString();
         } else {
           createdAt = new Date().toISOString();
         }
         
-        // Engagement metrics - check various field name possibilities
-        // Note: Apify uses British spelling "favouriteCount" not "favoriteCount"
-        // Apify returns: repostCount (not retweetCount), replyCount, quoteCount, favouriteCount
-        const likes = item.favouriteCount || item.likes || item.likeCount || item.favoriteCount || item.engagement?.likes || 0;
-        const retweets = item.repostCount || item.retweets || item.retweetCount || item.engagement?.retweets || 0; // Apify uses repostCount
+        // Engagement metrics - new actor uses camelCase field names
+        // New actor returns: likeCount, retweetCount, replyCount, quoteCount, viewCount (maps to impressions)
+        // Support both new format and fallback to old format for backward compatibility
+        const likes = item.likeCount || item.favouriteCount || item.likes || item.favoriteCount || item.engagement?.likes || 0;
+        const retweets = item.retweetCount || item.repostCount || item.retweets || item.engagement?.retweets || 0;
         const replies = item.replyCount || item.replies || item.engagement?.replies || 0;
         const quotes = item.quoteCount || item.quotes || item.engagement?.quotes || 0;
-        const impressions = item.impressions || item.impressionCount || item.views || item.engagement?.impressions || undefined;
+        // viewCount maps to impressions
+        const impressions = item.viewCount || item.impressions || item.impressionCount || item.views || item.engagement?.impressions || undefined;
         const clicks = item.clicks || item.clickCount || item.engagement?.clicks || undefined; // Check for clicks if available
 
         return {

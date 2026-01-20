@@ -2,7 +2,7 @@
 
 ## Overview
 
-The analytics system now supports using Apify's `scraper_one/x-profile-posts-scraper` actor to fetch post analytics, avoiding X API rate limits.
+The analytics system now supports using Apify's `dy7gIgPRMhrOrfW0f` actor to fetch post analytics, avoiding X API rate limits.
 
 ## How It Works
 
@@ -17,12 +17,18 @@ The analytics system now supports using Apify's `scraper_one/x-profile-posts-scr
 
 ### Apify Actor
 
-- **Actor ID**: `scraper_one/x-profile-posts-scraper`
+- **Actor ID**: `dy7gIgPRMhrOrfW0f`
 - **Purpose**: Scrapes X profiles to retrieve URLs, IDs, content, publication dates, text, and engagement metrics
 - **Input Parameters**:
-  - `profileUrls`: Array of X profile URLs (e.g., `["https://x.com/username"]`) - **Required**
-  - `maxPosts`: Maximum number of posts to fetch (default: 200)
-- **Output**: Array of posts with engagement metrics
+  - `startUrls`: Array of X profile URLs (e.g., `["https://x.com/username/"]`) - **Required**
+  - `twitterHandles`: Array of Twitter handles (e.g., `["username"]`) - **Required**
+  - `start`: Start date in YYYY-MM-DD format (default: start of current year)
+  - `end`: End date in YYYY-MM-DD format (default: end of current year)
+  - `maxItems`: Maximum number of posts to fetch (default: 1000)
+  - `getAboutData`: Whether to fetch detailed account info (default: false)
+  - `getReplies`: Whether to fetch replies (default: false)
+  - `customMapFunction`: Custom mapping function (optional)
+- **Output**: Array of posts with engagement metrics including `viewCount` (impressions), `likeCount`, `retweetCount`, `replyCount`, `quoteCount`, `bookmarkCount`, and full tweet text
 
 ## Implementation Details
 
@@ -59,17 +65,19 @@ The Apify actor returns posts in its own format. We transform it to match our `P
 
 ### Field Mapping
 
-The code handles various possible field names from the Apify actor:
+The new actor uses consistent camelCase field names. The code maps them to our database schema:
 
-- **Post ID**: `id`, `tweetId`, or extracted from URL
-- **URL**: `url`, `tweetUrl`
-- **Text**: `text`, `content`, `tweet`
-- **Created At**: `createdAt`, `date`, `timestamp`, `publishedAt`
-- **Likes**: `likes`, `likeCount`, `favoriteCount`, `engagement.likes`
-- **Retweets**: `retweets`, `retweetCount`, `engagement.retweets`
-- **Replies**: `replies`, `replyCount`, `engagement.replies`
-- **Quotes**: `quotes`, `quoteCount`, `engagement.quotes`
-- **Impressions**: `impressions`, `impressionCount`, `views`, `engagement.impressions`
+- **Post ID**: `id` (primary field)
+- **URL**: `url` (x.com) or `twitterUrl` (twitter.com)
+- **Text**: `fullText` (preferred) or `text` (fallback)
+- **Created At**: `createdAt` (formatted date string)
+- **Likes**: `likeCount` (primary) - maps to `likes`
+- **Retweets**: `retweetCount` (primary) - maps to `retweets`
+- **Replies**: `replyCount` (primary) - maps to `replies`
+- **Quotes**: `quoteCount` (primary) - maps to `quotes`
+- **Impressions**: `viewCount` (primary) - maps to `impressions`
+- **Bookmarks**: `bookmarkCount` (optional, not currently stored)
+- **Author**: `author.userName` (for filtering by author)
 
 ## Usage
 

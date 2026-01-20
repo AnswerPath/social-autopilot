@@ -21,6 +21,7 @@ export interface PostAnalytics {
   clicks?: number; // Clicks metric if available
   engagement_rate?: number;
   reach?: number;
+  tweet_text?: string; // Tweet content text
   collected_at: Date;
   tweet_created_at?: Date; // Original tweet timestamp from X/Apify
 }
@@ -429,6 +430,7 @@ export class PostAnalyticsService {
                   clicks: post.clicks, // Include clicks if available from Apify
                   engagement_rate: engagementRate || undefined,
                   reach: undefined, // Apify doesn't provide reach data
+                  tweet_text: post.text || undefined, // Store tweet text content
                   collected_at: new Date(),
                   tweet_created_at: tweetCreatedAt, // Store the actual post date
                 };
@@ -651,6 +653,11 @@ export class PostAnalyticsService {
           engagement_rate: r.engagement_rate !== undefined && r.engagement_rate !== null ? Number(r.engagement_rate) : null,
           collected_at: collectedAt,
         };
+        
+        // Include tweet_text if available
+        if (r.tweet_text !== undefined && r.tweet_text !== null) {
+          record.tweet_text = String(r.tweet_text);
+        }
         
         // Only include tweet_created_at if we have a valid value
         // This prevents errors if Supabase's schema cache doesn't recognize the column
