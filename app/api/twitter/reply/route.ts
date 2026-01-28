@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { replyToTweet } from '@/lib/twitter-api'
+import { replyToTweet } from '@/lib/twitter-api-node'
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {

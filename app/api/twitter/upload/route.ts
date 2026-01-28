@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { uploadMedia } from '@/lib/twitter-api'
+import { uploadMedia } from '@/lib/twitter-api-node'
 import { getPlatformConfig } from '@/lib/media-config'
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {

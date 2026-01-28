@@ -15,6 +15,11 @@ interface HybridSettingsProps {
 }
 
 export function HybridSettings({ userId }: HybridSettingsProps) {
+  // Log the userId we receive
+  console.log('🔧 HybridSettings - Received userId:', userId);
+  console.log('   userId type:', typeof userId);
+  console.log('   userId value:', userId);
+  
   // Apify state
   const [apifyApiKey, setApifyApiKey] = useState('');
   const [hasApifyCredentials, setHasApifyCredentials] = useState(false);
@@ -22,6 +27,11 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   const [isApifyTesting, setIsApifyTesting] = useState(false);
   const [apifyTestResult, setApifyTestResult] = useState<{ success: boolean; message: string; actorCount?: number } | null>(null);
   const [isApifyLoading, setIsApifyLoading] = useState(false);
+  
+  // X Username state (to avoid rate limit issues)
+  const [xUsername, setXUsername] = useState('');
+  const [hasXUsername, setHasXUsername] = useState(false);
+  const [isXUsernameLoading, setIsXUsernameLoading] = useState(false);
 
   // X API state
   const [xApiKey, setXApiKey] = useState('');
@@ -35,6 +45,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   const [isXApiLoading, setIsXApiLoading] = useState(false);
 
   useEffect(() => {
+    console.log('🔧 HybridSettings - useEffect triggered, checking credentials for userId:', userId);
     checkExistingCredentials();
   }, [userId]);
 
@@ -52,6 +63,16 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
       if (xApiResponse.ok) {
         const xApiData = await xApiResponse.json();
         setHasXApiCredentials(xApiData.hasCredentials);
+      }
+      
+      // Check stored X username
+      const usernameResponse = await fetch(`/api/settings/x-username?userId=${userId}`);
+      if (usernameResponse.ok) {
+        const usernameData = await usernameResponse.json();
+        if (usernameData.success && usernameData.username) {
+          setXUsername(usernameData.username);
+          setHasXUsername(true);
+        }
       }
     } catch (error) {
       console.error('Error checking existing credentials:', error);
@@ -106,6 +127,16 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   const saveApifyCredentials = async () => {
     if (!apifyApiKey.trim()) {
       setApifyMessage({ type: 'error', text: 'Please enter an API key' });
+      return;
+    }
+
+    console.log('💾 Saving Apify credentials for userId:', userId);
+    console.log('   userId type:', typeof userId);
+    console.log('   userId value:', userId);
+    
+    if (!userId || userId === 'demo-user') {
+      console.error('❌ Cannot save credentials: Invalid userId:', userId);
+      setApifyMessage({ type: 'error', text: 'Authentication error: Please log in and try again.' });
       return;
     }
 
@@ -165,28 +196,70 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     }
   };
 
-  // X API functions
-  const testXApiConnection = async () => {
-    if (!xApiKey.trim() || !xApiKeySecret.trim() || !xAccessToken.trim() || !xAccessTokenSecret.trim()) {
-      setXApiMessage({ type: 'error', text: 'Please enter all X API credentials to test' });
+  // X Username functions
+  const saveXUsername = async () => {
+    if (!xUsername.trim()) {
+      setApifyMessage({ type: 'error', text: 'Please enter your X username' });
       return;
     }
 
+    setIsXUsernameLoading(true);
+    setApifyMessage(null);
+
+    try {
+      const response = await fetch('/api/settings/x-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, username: xUsername.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setApifyMessage({ type: 'success', text: 'X username saved successfully! This will help avoid rate limit issues.' });
+        setHasXUsername(true);
+        setXUsername(''); // Clear the input
+      } else {
+        setApifyMessage({ type: 'error', text: data.error });
+      }
+    } catch (error) {
+      setApifyMessage({ type: 'error', text: 'Failed to save username. Please try again.' });
+    } finally {
+      setIsXUsernameLoading(false);
+    }
+  };
+
+  // X API functions
+  const testXApiConnection = async () => {
     setIsXApiTesting(true);
     setXApiTestResult(null);
     setXApiMessage(null);
 
     try {
-      const response = await fetch('/api/settings/test-x-api-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: xApiKey.trim(),
-          apiKeySecret: xApiKeySecret.trim(),
-          accessToken: xAccessToken.trim(),
-          accessTokenSecret: xAccessTokenSecret.trim(),
-        }),
-      });
+      let response;
+      
+      // If form fields are filled, test with those
+      if (xApiKey.trim() && xApiKeySecret.trim() && xAccessToken.trim() && xAccessTokenSecret.trim()) {
+        response = await fetch('/api/settings/test-x-api-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: xApiKey.trim(),
+            apiKeySecret: xApiKeySecret.trim(),
+            accessToken: xAccessToken.trim(),
+            accessTokenSecret: xAccessTokenSecret.trim(),
+          }),
+        });
+      } else if (hasXApiCredentials) {
+        // If credentials are saved, test with saved credentials
+        response = await fetch(`/api/settings/test-x-api-connection-saved?userId=${userId}`, {
+          method: 'POST',
+        });
+      } else {
+        setXApiMessage({ type: 'error', text: 'Please enter X API credentials or save them first' });
+        setIsXApiTesting(false);
+        return;
+      }
 
       const data = await response.json();
 
@@ -388,6 +461,41 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               </p>
             </div>
           )}
+
+          {/* X Username Input */}
+          <Separator className="my-4" />
+          <div className="space-y-2">
+            <Label htmlFor="x-username">X Username (Optional - to avoid rate limits)</Label>
+            <div className="flex gap-2">
+              <Input
+                id="x-username"
+                type="text"
+                placeholder="Enter your X username (e.g., yourusername)"
+                value={xUsername}
+                onChange={(e) => setXUsername(e.target.value.replace(/^@/, ''))}
+                disabled={isXUsernameLoading}
+              />
+              <Button
+                onClick={saveXUsername}
+                disabled={isXUsernameLoading || !xUsername.trim()}
+                variant="outline"
+                size="sm"
+              >
+                {isXUsernameLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4" />
+                )}
+                Save
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Enter your X username here to avoid rate limit issues. The app will use this instead of fetching it from X API.
+              {hasXUsername && (
+                <span className="ml-2 text-green-600 font-medium">✓ Username saved</span>
+              )}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -480,7 +588,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
           <div className="flex gap-2">
             <Button
               onClick={testXApiConnection}
-              disabled={isXApiLoading || !xApiKey.trim() || !xApiKeySecret.trim() || !xAccessToken.trim() || !xAccessTokenSecret.trim()}
+              disabled={isXApiLoading || isXApiTesting || (!hasXApiCredentials && (!xApiKey.trim() || !xApiKeySecret.trim() || !xAccessToken.trim() || !xAccessTokenSecret.trim()))}
               variant="outline"
             >
               {isXApiTesting ? (

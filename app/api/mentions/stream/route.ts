@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUnifiedCredentials } from '@/lib/unified-credentials';
 import { createMentionMonitoringService } from '@/lib/mention-monitoring';
+import { XApiCredentials } from '@/lib/x-api-service';
 
 /**
  * Store active monitoring services per user
@@ -35,11 +36,11 @@ export async function GET(request: NextRequest) {
     let hasRealCredentials = false;
     
     if (credentialsResult.success && credentialsResult.credentials) {
-      const creds = credentialsResult.credentials;
-      apiKey = creds.apiKey;
-      apiSecret = creds.apiKeySecret;
-      accessToken = creds.accessToken;
-      accessSecret = creds.accessTokenSecret;
+      const creds = credentialsResult.credentials as XApiCredentials;
+      apiKey = creds.apiKey ?? null;
+      apiSecret = creds.apiKeySecret ?? null;
+      accessToken = creds.accessToken ?? null;
+      accessSecret = creds.accessTokenSecret ?? null;
       
       // Validate that credentials are not empty or demo placeholders
       if (apiKey && apiSecret && accessToken && accessSecret &&
@@ -94,16 +95,20 @@ export async function GET(request: NextRequest) {
       // This prevents race conditions where credentials were just added
       const doubleCheck = await getUnifiedCredentials(userId);
       if (doubleCheck.success && doubleCheck.credentials) {
-        const creds = doubleCheck.credentials;
-        if (creds.apiKey && creds.apiKeySecret && creds.accessToken && creds.accessTokenSecret &&
-            !creds.apiKey.includes('demo_') && !creds.apiKeySecret.includes('demo_') &&
-            !creds.accessToken.includes('demo_') && !creds.accessTokenSecret.includes('demo_')) {
+        const creds = doubleCheck.credentials as XApiCredentials;
+        const checkApiKey = creds.apiKey ?? null;
+        const checkApiSecret = creds.apiKeySecret ?? null;
+        const checkAccessToken = creds.accessToken ?? null;
+        const checkAccessSecret = creds.accessTokenSecret ?? null;
+        if (checkApiKey && checkApiSecret && checkAccessToken && checkAccessSecret &&
+            !checkApiKey.includes('demo_') && !checkApiSecret.includes('demo_') &&
+            !checkAccessToken.includes('demo_') && !checkAccessSecret.includes('demo_')) {
           console.log('✅ Real credentials found on double-check, switching to real monitoring');
           hasRealCredentials = true;
-          apiKey = creds.apiKey;
-          apiSecret = creds.apiKeySecret;
-          accessToken = creds.accessToken;
-          accessSecret = creds.accessTokenSecret;
+          apiKey = checkApiKey;
+          apiSecret = checkApiSecret;
+          accessToken = checkAccessToken;
+          accessSecret = checkAccessSecret;
         }
       }
       
@@ -115,10 +120,14 @@ export async function GET(request: NextRequest) {
             // Before generating demo mention, check if credentials were added
             const checkCreds = await getUnifiedCredentials(userId);
             if (checkCreds.success && checkCreds.credentials) {
-              const creds = checkCreds.credentials;
-              if (creds.apiKey && creds.apiKeySecret && creds.accessToken && creds.accessTokenSecret &&
-                  !creds.apiKey.includes('demo_') && !creds.apiKeySecret.includes('demo_') &&
-                  !creds.accessToken.includes('demo_') && !creds.accessTokenSecret.includes('demo_')) {
+              const creds: XApiCredentials = checkCreds.credentials as XApiCredentials;
+              const checkApiKey = creds.apiKey ?? null;
+              const checkApiSecret = creds.apiKeySecret ?? null;
+              const checkAccessToken = creds.accessToken ?? null;
+              const checkAccessSecret = creds.accessTokenSecret ?? null;
+              if (checkApiKey && checkApiSecret && checkAccessToken && checkAccessSecret &&
+                  !checkApiKey.includes('demo_') && !checkApiSecret.includes('demo_') &&
+                  !checkAccessToken.includes('demo_') && !checkAccessSecret.includes('demo_')) {
                 // Real credentials found! Stop demo mode
                 console.log('🛑 Real credentials detected during demo interval, stopping demo mode');
                 clearInterval(demoInterval);
@@ -159,13 +168,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Validate that we have all required credentials before creating monitor
+    if (!apiKey || !apiSecret || !accessToken || !accessSecret) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Missing required credentials for monitoring' 
+        },
+        { status: 400 }
+      );
+    }
+
     // Create monitoring service
     const monitor = createMentionMonitoringService({
       credentials: {
-        apiKey,
-        apiKeySecret: apiSecret,
-        accessToken,
-        accessTokenSecret: accessSecret,
+        apiKey: apiKey as string,
+        apiKeySecret: apiSecret as string,
+        accessToken: accessToken as string,
+        accessTokenSecret: accessSecret as string,
         userId,
       },
       userId,

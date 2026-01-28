@@ -369,7 +369,7 @@ export function Dashboard() {
                             <p className="text-sm text-gray-900 line-clamp-2">{post.content}</p>
                             <div className="flex items-center gap-2 mt-2">
                               <Badge 
-                                variant={post.status === "published" ? "default" : post.status === "scheduled" ? "secondary" : "outline"}
+                                variant={post.status === "published" ? "default" : post.status === "approved" ? "secondary" : "outline"}
                               >
                                 {post.status}
                               </Badge>

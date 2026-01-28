@@ -71,7 +71,7 @@ export function CalendarView() {
             id: p.id,
             content: p.content,
             scheduledAt: p.scheduled_at,
-            status: p.status || 'scheduled',
+            status: p.status || 'approved',
             timezone: p.scheduled_timezone || p.user_timezone,
             mediaUrls: p.media_urls
           })))
@@ -98,6 +98,45 @@ export function CalendarView() {
     }
     fetchData()
   }, [visibleMonth, toast])
+
+  // Automatically process scheduled posts queue every 30 seconds
+  useEffect(() => {
+    const processQueue = async () => {
+      try {
+        const response = await fetch('/api/scheduler/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        if (response.ok) {
+          const result = await response.json()
+          if (result.processed > 0) {
+            // Refresh posts if any were processed
+            const postsRes = await fetch(`/api/scheduled-posts?month=${visibleMonth}`)
+            if (postsRes.ok) {
+              const { posts } = await postsRes.json()
+              setScheduledPosts((posts || []).map((p: any) => ({
+                id: p.id,
+                content: p.content,
+                scheduledAt: p.scheduled_at,
+                status: p.status || 'approved',
+                timezone: p.scheduled_timezone || p.user_timezone,
+                mediaUrls: p.media_urls
+              })))
+            }
+          }
+        }
+      } catch (error) {
+        // Silently fail - don't spam errors for background processing
+        console.debug('Queue processing error (non-critical):', error)
+      }
+    }
+
+    // Process immediately on mount, then every 30 seconds
+    processQueue()
+    const interval = setInterval(processQueue, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [visibleMonth])
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -154,7 +193,7 @@ export function CalendarView() {
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
     const post = scheduledPosts.find(p => p.id === active.id)
-    if (post && post.status === 'scheduled') {
+    if (post && post.status === 'approved') {
       setActivePost(post)
       setDraggingPostId(post.id)
     }
@@ -168,7 +207,7 @@ export function CalendarView() {
     if (!over || !active) return
 
     const draggedPost = scheduledPosts.find(p => p.id === active.id)
-    if (!draggedPost || draggedPost.status !== 'scheduled') return
+    if (!draggedPost || draggedPost.status !== 'approved') return
 
     // Find the target day from the over element
     const targetElement = over.data.current as { day?: number } | undefined
@@ -330,7 +369,7 @@ export function CalendarView() {
               id: p.id,
               content: p.content,
               scheduledAt: p.scheduled_at,
-              status: p.status || 'scheduled',
+              status: p.status || 'approved',
               timezone: p.scheduled_timezone || p.user_timezone,
               mediaUrls: p.media_urls
             })))
@@ -373,7 +412,7 @@ export function CalendarView() {
               >
                 <option value="">All Statuses</option>
                 <option value="draft">Draft</option>
-                <option value="scheduled">Scheduled</option>
+                <option value="approved">Scheduled</option>
                 <option value="pending_approval">Pending Approval</option>
                 <option value="published">Published</option>
                 <option value="failed">Failed</option>
@@ -431,7 +470,7 @@ export function CalendarView() {
           <CardContent>
             <div className="space-y-3">
               {scheduledPosts
-                .filter(p => ['scheduled', 'pending_approval'].includes(p.status))
+                .filter(p => ['approved', 'pending_approval'].includes(p.status))
                 .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
                 .slice(0, 5)
                 .map(post => {
@@ -450,7 +489,7 @@ export function CalendarView() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={post.status === "scheduled" ? "default" : "secondary"}>
+                        <Badge variant={post.status === "approved" ? "default" : "secondary"}>
                           {post.status === "pending_approval" ? "Pending Approval" : "Scheduled"}
                         </Badge>
                         <Button 

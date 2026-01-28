@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { postTweet, scheduleTweet } from '@/lib/twitter-api'
+import { postTweet, scheduleTweet } from '@/lib/twitter-api-node'
 import { SchedulingService } from '@/lib/scheduling-service'
 import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
 import { recordRevision } from '@/lib/approval/revisions'

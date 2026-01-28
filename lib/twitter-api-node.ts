@@ -102,9 +102,12 @@ export async function postTweet(
     
     console.log('🐦 Posting tweet via Twitter API v2')
     
-    const tweet = await client.tweet(text, {
-      media: mediaIds ? { media_ids: mediaIds } : undefined
-    })
+    // Only include media if we have actual media IDs (not empty array)
+    const mediaOptions = mediaIds && mediaIds.length > 0 
+      ? { media: { media_ids: mediaIds } }
+      : undefined
+    
+    const tweet = await client.tweet(text, mediaOptions)
     
     console.log('✅ Tweet posted successfully:', tweet.data.id)
     

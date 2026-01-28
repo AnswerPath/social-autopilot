@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retry Apify Analytics</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            margin-top: 0;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0070f3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background: #0051cc;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Retry Apify Analytics</h1>
+        <p>Use this page to retry storing analytics from a previous Apify run.</p>
+        
+        <form id="retryForm">
+            <div class="form-group">
+                <label for="runId">Apify Run ID *</label>
+                <input 
+                    type="text" 
+                    id="runId" 
+                    value="hv2W0bikTzwMTGQpX" 
+                    required 
+                    placeholder="e.g., hv2W0bikTzwMTGQpX"
+                >
+                <small style="color: #666; font-size: 12px;">
+                    The run ID from your Apify console (already filled with your last run)
+                </small>
+            </div>
+            
+            <div class="form-group">
+                <label for="startDate">Start Date</label>
+                <input 
+                    type="date" 
+                    id="startDate" 
+                    value="2025-08-01"
+                >
+            </div>
+            
+            <div class="form-group">
+                <label for="endDate">End Date</label>
+                <input 
+                    type="date" 
+                    id="endDate" 
+                    value="2026-01-08"
+                >
+            </div>
+            
+            <button type="submit" id="submitBtn">Retry Storing Analytics</button>
+        </form>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('retryForm');
+        const resultDiv = document.getElementById('result');
+        const submitBtn = document.getElementById('submitBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const runId = document.getElementById('runId').value.trim();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            if (!runId) {
+                showResult('Please enter a Run ID', 'error');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            showResult('Fetching data from Apify run...', 'info');
+            
+            try {
+                const response = await fetch('/api/analytics/posts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        retryFromRunId: runId,
+                        startDate: startDate,
+                        endDate: endDate
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(
+                        `✅ Success! Stored ${data.stored || data.count || 0} analytics records from Apify run ${runId}.\n\n` +
+                        `You can now refresh your analytics page to see the data.`,
+                        'success'
+                    );
+                } else {
+                    showResult(
+                        `❌ Error: ${data.error || 'Unknown error occurred'}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult(
+                    `❌ Network error: ${error.message}\n\nMake sure you're logged in and the server is running.`,
+                    'error'
+                );
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Retry Storing Analytics';
+            }
+        });
+        
+        function showResult(message, type) {
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+

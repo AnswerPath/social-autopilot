@@ -259,7 +259,17 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
           body: JSON.stringify(payload)
         })
 
-        const result = await response.json()
+        // Try to parse JSON response, handle empty/invalid responses gracefully
+        let result: any = {}
+        try {
+          const text = await response.text()
+          if (text.trim()) {
+            result = JSON.parse(text)
+          }
+        } catch (parseError) {
+          console.error('Failed to parse response JSON:', parseError)
+          result = { error: 'Invalid response from server' }
+        }
         
         console.log('Schedule post response:', { 
           status: response.status, 
@@ -268,7 +278,15 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
         })
         
         if (!response.ok) {
-          console.error('Schedule post failed:', result)
+          // Log error with full details for debugging
+          const errorDetails = {
+            status: response.status,
+            statusText: response.statusText,
+            error: result.error,
+            details: result.details,
+            fullResult: result
+          }
+          console.error('Schedule post failed:', errorDetails)
         }
         
         if (response.ok && result.success) {
@@ -306,9 +324,17 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
               variant: "destructive",
             })
           } else {
+            // Provide meaningful error message even if result is empty
+            const errorMessage = result.error || result.details || 
+              (response.status === 500 ? 'Server error occurred' :
+               response.status === 400 ? 'Invalid request' :
+               response.status === 404 ? 'Endpoint not found' :
+               response.status === 401 ? 'Unauthorized' :
+               response.status === 403 ? 'Forbidden' :
+               `Failed to schedule post (${response.status})`)
             toast({
               title: "Error",
-              description: result.error || result.details || "Failed to schedule post",
+              description: errorMessage,
               variant: "destructive",
             })
           }
