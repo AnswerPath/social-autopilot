@@ -130,21 +130,43 @@ export async function GET(request: NextRequest) {
         const fetchResult = await analyticsService.fetchAllPostAnalytics(finalUserId, dateRange);
         
         if (!fetchResult.success) {
-          // Instead of returning 400, try to return stored data from database
-          // This allows the dashboard to show existing data even if API fetch fails
-          console.log(`⚠️ API fetch failed: ${fetchResult.error}. Attempting to return stored data from database...`);
-          const historicalResult = await analyticsService.getHistoricalAnalytics(finalUserId, dateRange);
-          
+          // Check if this is an Apify failure - if so, don't silently fall back to historical data
+          // This ensures users know Apify needs to be fixed
           const source = (fetchResult as any).source || 'x-api';
           const sourceName = source === 'apify' ? 'Apify' : 'X API';
           const errorMessage = fetchResult.error || `Failed to fetch analytics from ${sourceName}`;
           
-          return NextResponse.json({
-            success: true,
-            data: historicalResult.data || [],
-            warning: errorMessage + '. Showing stored data from database.',
-            source: source,
-          });
+          if (source === 'apify') {
+            // For Apify failures, return error with stored data as fallback
+            // This makes it clear that Apify needs attention
+            console.error(`❌ Apify fetch failed: ${errorMessage}`);
+            console.log(`   Attempting to return stored data from database as fallback...`);
+            
+            const historicalResult = await analyticsService.getHistoricalAnalytics(finalUserId, dateRange);
+            
+            // Return error status but include historical data so dashboard can still show something
+            return NextResponse.json(
+              {
+                success: false, // Mark as failure to indicate Apify issue
+                error: `Apify analytics fetch failed: ${errorMessage}. Showing stored data from database. Please check your Apify configuration and try again.`,
+                data: historicalResult.data || [],
+                warning: 'Apify is not returning results. Please check your Apify account, actor configuration, and run logs.',
+                source: source,
+              },
+              { status: 200 } // Still return 200 so frontend can display the data
+            );
+          } else {
+            // For non-Apify failures, return stored data as before
+            console.log(`⚠️ API fetch failed: ${errorMessage}. Attempting to return stored data from database...`);
+            const historicalResult = await analyticsService.getHistoricalAnalytics(finalUserId, dateRange);
+            
+            return NextResponse.json({
+              success: true,
+              data: historicalResult.data || [],
+              warning: errorMessage + '. Showing stored data from database.',
+              source: source,
+            });
+          }
         }
 
         // Store the fetched analytics
@@ -248,7 +270,7 @@ export async function GET(request: NextRequest) {
           }
         }
         
-        // Auto-fetch from analytics service (Apify preferred, X API fallback) if no data exists
+        // Auto-fetch from analytics service (Apify only) if no data exists
         // Only auto-fetch if there's truly no data in the database
         if (dataCount === 0 && !hasRawData && !fetchFromApi) {
           // Check for Apify credentials to provide helpful message
@@ -259,11 +281,31 @@ export async function GET(request: NextRequest) {
           if (hasApify) {
             console.log(`⚠️ No analytics found in database. Automatically fetching from Apify...`);
           } else {
-            console.log(`⚠️ No analytics found in database. Automatically fetching from analytics service (Apify preferred, X API fallback)...`);
-            console.log(`💡 Tip: Configure Apify credentials in Settings to use Apify for analytics and avoid X API rate limits.`);
+            console.log(`⚠️ No analytics found in database. Apify credentials required for analytics.`);
+            console.log(`💡 Please configure Apify credentials in Settings → Integrations to fetch analytics.`);
+            return NextResponse.json({
+              success: false,
+              error: 'No analytics data found and Apify credentials are not configured. Please configure Apify credentials in Settings → Integrations to fetch analytics data.',
+              data: [],
+            });
           }
           
           const fetchResult = await analyticsService.fetchAllPostAnalytics(finalUserId, dateRange);
+          
+          // If Apify fetch fails, return error instead of silently falling back
+          if (!fetchResult.success) {
+            const errorMsg = fetchResult.error || 'Failed to fetch analytics from Apify';
+            console.error(`❌ Auto-fetch from Apify failed: ${errorMsg}`);
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Failed to fetch analytics from Apify: ${errorMsg}. Please check your Apify configuration, verify the username is correct, and check the Apify run logs.`,
+                data: [],
+                source: 'apify',
+              },
+              { status: 200 } // Return 200 so frontend can display error message
+            );
+          }
           
           if (fetchResult.success && fetchResult.analytics && fetchResult.analytics.length > 0) {
             const source = fetchResult.source || 'x-api';

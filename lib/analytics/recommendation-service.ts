@@ -62,15 +62,52 @@ export class RecommendationService {
 
       const historicalData = historicalResult.data;
 
+      // Log diagnostic information
+      console.log(`📊 Recommendation Service: Analyzing ${historicalData.length} total posts`);
+      
       // Filter out posts without analytics
-      const postsWithAnalytics = historicalData.filter(
-        (post) => post.latest && post.latest.impressions && post.latest.impressions > 0
-      );
+      // Since engagement rate is now based on likes only, we accept posts with any engagement data
+      // (likes, retweets, replies, quotes) even if impressions are missing
+      const postsWithAnalytics = historicalData.filter((post) => {
+        if (!post.latest) return false;
+        
+        // Check if post has any engagement data
+        const hasEngagement = 
+          (post.latest.likes && post.latest.likes > 0) ||
+          (post.latest.retweets && post.latest.retweets > 0) ||
+          (post.latest.replies && post.latest.replies > 0) ||
+          (post.latest.quotes && post.latest.quotes > 0);
+        
+        // Also accept posts with impressions > 0 (even if no engagement yet)
+        const hasImpressions = post.latest.impressions && post.latest.impressions > 0;
+        
+        return hasEngagement || hasImpressions;
+      });
+
+      // Log detailed breakdown
+      const postsWithoutLatest = historicalData.filter((post) => !post.latest).length;
+      const postsWithZeroImpressions = historicalData.filter(
+        (post) => post.latest && (!post.latest.impressions || post.latest.impressions === 0)
+      ).length;
+      const postsWithEngagement = historicalData.filter((post) => {
+        if (!post.latest) return false;
+        return (post.latest.likes && post.latest.likes > 0) ||
+               (post.latest.retweets && post.latest.retweets > 0) ||
+               (post.latest.replies && post.latest.replies > 0) ||
+               (post.latest.quotes && post.latest.quotes > 0);
+      }).length;
+      
+      console.log(`📊 Recommendation Service: Posts breakdown:`);
+      console.log(`   - Total posts: ${historicalData.length}`);
+      console.log(`   - Posts with valid analytics (engagement or impressions): ${postsWithAnalytics.length}`);
+      console.log(`   - Posts without latest analytics: ${postsWithoutLatest}`);
+      console.log(`   - Posts with engagement data (likes/retweets/replies/quotes): ${postsWithEngagement}`);
+      console.log(`   - Posts with zero/null impressions: ${postsWithZeroImpressions}`);
 
       if (postsWithAnalytics.length < 5) {
         return {
           success: false,
-          error: 'Insufficient data. Need at least 5 posts with analytics to generate recommendations.',
+          error: `Insufficient data. Found ${historicalData.length} total posts, but only ${postsWithAnalytics.length} have analytics data (engagement or impressions). Need at least 5 posts with analytics to generate recommendations.`,
         };
       }
 
@@ -118,9 +155,16 @@ export class RecommendationService {
       }
 
       const historicalData = historicalResult.data;
-      const postsWithAnalytics = historicalData.filter(
-        (post) => post.latest && post.latest.impressions && post.latest.impressions > 0
-      );
+      const postsWithAnalytics = historicalData.filter((post) => {
+        if (!post.latest) return false;
+        const hasEngagement = 
+          (post.latest.likes && post.latest.likes > 0) ||
+          (post.latest.retweets && post.latest.retweets > 0) ||
+          (post.latest.replies && post.latest.replies > 0) ||
+          (post.latest.quotes && post.latest.quotes > 0);
+        const hasImpressions = post.latest.impressions && post.latest.impressions > 0;
+        return hasEngagement || hasImpressions;
+      });
 
       if (postsWithAnalytics.length < 3) {
         return {
@@ -169,7 +213,18 @@ export class RecommendationService {
     const slotMap = new Map<string, TimeSlotAnalytics>();
 
     historicalData.forEach((post) => {
-      if (!post.latest || !post.latest.impressions || post.latest.impressions === 0) {
+      if (!post.latest) return;
+      
+      // Accept posts with engagement data even if impressions are missing
+      const hasEngagement = 
+        (post.latest.likes && post.latest.likes > 0) ||
+        (post.latest.retweets && post.latest.retweets > 0) ||
+        (post.latest.replies && post.latest.replies > 0) ||
+        (post.latest.quotes && post.latest.quotes > 0);
+      
+      const hasImpressions = post.latest.impressions && post.latest.impressions > 0;
+      
+      if (!hasEngagement && !hasImpressions) {
         return;
       }
 
@@ -196,16 +251,16 @@ export class RecommendationService {
         });
       }
 
-      const slot = slotMap.get(slotKey)!;
-      slot.posts.push({
-        engagementRate,
-        totalEngagement,
-        impressions: post.latest.impressions,
-        postedAt,
-      });
-      slot.postCount += 1;
-      slot.totalEngagement += totalEngagement;
-      slot.totalImpressions += post.latest.impressions || 0;
+        const slot = slotMap.get(slotKey)!;
+        slot.posts.push({
+          engagementRate,
+          totalEngagement,
+          impressions: post.latest.impressions || 0, // Use 0 if impressions missing
+          postedAt,
+        });
+        slot.postCount += 1;
+        slot.totalEngagement += totalEngagement;
+        slot.totalImpressions += post.latest.impressions || 0;
     });
 
     // Calculate averages and weighted rates
@@ -331,9 +386,16 @@ export class RecommendationService {
       }
 
       const historicalData = historicalResult.data;
-      const postsWithAnalytics = historicalData.filter(
-        (post) => post.latest && post.latest.impressions && post.latest.impressions > 0
-      );
+      const postsWithAnalytics = historicalData.filter((post) => {
+        if (!post.latest) return false;
+        const hasEngagement = 
+          (post.latest.likes && post.latest.likes > 0) ||
+          (post.latest.retweets && post.latest.retweets > 0) ||
+          (post.latest.replies && post.latest.replies > 0) ||
+          (post.latest.quotes && post.latest.quotes > 0);
+        const hasImpressions = post.latest.impressions && post.latest.impressions > 0;
+        return hasEngagement || hasImpressions;
+      });
 
       if (postsWithAnalytics.length < 5) {
         return {

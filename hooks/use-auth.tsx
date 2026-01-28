@@ -143,19 +143,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }))
       
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify(userData)
-      })
+      let response
+      try {
+        response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify(userData)
+        })
+      } catch (fetchError: any) {
+        // Handle network errors (fetch failed)
+        if (fetchError.message?.includes('fetch failed') || fetchError.cause?.code === 'ENOTFOUND') {
+          throw new Error(
+            'Unable to connect to the server. Your Supabase project may be paused. ' +
+            'Please check your Supabase dashboard (https://supabase.com/dashboard) and ensure the project is active. ' +
+            'Free tier projects are paused after inactivity and need to be restored.'
+          )
+        }
+        throw new Error(`Network error: ${fetchError.message || 'Failed to connect to server'}`)
+      }
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error?.message || 'Registration failed')
+        // Provide more helpful error messages
+        const errorMessage = data.error?.message || 'Registration failed'
+        
+        // Check for specific Supabase connection errors
+        if (errorMessage.includes('Unable to connect to Supabase') || 
+            errorMessage.includes('ENOTFOUND') ||
+            errorMessage.includes('fetch failed')) {
+          throw new Error(
+            'Unable to connect to Supabase. Your Supabase project may be paused. ' +
+            'Please check your Supabase dashboard and ensure the project is active. ' +
+            'Free tier projects are paused after inactivity and need to be restored.'
+          )
+        }
+        
+        throw new Error(errorMessage)
       }
 
       setState({

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The analytics system now supports using Apify's `dy7gIgPRMhrOrfW0f` actor to fetch post analytics, avoiding X API rate limits.
+The analytics system now supports using Apify's `delicious_zebu/advanced-x-twitter-profile-scraper` actor to fetch post analytics, avoiding X API rate limits.
 
 ## How It Works
 
@@ -17,7 +17,7 @@ The analytics system now supports using Apify's `dy7gIgPRMhrOrfW0f` actor to fet
 
 ### Apify Actor
 
-- **Actor ID**: `dy7gIgPRMhrOrfW0f`
+- **Actor ID**: `delicious_zebu/advanced-x-twitter-profile-scraper`
 - **Purpose**: Scrapes X profiles to retrieve URLs, IDs, content, publication dates, text, and engagement metrics
 - **Input Parameters**:
   - `startUrls`: Array of X profile URLs (e.g., `["https://x.com/username/"]`) - **Required**

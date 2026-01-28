@@ -28,6 +28,28 @@ const mockUser: AuthUser = {
   last_sign_in_at: new Date().toISOString()
 }
 
+// Demo user data for development
+const demoUser: AuthUser = {
+  id: 'dev-demo-admin-user',
+  email: 'demo@socialautopilot.com',
+  role: UserRole.ADMIN,
+  permissions: ROLE_PERMISSIONS[UserRole.ADMIN],
+  profile: {
+    id: 'profile-demo',
+    user_id: 'dev-demo-user',
+    first_name: 'Demo',
+    last_name: 'User',
+    display_name: 'Demo User',
+    bio: '',
+    avatar_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  last_sign_in_at: new Date().toISOString()
+}
+
 // Cookie names for authentication
 const AUTH_COOKIE_NAME = 'sb-auth-token'
 const REFRESH_COOKIE_NAME = 'sb-refresh-token'
@@ -54,7 +76,10 @@ export async function getCurrentUserDev(request: NextRequest): Promise<AuthUser 
     return null
   }
 
-  return mockUser
+  // Try to determine which user based on token (simple check)
+  // In a real scenario, you'd decode the token to get user info
+  // For now, default to demo user if available, otherwise mock user
+  return demoUser || mockUser
 }
 
 /**
@@ -102,7 +127,10 @@ export function createMockAuthCookies(): NextResponse {
  * Mock login function for development
  */
 export async function mockLogin(email: string, password: string): Promise<AuthUser> {
-  // In development mode, accept any credentials
+  // Support multiple demo credentials
+  if (email === 'demo@socialautopilot.com' && password === 'demo123456') {
+    return demoUser
+  }
   if (email === 'test@example.com' && password === 'password123') {
     return mockUser
   }

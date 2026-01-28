@@ -45,10 +45,15 @@ export function PostingRecommendations() {
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to fetch recommendations')
+        const errorMessage = result.error || 'Failed to fetch recommendations'
+        setError(errorMessage)
+        setRecommendations([])
+        setLoading(false)
+        return
       }
 
       setRecommendations(result.recommendations || [])
+      setError(null)
     } catch (err) {
       console.error('Error fetching recommendations:', err)
       setError(err instanceof Error ? err.message : 'Failed to load recommendations')
@@ -142,8 +147,15 @@ export function PostingRecommendations() {
             <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p className="font-medium">Insufficient data for recommendations</p>
             <p className="text-sm mt-2">
-              We need at least 5 posts with analytics data to generate recommendations.
-              Keep posting and check back later!
+              We need at least 5 posts with analytics data (impressions &gt; 0) to generate recommendations.
+            </p>
+            {error && (
+              <p className="text-xs mt-3 text-muted-foreground/80 max-w-md mx-auto">
+                {error}
+              </p>
+            )}
+            <p className="text-sm mt-3">
+              Keep posting and check back later! Analytics data is collected automatically after posts are published.
             </p>
           </div>
         </CardContent>

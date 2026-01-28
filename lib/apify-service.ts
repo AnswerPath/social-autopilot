@@ -211,15 +211,17 @@ export class ApifyService {
   }
 
   /**
-   * Fetch post analytics using dy7gIgPRMhrOrfW0f actor
+   * Fetch post analytics using delicious_zebu/advanced-x-twitter-profile-scraper actor
    * Retrieves URLs, IDs, content, publication dates, text and engagement metrics
    */
   async getPostAnalytics(
     username: string,
     options?: {
       maxPosts?: number;
-      startDate?: Date;
-      endDate?: Date;
+      startDate?: Date | string;
+      endDate?: Date | string;
+      splitMode?: 'day' | 'week' | 'month';
+      language?: string;
     }
   ): Promise<{
     success: boolean;
@@ -239,79 +241,289 @@ export class ApifyService {
   }> {
     try {
       console.log(`🔍 Fetching post analytics from Apify for username: ${username}`);
-      const actorId = 'dy7gIgPRMhrOrfW0f';
+      // TODO: Update with the actual new actor ID
+      // IMPORTANT: The actor we use expects `accountUrls`. If we omit it (or send the wrong field),
+      // the actor may fall back to demo defaults (e.g. elonmusk, NASA).
+      const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID || 'delicious_zebu/advanced-x-twitter-profile-scraper';
       
       // Clean username (remove @ if present)
       const cleanUsername = username.replace('@', '');
       
-      // Try to get actor input schema to see what parameters are expected
+      // Fetch actor input schema to understand required parameters
       let inputSchema: any = null;
+      let actorInfo: any = null;
       try {
         const actor = this.client.actor(actorId);
-        const actorInfo = await actor.get();
-        console.log(`📋 Actor info:`, {
-          name: actorInfo.name,
-          username: actorInfo.username,
-          description: actorInfo.description?.substring(0, 200),
-        });
-        // Try to get the input schema if available
-        if ((actorInfo as any).inputSchema) {
-          inputSchema = (actorInfo as any).inputSchema;
-          console.log(`📋 Actor input schema:`, JSON.stringify(inputSchema, null, 2));
+        actorInfo = await actor.get();
+        if (actorInfo) {
+          console.log(`📋 Actor info:`, {
+            name: actorInfo.name,
+            username: actorInfo.username,
+            description: actorInfo.description?.substring(0, 200),
+          });
+          
+          // Try to get the input schema from the actor
+          if ((actorInfo as any).inputSchema) {
+            inputSchema = (actorInfo as any).inputSchema;
+            console.log(`📋 Actor input schema found:`, JSON.stringify(inputSchema, null, 2));
+          } else {
+            // Try to get it from the actor's latest version
+            try {
+              const versions = await actor.versions().list({ limit: 1 });
+              if (versions.items && versions.items.length > 0) {
+                const latestVersion = versions.items[0];
+                if ((latestVersion as any).inputSchema) {
+                  inputSchema = (latestVersion as any).inputSchema;
+                  console.log(`📋 Actor input schema from latest version:`, JSON.stringify(inputSchema, null, 2));
+                }
+              }
+            } catch (versionError) {
+              console.log(`⚠️ Could not fetch actor version info:`, versionError instanceof Error ? versionError.message : String(versionError));
+            }
+          }
         }
       } catch (schemaError) {
         console.log(`⚠️ Could not fetch actor info (this is optional):`, schemaError instanceof Error ? schemaError.message : String(schemaError));
       }
       
-      // Prepare input parameters for the new actor
-      // The new actor uses startUrls, twitterHandles, start, end, maxItems, etc.
-      const input: any = {
-        startUrls: [`https://x.com/${cleanUsername}/`],
-        twitterHandles: [cleanUsername],
-        customMapFunction: '(object) => { return {...object} }',
-        getAboutData: false,
-        getReplies: false,
-        minReplyCount: 0, // Include minReplyCount as shown in example
+      // Prepare input parameters for the actor
+      // Actor expects: accountUrls (array), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), splitMode (optional), language (optional)
+      // IMPORTANT: Only include the exact fields required by the actor - do not add extra fields
+      const input: {
+        accountUrls: string[];
+        startDate?: string;
+        endDate?: string;
+        splitMode?: 'day' | 'week' | 'month';
+        language?: string;
+      } = {
+        // Required: Array of X account URLs
+        // Use the user's username here to avoid actor demo defaults.
+        accountUrls: [`https://x.com/${cleanUsername}`],
       };
 
-      // Add date range if provided
-      // The actor appears to require dates based on the example input
-      // Default to a range that includes 2025 and 2026 to capture recent tweets
+      // Format startDate (required)
+      let startDateStr: string;
       if (options?.startDate) {
-        // Format date as YYYY-MM-DD
-        const startDate = options.startDate instanceof Date 
+        startDateStr = options.startDate instanceof Date 
           ? options.startDate.toISOString().split('T')[0]
           : options.startDate;
-        input.start = startDate;
       } else {
-        // Default to start of 2025 (matching the example input format)
-        // This ensures we capture tweets from 2025 and 2026
-        input.start = '2025-01-01';
+        // Default to a reasonable date range (last 5 years to capture more tweets)
+        const fiveYearsAgo = new Date();
+        fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+        startDateStr = fiveYearsAgo.toISOString().split('T')[0];
+        console.log(`📅 Using default start date (5 years ago): ${startDateStr}`);
+      }
+      input.startDate = startDateStr;
+      if (options?.startDate) {
+        console.log(`📅 Using provided start date: ${input.startDate}`);
       }
 
+      // Format endDate (required)
+      let endDateStr: string;
       if (options?.endDate) {
-        // Format date as YYYY-MM-DD
-        const endDate = options.endDate instanceof Date 
+        endDateStr = options.endDate instanceof Date 
           ? options.endDate.toISOString().split('T')[0]
           : options.endDate;
-        input.end = endDate;
       } else {
-        // Default to end of 2026 (current year)
-        input.end = '2026-12-31';
+        // Default to today (or tomorrow to ensure we capture today's tweets)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        endDateStr = tomorrow.toISOString().split('T')[0];
+        console.log(`📅 Using default end date (tomorrow): ${endDateStr}`);
+      }
+      input.endDate = endDateStr;
+      if (options?.endDate) {
+        console.log(`📅 Using provided end date: ${input.endDate}`);
       }
 
-      // Add maxItems parameter (corresponds to maxPosts)
-      if (options?.maxPosts) {
-        input.maxItems = options.maxPosts;
+      // Add optional splitMode parameter (default: 'month' for fastest performance)
+      if (options?.splitMode) {
+        if (['day', 'week', 'month'].includes(options.splitMode)) {
+          input.splitMode = options.splitMode;
+          console.log(`📅 Using splitMode: ${input.splitMode}`);
+        } else {
+          console.warn(`⚠️ Invalid splitMode "${options.splitMode}", using default 'month'`);
+          input.splitMode = 'month';
+        }
       } else {
-        input.maxItems = 1000; // Default to 1000 items (higher than old actor)
+        input.splitMode = 'month'; // Default to 'month' for fastest performance
+        console.log(`📅 Using default splitMode: ${input.splitMode}`);
+      }
+
+      // Add optional language parameter (default: 'any' to disable filtering)
+      if (options?.language) {
+        input.language = options.language;
+        console.log(`🌐 Using language filter: ${input.language}`);
+      } else {
+        input.language = 'any'; // Default to 'any' to get all languages
+        console.log(`🌐 Using default language: ${input.language} (no filtering)`);
       }
       
-      console.log(`📡 Apify input parameters:`, JSON.stringify(input, null, 2));
-      console.log(`📡 Calling Apify actor ${actorId} with input:`, { startUrls: input.startUrls, twitterHandles: input.twitterHandles, maxItems: input.maxItems, start: input.start, end: input.end });
+      // Validate date range
+      if (input.startDate && input.endDate) {
+        const startDateObj = new Date(input.startDate);
+        const endDateObj = new Date(input.endDate);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        const todayStr = todayEnd.toISOString().split('T')[0];
+
+        if (startDateObj > endDateObj) {
+          console.error(`❌ Invalid date range: start date (${input.startDate}) is after end date (${input.endDate})`);
+          return {
+            success: false,
+            error: `Invalid date range: start date (${input.startDate}) must be before end date (${input.endDate})`,
+          };
+        }
+        // Reject future start date: no tweets exist after today, so Apify returns demo/placeholder items
+        if (startDateObj > todayEnd) {
+          console.error(`❌ Invalid date range: start date (${input.startDate}) is in the future (today is ${todayStr}). The Apify actor returns demo/placeholder data when the range has no tweets.`);
+          return {
+            success: false,
+            error: `Start date (${input.startDate}) is in the future. Use a start date on or before today (${todayStr}). The Apify actor cannot find tweets that don't exist yet and returns placeholder data when the range is empty.`,
+          };
+        }
+        // Clamp end date to today if in the future (avoids empty/demo results from future ranges)
+        // Note: end date can be up to 1 day in future (tomorrow) to capture today's tweets, but we clamp if it's further
+        if (endDateObj > todayEnd) {
+          const daysInFuture = Math.ceil((endDateObj.getTime() - todayEnd.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysInFuture > 1) {
+            console.warn(`⚠️ End date (${input.endDate}) is ${daysInFuture} days in the future. Clamping to today (${todayStr}) to avoid empty/demo results.`);
+            input.endDate = todayStr;
+          } else {
+            // Allow end date up to 1 day in future (tomorrow) to ensure we capture today's tweets
+            console.log(`📅 End date (${input.endDate}) is tomorrow - allowing to capture today's tweets`);
+          }
+        }
+        const daysDiff = Math.ceil((new Date(input.endDate).getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24));
+        console.log(`📅 Date range: ${daysDiff} days (${input.startDate} to ${input.endDate})`);
+      }
       
-      // Call the actor
-      const run = await this.client.actor(actorId).call(input);
+      console.log(`📡 Username being used: @${cleanUsername}`);
+      console.log(`📡 Profile URL: https://x.com/${cleanUsername}`);
+      
+      // Log date range validation for debugging
+      if (input.startDate && input.endDate) {
+        const startDateObj = new Date(input.startDate);
+        const endDateObj = new Date(input.endDate);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+        const daysDiff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24));
+        const startIsPast = startDateObj <= today;
+        const endIsPast = endDateObj <= today;
+        console.log(`📅 Date range validation:`, {
+          start: input.startDate,
+          end: input.endDate,
+          daysRange: daysDiff,
+          startIsPast,
+          endIsPast,
+          today: today.toISOString().split('T')[0],
+        });
+      }
+      
+      // Validate input before calling
+      if (!cleanUsername || cleanUsername.trim().length === 0) {
+        return {
+          success: false,
+          error: 'Invalid username provided to Apify actor. Username cannot be empty.',
+        };
+      }
+      
+      // Validate username format (should be alphanumeric, underscores, no special chars except @)
+      const usernamePattern = /^[a-zA-Z0-9_]+$/;
+      if (!usernamePattern.test(cleanUsername)) {
+        console.error(`❌ Invalid username format: "${cleanUsername}"`);
+        return {
+          success: false,
+          error: `Invalid username format: "${cleanUsername}". Username should only contain letters, numbers, and underscores.`,
+        };
+      }
+      
+      // Validate that accountUrls is properly formatted
+      if (!input.accountUrls || !Array.isArray(input.accountUrls) || input.accountUrls.length === 0) {
+        return {
+          success: false,
+          error: 'Invalid accountUrls: must be a non-empty array of account URLs.',
+        };
+      }
+      
+      // Ensure URLs are properly formatted
+      input.accountUrls = input.accountUrls.map((url: string) => {
+        // Remove trailing slash if present
+        return url.replace(/\/$/, '');
+      });
+      
+      // Explicitly remove any unwanted properties from input object before creating cleanInput
+      // This prevents accountUrls, maxCollections, or any other unwanted fields from being included
+      const unwantedInputKeys = ['maxCollections'];
+      unwantedInputKeys.forEach(key => {
+        if ((input as any)[key] !== undefined) {
+          console.warn(`⚠️ Removing unwanted property '${key}' from input object before creating cleanInput`);
+          delete (input as any)[key];
+        }
+      });
+      
+      // Create a clean input object with only the fields we want to send
+      // This ensures no extra fields (like accountUrls, maxCollections) are accidentally included
+      // startDate and endDate are guaranteed to be set (they have defaults if not provided)
+      if (!input.startDate || !input.endDate) {
+        return {
+          success: false,
+          error: 'Internal error: startDate and endDate must be set before creating clean input',
+        };
+      }
+      
+      // Explicitly create cleanInput with ONLY the allowed fields
+      // Do NOT include accountUrls, maxCollections, or any other fields
+      const cleanInput: {
+        accountUrls: string[];
+        startDate: string;
+        endDate: string;
+        splitMode?: 'day' | 'week' | 'month';
+        language?: string;
+      } = {
+        accountUrls: [...input.accountUrls], // Create a new array to avoid reference issues
+        startDate: input.startDate,
+        endDate: input.endDate,
+      };
+      
+      // Only add optional fields if they are set (not undefined)
+      if (input.splitMode) {
+        cleanInput.splitMode = input.splitMode;
+      }
+      if (input.language) {
+        cleanInput.language = input.language;
+      }
+      
+      // Explicitly validate that cleanInput doesn't have any unwanted properties
+      const allowedKeys = ['accountUrls', 'startDate', 'endDate', 'splitMode', 'language'];
+      const cleanInputKeys = Object.keys(cleanInput);
+      const unwantedKeys = cleanInputKeys.filter(key => !allowedKeys.includes(key));
+      if (unwantedKeys.length > 0) {
+        console.error(`❌ ERROR: cleanInput contains unwanted keys: ${unwantedKeys.join(', ')}`);
+        console.error(`   This should never happen. cleanInput keys:`, cleanInputKeys);
+        // Remove unwanted keys
+        unwantedKeys.forEach(key => {
+          delete (cleanInput as any)[key];
+        });
+      }
+      
+      console.log(`✅ Input validation passed`);
+      console.log(`   Username: ${cleanUsername}`);
+      console.log(`   Account URLs: ${cleanInput.accountUrls.join(', ')}`);
+      console.log(`   Date range: ${cleanInput.startDate} to ${cleanInput.endDate}`);
+      if (cleanInput.splitMode) {
+        console.log(`   Split mode: ${cleanInput.splitMode}`);
+      }
+      if (cleanInput.language) {
+        console.log(`   Language: ${cleanInput.language}`);
+      }
+      
+      console.log(`📡 Apify input parameters:`, JSON.stringify(cleanInput, null, 2));
+      console.log(`📡 Calling Apify actor ${actorId} with clean input (no extra fields)`);
+      
+      // Call the actor with the clean input (only the fields we explicitly set)
+      const run = await this.client.actor(actorId).call(cleanInput);
 
       console.log(`⏳ Apify actor run started. Status: ${run.status}, Run ID: ${run.id}`);
 
@@ -323,7 +535,9 @@ export class ApifyService {
       while (finalStatus !== 'SUCCEEDED' && finalStatus !== 'FAILED' && finalStatus !== 'ABORTED' && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
         const runInfo = await this.client.run(run.id).get();
-        finalStatus = runInfo.status;
+        if (runInfo) {
+          finalStatus = runInfo.status;
+        }
         attempts++;
         
         if (attempts % 6 === 0) { // Log every 30 seconds
@@ -334,24 +548,54 @@ export class ApifyService {
       if (finalStatus !== 'SUCCEEDED') {
         console.error(`❌ Apify actor run ${finalStatus}`);
         
-        // Try to get run logs to check for rate limit errors
+        // Get detailed error information from run logs
+        let errorDetails = `Actor run ${finalStatus.toLowerCase()}`;
         let rateLimitError = false;
+        let inputError = false;
+        let authenticationError = false;
+        
         try {
-          const runLog = await this.client.run(run.id).log().get();
-          const logText = runLog?.log || '';
+          const runLog: any = await this.client.run(run.id).log().get();
+          const logText = (runLog?.log || runLog || '') as string;
+          
+          // Check for common error patterns
           if (logText.includes('Rate limit') || logText.includes('rate limit') || logText.includes('upgrade your plan')) {
             rateLimitError = true;
+            errorDetails = 'Apify rate limit reached. Please upgrade your Apify plan or try again later.';
             console.error(`⚠️ Rate limit detected in actor logs`);
+          } else if (logText.includes('Invalid input') || logText.includes('input validation') || logText.includes('required parameter')) {
+            inputError = true;
+            errorDetails = 'Invalid input parameters provided to actor. Check the actor documentation for required parameters.';
+            console.error(`⚠️ Input validation error detected in actor logs`);
+          } else if (logText.includes('Authentication') || logText.includes('401') || logText.includes('403')) {
+            authenticationError = true;
+            errorDetails = 'Authentication error. Please check your Apify API key.';
+            console.error(`⚠️ Authentication error detected in actor logs`);
+          } else if (logText.includes('No tweets found') || logText.includes('no results') || logText.includes('empty')) {
+            errorDetails = 'Actor completed but found no tweets. This might indicate the profile is private, has no posts, or the date range is incorrect.';
+            console.error(`⚠️ No results detected in actor logs`);
+          }
+          
+          // Log a sample of the error log for debugging
+          if (logText) {
+            const logLines = logText.split('\n');
+          const errorLines = logLines.filter((line: string) => 
+            line.toLowerCase().includes('error') || 
+            line.toLowerCase().includes('failed') ||
+            line.toLowerCase().includes('exception') ||
+            line.toLowerCase().includes('traceback')
+          );
+            if (errorLines.length > 0) {
+              console.error(`📋 Error lines from actor logs:`, errorLines.slice(0, 10).join('\n'));
+            }
           }
         } catch (logError) {
-          // Ignore log fetch errors
+          console.log(`⚠️ Could not fetch actor run logs:`, logError instanceof Error ? logError.message : String(logError));
         }
         
         return {
           success: false,
-          error: rateLimitError 
-            ? `Apify rate limit reached. Please upgrade your Apify plan or try again later. Run ID: ${run.id}`
-            : `Actor run ${finalStatus.toLowerCase()}. Run ID: ${run.id}`,
+          error: `${errorDetails} Run ID: ${run.id}. Check the run logs at https://console.apify.com/actors/runs/${run.id} for details.`,
         };
       }
 
@@ -364,11 +608,13 @@ export class ApifyService {
       
       // Get dataset info first to debug
       const datasetInfo = await dataset.get();
-      console.log(`📊 Dataset info:`, {
-        id: datasetInfo.id,
-        itemCount: datasetInfo.itemCount,
-        createdAt: datasetInfo.createdAt,
-      });
+      if (datasetInfo) {
+        console.log(`📊 Dataset info:`, {
+          id: datasetInfo.id,
+          itemCount: datasetInfo.itemCount,
+          createdAt: datasetInfo.createdAt,
+        });
+      }
       
       // Try to get all items - check if pagination is needed
       let items = await dataset.listItems({ limit: 1000 }); // Request up to 1000 items
@@ -391,8 +637,8 @@ export class ApifyService {
       
       // Also check run logs for errors and warnings even if run succeeded
       try {
-        const runLog = await this.client.run(run.id).log().get();
-        const logText = runLog?.log || '';
+        const runLog: any = await this.client.run(run.id).log().get();
+        const logText = (runLog?.log || runLog || '') as string;
         
         // Log a sample of the run log for debugging
         if (logText) {
@@ -432,54 +678,155 @@ export class ApifyService {
       }
 
       if (!items.items || items.items.length === 0) {
-        console.log(`⚠️ No posts found in Apify dataset`);
-        console.log(`   Username used: ${cleanUsername}`);
-        console.log(`   Profile URL: https://x.com/${cleanUsername}`);
-        console.log(`   Input parameters:`, JSON.stringify(input, null, 2));
-        console.log(`   Run ID: ${run.id}`);
-        console.log(`   Run URL: https://console.apify.com/actors/runs/${run.id}`);
-        console.log(`   Dataset total: ${items.total}`);
+        console.error(`❌ No posts found in Apify dataset`);
+        console.error(`   Username used: ${cleanUsername}`);
+        console.error(`   Profile URL: https://x.com/${cleanUsername}`);
+        console.error(`   Input parameters:`, JSON.stringify(input, null, 2));
+        console.error(`   Run ID: ${run.id}`);
+        console.error(`   Run URL: https://console.apify.com/actors/runs/${run.id}`);
+        console.error(`   Dataset total: ${items.total}`);
         
-        // Check for rate limit in logs
+        // Get detailed error information from run logs
+        let errorMessage = 'No posts found in Apify dataset';
         let rateLimitDetected = false;
+        let inputErrorDetected = false;
+        let profileErrorDetected = false;
+        
         try {
-          const runLog = await this.client.run(run.id).log().get();
-          const logText = runLog?.log || '';
+          const runLog: any = await this.client.run(run.id).log().get();
+          const logText = (runLog?.log || runLog || '') as string;
+          
+          // Check for specific error patterns
           if (logText.includes('Rate limit') || logText.includes('rate limit') || logText.includes('upgrade your plan')) {
             rateLimitDetected = true;
+            errorMessage = 'Apify rate limit reached. Please upgrade your Apify plan or wait for the rate limit to reset.';
             console.error(`   ❌ RATE LIMIT DETECTED: Apify account has reached its rate limit`);
             console.error(`   💡 Solution: Upgrade your Apify plan or wait for the rate limit to reset`);
             console.error(`   📊 Check your Apify usage at: https://console.apify.com/account/usage`);
-            return {
-              success: false,
-              error: 'Apify rate limit reached. Please upgrade your Apify plan or try again later. Check your usage at https://console.apify.com/account/usage',
-            };
+          } else if (logText.includes('Invalid input') || logText.includes('input validation') || logText.includes('required parameter')) {
+            inputErrorDetected = true;
+            errorMessage = 'Invalid input parameters provided to actor. The actor may require different parameters than what was provided.';
+            console.error(`   ❌ INPUT ERROR DETECTED: Actor rejected the input parameters`);
+            console.error(`   💡 Solution: Check the actor documentation for required parameters`);
+          } else if (logText.includes('Profile not found') || logText.includes('User not found') || logText.includes('404')) {
+            profileErrorDetected = true;
+            errorMessage = `Profile @${cleanUsername} not found or is invalid. Please verify the username is correct.`;
+            console.error(`   ❌ PROFILE ERROR DETECTED: The profile may not exist or is invalid`);
+          } else if (logText.includes('No tweets found') || logText.includes('no results') || logText.includes('empty')) {
+            errorMessage = `No tweets found for @${cleanUsername}. The profile may have no public posts, be private, or the date range may be incorrect.`;
+            console.error(`   ⚠️ NO RESULTS: Actor found no tweets matching the criteria`);
+          } else if (logText.includes('blocked') || logText.includes('Blocked') || logText.includes('403')) {
+            errorMessage = `Access to @${cleanUsername} was blocked. The profile may be private or X/Twitter blocked the scrape attempt.`;
+            console.error(`   ❌ BLOCKED: Access to the profile was blocked`);
+          }
+          
+          // Log error lines for debugging
+          if (logText) {
+            const logLines = logText.split('\n');
+            const errorLines = logLines.filter((line: string) => 
+              line.toLowerCase().includes('error') || 
+              line.toLowerCase().includes('failed') ||
+              line.toLowerCase().includes('exception') ||
+              line.toLowerCase().includes('traceback') ||
+              line.toLowerCase().includes('warning')
+            );
+            if (errorLines.length > 0) {
+              console.error(`   📋 Error/warning lines from actor logs:`, errorLines.slice(0, 15).join('\n   '));
+            }
           }
         } catch (logError) {
-          // Ignore log fetch errors
+          console.log(`   ⚠️ Could not fetch actor run logs:`, logError instanceof Error ? logError.message : String(logError));
         }
         
-        if (!rateLimitDetected) {
-          console.log(`   This could mean:`);
-          console.log(`   1. The profile URL is incorrect or the profile doesn't exist`);
-          console.log(`   2. The profile has no public posts`);
-          console.log(`   3. The profile is private or blocked`);
-          console.log(`   4. X/Twitter blocked the scrape attempt`);
-          console.log(`   5. Check the Apify run logs at: https://console.apify.com/actors/runs/${run.id}`);
+        if (!rateLimitDetected && !inputErrorDetected && !profileErrorDetected) {
+          console.error(`   💡 Possible causes:`);
+          console.error(`   1. The profile URL is incorrect or the profile doesn't exist`);
+          console.error(`   2. The profile has no public posts in the specified date range`);
+          console.error(`   3. The profile is private or blocked`);
+          console.error(`   4. X/Twitter blocked the scrape attempt`);
+          console.error(`   5. The actor input parameters may be incorrect`);
+          console.error(`   6. Check the Apify run logs at: https://console.apify.com/actors/runs/${run.id}`);
         }
         
+        // Return error instead of empty success to prevent silent failures
         return {
-          success: true,
-          posts: [],
+          success: false,
+          error: `${errorMessage} Run ID: ${run.id}. Check the run logs at https://console.apify.com/actors/runs/${run.id} for details.`,
         };
       }
 
       console.log(`📊 Found ${items.items.length} posts in Apify dataset`);
       
+      // Helper: treat an item as demo/placeholder if it has demo flag or has no real post content
+      const isDemoItem = (item: any): boolean =>
+        item.demo === true ||
+        (Object.keys(item).length === 1 && item.demo !== undefined) ||
+        (!item.id && !item.postId && !item.text && !item.fullText && !item.url);
+
       // Log sample item to debug field names
       if (items.items.length > 0) {
         console.log(`📋 Sample Apify item structure:`, JSON.stringify(items.items[0], null, 2));
         console.log(`📋 Sample item keys:`, Object.keys(items.items[0]));
+        
+        // Check if items are demo/placeholder data (first item or all items)
+        const firstItem = items.items[0];
+        const firstItemIsDemo = isDemoItem(firstItem);
+        const allItemsDemo = items.items.every((it: any) => isDemoItem(it));
+        const demoCount = items.items.filter((it: any) => isDemoItem(it)).length;
+
+        if (firstItemIsDemo || allItemsDemo || demoCount === items.items.length) {
+          console.error(`❌ ERROR: Apify actor returned demo/placeholder data instead of real posts!`);
+          console.error(`   ${demoCount} of ${items.items.length} items are demo placeholders.`);
+          console.error(`   This usually means:`);
+          console.error(`   1. The date range is in the future (no tweets exist yet) — use start/end on or before today`);
+          console.error(`   2. The actor run didn't actually scrape any data`);
+          console.error(`   3. The profile URL or username is incorrect`);
+          console.error(`   4. The profile is private, blocked, or has no posts`);
+          console.error(`   5. X/Twitter blocked the scrape attempt`);
+          console.error(`   Run URL: https://console.apify.com/actors/runs/${run.id}`);
+          console.error(`   Please check the Apify run logs for detailed error messages`);
+          
+          // Try to get run logs for more details
+          try {
+            const runLog: any = await this.client.run(run.id).log().get();
+            const logText: string = runLog?.log ? String(runLog.log) : (runLog ? String(runLog) : '');
+            if (logText) {
+              const logLines = logText.split('\n');
+            const errorLines = logLines.filter((line: string) => 
+              line.toLowerCase().includes('error') || 
+              line.toLowerCase().includes('failed') ||
+              line.toLowerCase().includes('blocked') ||
+              line.toLowerCase().includes('private') ||
+              line.toLowerCase().includes('no posts') ||
+              line.toLowerCase().includes('not found')
+            );
+              if (errorLines.length > 0) {
+                console.error(`   Error lines from actor logs:`, errorLines.slice(0, 10).join('\n   '));
+              }
+            }
+          } catch (logError) {
+            console.error(`   Could not fetch detailed logs:`, logError instanceof Error ? logError.message : String(logError));
+          }
+          
+          // Check if date range might be the issue
+          const startDateObj = input.startDate ? new Date(input.startDate) : null;
+          const endDateObj = input.endDate ? new Date(input.endDate) : null;
+          const today = new Date();
+          today.setHours(23, 59, 59, 999);
+          
+          let hint = '';
+          if (startDateObj && startDateObj > today) {
+            hint = ' The start date is in the future — use a start date on or before today.';
+          } else if (startDateObj && endDateObj) {
+            const daysDiff = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24));
+            hint = ` Date range: ${input.startDate} to ${input.endDate} (${daysDiff} days).`;
+          }
+          
+          return {
+            success: false,
+            error: `Apify actor returned demo/placeholder data instead of real posts. This usually means the actor couldn't scrape the profile or found no posts in the specified date range.${hint} Check the run logs at https://console.apify.com/actors/runs/${run.id} for details. Possible causes: no posts in date range, incorrect username, private profile, X/Twitter blocking, or actor limitations.`,
+          };
+        }
       }
 
       // Clean username for comparison (remove @ and lowercase)
@@ -487,14 +834,17 @@ export class ApifyService {
       
       // Log first item structure for debugging
       if (items.items.length > 0) {
-        const firstItem = items.items[0];
+        const firstItem: any = items.items[0];
+        const author = firstItem.author || {};
         console.log(`📋 First item author info:`, {
           hasAuthor: !!firstItem.author,
-          authorUserName: firstItem.author?.userName, // New actor uses userName (camelCase)
-          authorScreenName: firstItem.author?.screenName,
-          authorUsername: firstItem.author?.username,
+          authorHandle: firstItem.authorHandle, // New actor uses authorHandle directly
+          authorUserName: author.userName, // Old actor uses userName (camelCase)
+          authorScreenName: author.screenName,
+          authorUsername: author.username,
           profileUrl: firstItem.profileUrl,
-          postId: firstItem.postId || firstItem.id,
+          authorUrl: firstItem.authorUrl,
+          postId: firstItem.postId || firstItem.id || firstItem.tweetId,
           allKeys: Object.keys(firstItem),
         });
       }
@@ -502,12 +852,21 @@ export class ApifyService {
       // Filter items by author to ensure we only process tweets from the requested user
       // Apify might return retweets, replies, or other content not authored by the profile owner
       const userItems = items.items.filter((item: any) => {
-        // Check author.userName first (new actor uses camelCase userName)
+        // Check authorHandle first (new actor format - direct field)
+        if (item.authorHandle) {
+          const authorHandle = String(item.authorHandle).toLowerCase().replace('@', '');
+          const matches = authorHandle === cleanUsernameLower;
+          if (!matches) {
+            console.log(`   🔍 Item ${item.tweetId || item.postId || item.id} filtered: authorHandle "${authorHandle}" != "${cleanUsernameLower}"`);
+          }
+          return matches;
+        }
+        // Check author.userName (old actor format)
         if (item.author?.userName) {
           const authorUserName = String(item.author.userName).toLowerCase().replace('@', '');
           const matches = authorUserName === cleanUsernameLower;
           if (!matches) {
-            console.log(`   🔍 Item ${item.postId || item.id} filtered: author userName "${authorUserName}" != "${cleanUsernameLower}"`);
+            console.log(`   🔍 Item ${item.tweetId || item.postId || item.id} filtered: author userName "${authorUserName}" != "${cleanUsernameLower}"`);
           }
           return matches;
         }
@@ -516,7 +875,7 @@ export class ApifyService {
           const authorScreenName = String(item.author.screenName).toLowerCase().replace('@', '');
           const matches = authorScreenName === cleanUsernameLower;
           if (!matches) {
-            console.log(`   🔍 Item ${item.postId || item.id} filtered: author "${authorScreenName}" != "${cleanUsernameLower}"`);
+            console.log(`   🔍 Item ${item.tweetId || item.postId || item.id} filtered: author "${authorScreenName}" != "${cleanUsernameLower}"`);
           }
           return matches;
         }
@@ -525,22 +884,30 @@ export class ApifyService {
           const authorUsername = String(item.author.username).toLowerCase().replace('@', '');
           const matches = authorUsername === cleanUsernameLower;
           if (!matches) {
-            console.log(`   🔍 Item ${item.postId || item.id} filtered: author username "${authorUsername}" != "${cleanUsernameLower}"`);
+            console.log(`   🔍 Item ${item.tweetId || item.postId || item.id} filtered: author username "${authorUsername}" != "${cleanUsernameLower}"`);
           }
           return matches;
         }
-        // Fallback: check profileUrl if author info not available
+        // Fallback: check authorUrl or profileUrl if author info not available
+        if (item.authorUrl) {
+          const authorUrlLower = String(item.authorUrl).toLowerCase();
+          const matches = authorUrlLower.includes(`/${cleanUsernameLower}`) || authorUrlLower.includes(`/x.com/${cleanUsernameLower}`);
+          if (!matches) {
+            console.log(`   🔍 Item ${item.tweetId || item.postId || item.id} filtered: authorUrl "${authorUrlLower}" doesn't match "${cleanUsernameLower}"`);
+          }
+          return matches;
+        }
         if (item.profileUrl) {
           const profileUrlLower = String(item.profileUrl).toLowerCase();
           const matches = profileUrlLower.includes(`/${cleanUsernameLower}`) || profileUrlLower.includes(`/x.com/${cleanUsernameLower}`);
           if (!matches) {
-            console.log(`   🔍 Item ${item.postId || item.id} filtered: profileUrl "${profileUrlLower}" doesn't match "${cleanUsernameLower}"`);
+            console.log(`   🔍 Item ${item.tweetId || item.postId || item.id} filtered: profileUrl "${profileUrlLower}" doesn't match "${cleanUsernameLower}"`);
           }
           return matches;
         }
         // If no author info, include it (since we're fetching from a specific profile URL, items should be from that profile)
         // This is more lenient to avoid filtering out valid posts when Apify doesn't include author info
-        console.log(`   ✅ Item ${item.postId || item.id} included (no author info, assuming from requested profile)`);
+        console.log(`   ✅ Item ${item.tweetId || item.postId || item.id} included (no author info, assuming from requested profile)`);
         return true;
       });
       
@@ -560,23 +927,23 @@ export class ApifyService {
       }
       
       // Transform the Apify output to our format
-      // New actor returns: id, type, url, twitterUrl, text, fullText, likeCount, retweetCount, replyCount, quoteCount, viewCount, createdAt, etc.
+      // New actor returns: tweetId, authorHandle, tweetUrl, fullText, createdAt, replyCount, repostCount, likeCount, viewCount, etc.
       const posts = userItems.map((item: any) => {
-        // Extract tweet ID - new actor uses 'id' field
-        const postId = item.id || item.postId || item.tweetId || item.url?.split('/').pop() || item.postUrl?.split('/').pop() || '';
+        // Extract tweet ID - new actor uses 'tweetId' field, fallback to other formats
+        const postId = item.tweetId || item.id || item.postId || item.url?.split('/').pop() || item.tweetUrl?.split('/').pop() || item.postUrl?.split('/').pop() || '';
         
-        // Extract URL - new actor provides both url (x.com) and twitterUrl (twitter.com)
-        const url = item.url || item.twitterUrl || item.postUrl || item.tweetUrl || `https://x.com/${username}/status/${postId}`;
+        // Extract URL - new actor provides tweetUrl, fallback to other formats
+        const url = item.tweetUrl || item.url || item.twitterUrl || item.postUrl || `https://x.com/${username}/status/${postId}`;
         
-        // Extract text - new actor provides both 'text' and 'fullText' (use fullText if available, fallback to text)
+        // Extract text - new actor provides 'fullText', fallback to other formats
         const text = item.fullText || item.text || item.postText || item.content || item.tweet || '';
         
         // Handle timestamp - new actor returns createdAt as formatted date string
         let createdAt: string;
         if (item.createdAt) {
-          // Parse the date string format: "Wed Sep 24 18:06:27 +0000 2025"
+          // Parse the date string format: "2025-09-02 16:00:24+00:00" or ISO format
           if (typeof item.createdAt === 'string') {
-            // Try to parse the Twitter date format
+            // Try to parse the date string
             try {
               const parsedDate = new Date(item.createdAt);
               if (!isNaN(parsedDate.getTime())) {
@@ -600,10 +967,10 @@ export class ApifyService {
         }
         
         // Engagement metrics - new actor uses camelCase field names
-        // New actor returns: likeCount, retweetCount, replyCount, quoteCount, viewCount (maps to impressions)
+        // New actor returns: likeCount, repostCount (not retweetCount), replyCount, viewCount (maps to impressions)
         // Support both new format and fallback to old format for backward compatibility
         const likes = item.likeCount || item.favouriteCount || item.likes || item.favoriteCount || item.engagement?.likes || 0;
-        const retweets = item.retweetCount || item.repostCount || item.retweets || item.engagement?.retweets || 0;
+        const retweets = item.repostCount || item.retweetCount || item.retweets || item.engagement?.retweets || 0;
         const replies = item.replyCount || item.replies || item.engagement?.replies || 0;
         const quotes = item.quoteCount || item.quotes || item.engagement?.quotes || 0;
         // viewCount maps to impressions
@@ -627,21 +994,29 @@ export class ApifyService {
       // Filter by date range if provided
       let filteredPosts = posts;
       if (options?.startDate || options?.endDate) {
+        // Convert string dates to Date objects for comparison
+        const startDateObj = options.startDate 
+          ? (options.startDate instanceof Date ? options.startDate : new Date(options.startDate))
+          : null;
+        const endDateObj = options.endDate 
+          ? (options.endDate instanceof Date ? options.endDate : new Date(options.endDate))
+          : null;
+        
         console.log(`📅 Filtering posts by date range:`, {
-          startDate: options.startDate?.toISOString(),
-          endDate: options.endDate?.toISOString(),
+          startDate: startDateObj?.toISOString(),
+          endDate: endDateObj?.toISOString(),
           totalPosts: posts.length
         });
         
         const beforeFilter = posts.length;
         filteredPosts = posts.filter((post) => {
           const postDate = new Date(post.createdAt);
-          if (options.startDate && postDate < options.startDate) {
-            console.log(`   ❌ Post ${post.id} filtered out: ${postDate.toISOString()} < ${options.startDate.toISOString()}`);
+          if (startDateObj && postDate < startDateObj) {
+            console.log(`   ❌ Post ${post.id} filtered out: ${postDate.toISOString()} < ${startDateObj.toISOString()}`);
             return false;
           }
-          if (options.endDate && postDate > options.endDate) {
-            console.log(`   ❌ Post ${post.id} filtered out: ${postDate.toISOString()} > ${options.endDate.toISOString()}`);
+          if (endDateObj && postDate > endDateObj) {
+            console.log(`   ❌ Post ${post.id} filtered out: ${postDate.toISOString()} > ${endDateObj.toISOString()}`);
             return false;
           }
           return true;
@@ -651,7 +1026,7 @@ export class ApifyService {
         
         if (afterFilter === 0 && beforeFilter > 0) {
           console.error(`❌ WARNING: All ${beforeFilter} posts were filtered out by date range!`);
-          console.error(`   Date range: ${options.startDate?.toISOString()} to ${options.endDate?.toISOString()}`);
+          console.error(`   Date range: ${startDateObj?.toISOString()} to ${endDateObj?.toISOString()}`);
           if (posts.length > 0) {
             const samplePost = posts[0];
             console.error(`   Sample post date: ${samplePost.createdAt}`);
@@ -794,8 +1169,10 @@ export class ApifyService {
           // Try to get the dataset ID from the dataset object
           try {
             const datasetInfo = await dataset.get();
-            datasetIdToUse = datasetInfo.id;
-            console.log(`📊 Got dataset ID from dataset object: ${datasetIdToUse}`);
+            if (datasetInfo) {
+              datasetIdToUse = datasetInfo.id;
+              console.log(`📊 Got dataset ID from dataset object: ${datasetIdToUse}`);
+            }
           } catch (infoError) {
             console.log(`⚠️ Could not get dataset ID from dataset object:`, infoError);
           }
@@ -826,12 +1203,14 @@ export class ApifyService {
       // Try to get dataset info first
       try {
         const datasetInfo = await dataset.get();
-        console.log(`📊 Dataset info:`, {
-          id: datasetInfo.id,
-          name: datasetInfo.name,
-          itemCount: datasetInfo.itemCount,
-          cleanItemCount: datasetInfo.cleanItemCount,
-        });
+        if (datasetInfo) {
+          console.log(`📊 Dataset info:`, {
+            id: datasetInfo.id,
+            name: datasetInfo.name,
+            itemCount: datasetInfo.itemCount,
+            cleanItemCount: (datasetInfo as any).cleanItemCount,
+          });
+        }
       } catch (datasetInfoError) {
         console.log(`⚠️ Could not get dataset info (this is optional):`, datasetInfoError);
       }
@@ -936,16 +1315,19 @@ export class ApifyService {
         console.log(`⚠️ Dataset appears empty. Double-checking with dataset info...`);
         try {
           const datasetInfo = await dataset.get();
-          console.log(`📊 Dataset info re-check:`, {
-            itemCount: datasetInfo.itemCount,
-            cleanItemCount: datasetInfo.cleanItemCount,
-          });
-          
-          // If dataset info shows items but listItems doesn't, there might be a sync issue
-          if (datasetInfo.itemCount > 0 || datasetInfo.cleanItemCount > 0) {
-            const actualCount = datasetInfo.itemCount || datasetInfo.cleanItemCount || 0;
-            console.log(`⚠️ Dataset info shows ${actualCount} items but listItems returned 0. This might be a timing/sync issue.`);
-            items.total = actualCount;
+          if (datasetInfo) {
+            console.log(`📊 Dataset info re-check:`, {
+              itemCount: datasetInfo.itemCount,
+              cleanItemCount: (datasetInfo as any).cleanItemCount,
+            });
+            
+            // If dataset info shows items but listItems doesn't, there might be a sync issue
+            const cleanItemCount = (datasetInfo as any).cleanItemCount || 0;
+            if (datasetInfo.itemCount > 0 || cleanItemCount > 0) {
+              const actualCount = datasetInfo.itemCount || cleanItemCount || 0;
+              console.log(`⚠️ Dataset info shows ${actualCount} items but listItems returned 0. This might be a timing/sync issue.`);
+              items.total = actualCount;
+            }
           }
         } catch (infoError) {
           console.log(`⚠️ Could not re-check dataset info:`, infoError);
@@ -959,24 +1341,26 @@ export class ApifyService {
         try {
           // Try key-value store
           const keyValueStore = this.client.run(cleanRunId).keyValueStore();
-          const keyValueInfo = await keyValueStore.get();
-          console.log(`📊 Key-value store info:`, {
-            id: keyValueInfo.id,
-            name: keyValueInfo.name,
-            recordCount: keyValueInfo.recordCount,
-          });
-          
-          if (keyValueInfo.recordCount > 0) {
-            console.log(`📊 Found ${keyValueInfo.recordCount} records in key-value store. Trying to get records...`);
-            // Try to get records from key-value store
-            const records = await keyValueStore.listKeys();
-            console.log(`📊 Key-value store keys:`, records.items?.slice(0, 10).map((k: any) => k.key));
+          const keyValueInfo: any = await keyValueStore.get();
+          if (keyValueInfo) {
+            console.log(`📊 Key-value store info:`, {
+              id: keyValueInfo.id,
+              name: keyValueInfo.name,
+              recordCount: keyValueInfo.recordCount,
+            });
             
-            // Try to get the first record to see the structure
-            if (records.items && records.items.length > 0) {
-              const firstKey = records.items[0].key;
-              const firstRecord = await keyValueStore.getRecord(firstKey);
-              console.log(`📊 Sample key-value record (key: ${firstKey}):`, JSON.stringify(firstRecord?.value, null, 2));
+            if (keyValueInfo.recordCount > 0) {
+              console.log(`📊 Found ${keyValueInfo.recordCount} records in key-value store. Trying to get records...`);
+              // Try to get records from key-value store
+              const records = await keyValueStore.listKeys();
+              console.log(`📊 Key-value store keys:`, records.items?.slice(0, 10).map((k: any) => k.key));
+              
+              // Try to get the first record to see the structure
+              if (records.items && records.items.length > 0) {
+                const firstKey = records.items[0].key;
+                const firstRecord = await keyValueStore.getRecord(firstKey);
+                console.log(`📊 Sample key-value record (key: ${firstKey}):`, JSON.stringify(firstRecord?.value, null, 2));
+              }
             }
           }
         } catch (kvError) {
@@ -985,15 +1369,17 @@ export class ApifyService {
         
         // Check run output/result
         try {
-          const runOutput = runInfo?.output;
-          if (runOutput) {
-            console.log(`📊 Run output found:`, {
-              type: typeof runOutput,
-              isArray: Array.isArray(runOutput),
-              length: Array.isArray(runOutput) ? runOutput.length : 'N/A',
-            });
-            if (Array.isArray(runOutput) && runOutput.length > 0) {
-              console.log(`📊 Sample run output item:`, JSON.stringify(runOutput[0], null, 2));
+          if (runInfo) {
+            const runOutput = (runInfo as any).output;
+            if (runOutput) {
+              console.log(`📊 Run output found:`, {
+                type: typeof runOutput,
+                isArray: Array.isArray(runOutput),
+                length: Array.isArray(runOutput) ? runOutput.length : 'N/A',
+              });
+              if (Array.isArray(runOutput) && runOutput.length > 0) {
+                console.log(`📊 Sample run output item:`, JSON.stringify(runOutput[0], null, 2));
+              }
             }
           }
         } catch (outputError) {
@@ -1028,20 +1414,48 @@ export class ApifyService {
       const cleanUsernameLower = username.replace('@', '').toLowerCase();
       
       // Filter items by author to ensure we only process tweets from the requested user
+      // Apify might return retweets, replies, or other content not authored by the profile owner
       const userItems = items.items.filter((item: any) => {
+        // Check author.userName first (new actor uses camelCase userName)
+        if (item.author?.userName) {
+          const authorUserName = String(item.author.userName).toLowerCase().replace('@', '');
+          const matches = authorUserName === cleanUsernameLower;
+          if (!matches) {
+            console.log(`   🔍 Item ${item.postId || item.id} filtered: author userName "${authorUserName}" != "${cleanUsernameLower}"`);
+          }
+          return matches;
+        }
+        // Check author.screenName if available (old actor format)
         if (item.author?.screenName) {
           const authorScreenName = String(item.author.screenName).toLowerCase().replace('@', '');
-          return authorScreenName === cleanUsernameLower;
+          const matches = authorScreenName === cleanUsernameLower;
+          if (!matches) {
+            console.log(`   🔍 Item ${item.postId || item.id} filtered: author "${authorScreenName}" != "${cleanUsernameLower}"`);
+          }
+          return matches;
         }
+        // Check author.username as fallback (alternative format)
         if (item.author?.username) {
           const authorUsername = String(item.author.username).toLowerCase().replace('@', '');
-          return authorUsername === cleanUsernameLower;
+          const matches = authorUsername === cleanUsernameLower;
+          if (!matches) {
+            console.log(`   🔍 Item ${item.postId || item.id} filtered: author username "${authorUsername}" != "${cleanUsernameLower}"`);
+          }
+          return matches;
         }
+        // Fallback: check profileUrl if author info not available
         if (item.profileUrl) {
           const profileUrlLower = String(item.profileUrl).toLowerCase();
-          return profileUrlLower.includes(`/${cleanUsernameLower}`) || profileUrlLower.includes(`/x.com/${cleanUsernameLower}`);
+          const matches = profileUrlLower.includes(`/${cleanUsernameLower}`) || profileUrlLower.includes(`/x.com/${cleanUsernameLower}`);
+          if (!matches) {
+            console.log(`   🔍 Item ${item.postId || item.id} filtered: profileUrl "${profileUrlLower}" doesn't match "${cleanUsernameLower}"`);
+          }
+          return matches;
         }
-        return true; // Include if no author info (shouldn't happen, but be safe)
+        // If no author info, include it (since we're fetching from a specific profile URL, items should be from that profile)
+        // This is more lenient to avoid filtering out valid posts when Apify doesn't include author info
+        console.log(`   ✅ Item ${item.postId || item.id} included (no author info, assuming from requested profile)`);
+        return true;
       });
       
       if (userItems.length < items.items.length) {
@@ -1050,17 +1464,39 @@ export class ApifyService {
       }
 
       // Transform the Apify output to our format (same logic as getPostAnalytics)
+      // New actor uses camelCase field names: id, url, fullText/text, createdAt, likeCount, retweetCount, etc.
       const posts = userItems.map((item: any) => {
-        const postId = item.postId || item.id || item.tweetId || item.url?.split('/').pop() || item.postUrl?.split('/').pop() || '';
-        const url = item.postUrl || item.url || item.tweetUrl || `https://x.com/${username}/status/${postId}`;
-        const text = item.postText || item.text || item.content || item.tweet || '';
+        // Extract tweet ID - new actor uses 'id' field
+        const postId = item.id || item.postId || item.tweetId || item.url?.split('/').pop() || item.postUrl?.split('/').pop() || '';
         
-        // Handle timestamp
+        // Extract URL - new actor provides both url (x.com) and twitterUrl (twitter.com)
+        const url = item.url || item.twitterUrl || item.postUrl || item.tweetUrl || `https://x.com/${username}/status/${postId}`;
+        
+        // Extract text - new actor provides both 'text' and 'fullText' (use fullText if available, fallback to text)
+        const text = item.fullText || item.text || item.postText || item.content || item.tweet || '';
+        
+        // Handle timestamp - new actor returns createdAt as formatted date string
         let createdAt: string;
-        if (item.timestamp) {
+        if (item.createdAt) {
+          // Parse the date string format: "Wed Sep 24 18:06:27 +0000 2025"
+          if (typeof item.createdAt === 'string') {
+            // Try to parse the Twitter date format
+            try {
+              const parsedDate = new Date(item.createdAt);
+              if (!isNaN(parsedDate.getTime())) {
+                createdAt = parsedDate.toISOString();
+              } else {
+                createdAt = item.createdAt; // Use as-is if parsing fails
+              }
+            } catch {
+              createdAt = item.createdAt; // Use as-is if parsing fails
+            }
+          } else {
+            createdAt = new Date(item.createdAt).toISOString();
+          }
+        } else if (item.timestamp) {
+          // Fallback: Convert milliseconds to ISO string
           createdAt = new Date(item.timestamp).toISOString();
-        } else if (item.createdAt) {
-          createdAt = typeof item.createdAt === 'string' ? item.createdAt : new Date(item.createdAt).toISOString();
         } else if (item.date) {
           createdAt = typeof item.date === 'string' ? item.date : new Date(item.date).toISOString();
         } else if (item.publishedAt) {
@@ -1069,12 +1505,15 @@ export class ApifyService {
           createdAt = new Date().toISOString();
         }
         
-        // Engagement metrics
-        const likes = item.favouriteCount || item.likes || item.likeCount || item.favoriteCount || item.engagement?.likes || 0;
-        const retweets = item.retweets || item.retweetCount || item.engagement?.retweets || 0;
+        // Engagement metrics - new actor uses camelCase field names
+        // New actor returns: likeCount, retweetCount, replyCount, quoteCount, viewCount (maps to impressions)
+        // Support both new format and fallback to old format for backward compatibility
+        const likes = item.likeCount || item.favouriteCount || item.likes || item.favoriteCount || item.engagement?.likes || 0;
+        const retweets = item.retweetCount || item.repostCount || item.retweets || item.engagement?.retweets || 0;
         const replies = item.replyCount || item.replies || item.engagement?.replies || 0;
         const quotes = item.quoteCount || item.quotes || item.engagement?.quotes || 0;
-        const impressions = item.impressions || item.impressionCount || item.views || item.engagement?.impressions || undefined;
+        // viewCount maps to impressions
+        const impressions = item.viewCount || item.impressions || item.impressionCount || item.views || item.engagement?.impressions || undefined;
 
         return {
           id: String(postId),
@@ -1086,13 +1525,15 @@ export class ApifyService {
           replies: Number(replies) || 0,
           quotes: Number(quotes) || 0,
           impressions: impressions !== undefined ? Number(impressions) : undefined,
+          // Note: clicks and bookmarkCount are not included here as they're not in the return type
+          // but could be added if needed in the future
         };
       });
 
       // Filter by date range if provided
       let filteredPosts = posts;
       if (options?.startDate || options?.endDate) {
-        filteredPosts = posts.filter((post) => {
+        filteredPosts = posts.filter((post: any) => {
           const postDate = new Date(post.createdAt);
           if (options.startDate && postDate < options.startDate) {
             return false;

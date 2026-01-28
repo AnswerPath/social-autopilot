@@ -46,11 +46,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new user with Supabase Auth
-    const { data, error } = await getSupabaseAdmin().auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true // Auto-confirm email for now (can be changed later)
-    })
+    let data, error
+    try {
+      const result = await getSupabaseAdmin().auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true // Auto-confirm email for now (can be changed later)
+      })
+      data = result.data
+      error = result.error
+    } catch (fetchError: any) {
+      console.error('Supabase connection error:', fetchError)
+      
+      // Check for specific network errors
+      if (fetchError.message?.includes('fetch failed') || fetchError.cause?.code === 'ENOTFOUND') {
+        return NextResponse.json(
+          { 
+            error: createAuthError(
+              AuthErrorType.NETWORK_ERROR, 
+              'Unable to connect to Supabase. Please check if your Supabase project is active and the URL is correct. Free tier projects may be paused after inactivity.'
+            ) 
+          },
+          { status: 503 }
+        )
+      }
+      
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, `Connection error: ${fetchError.message || 'Unknown error'}`) },
+        { status: 503 }
+      )
+    }
 
     if (error) {
       return NextResponse.json(
