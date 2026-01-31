@@ -308,6 +308,7 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
       const response = await fetch(
         `/api/analytics/followers?startDate=${startDate}&endDate=${endDate}`,
         {
+          credentials: 'include', // Include cookies for authentication
           headers: {
             'x-user-id': userId
           }
@@ -328,6 +329,8 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
 
   // Fetch all data - use ref to track if we're already fetching to prevent loops
   const isFetchingRef = useRef(false)
+  // Store fetchAllData in ref so initial fetch effect can call it before effects run
+  const fetchAllDataRef = useRef<((fetchFromApi?: boolean, customDateRange?: DateRange) => Promise<void>) | null>(null)
   // Store fetch functions in refs to avoid dependency issues
   const fetchFunctionsRef = useRef<{
     fetchSummaryMetrics: typeof fetchSummaryMetrics
@@ -394,7 +397,10 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
     }
   }, [toast]) // Removed dateRange dependency - use ref instead
 
-  // Update fetchAllDataRef after fetchAllData is defined
+  // Assign fetchAllDataRef synchronously so it's available before any effects run
+  // (avoids race where initial fetch effect runs before useEffect-based assignment)
+  fetchAllDataRef.current = fetchAllData
+  // Keep useEffect for subsequent updates when fetchAllData identity changes
   useEffect(() => {
     fetchAllDataRef.current = fetchAllData
   }, [fetchAllData])
@@ -465,10 +471,6 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
   // Track last fetch time to prevent rapid successive fetches
   const lastFetchTimeRef = useRef<number>(0)
   const MIN_FETCH_INTERVAL = 60000 // Minimum 60 seconds (1 minute) between automatic fetches
-  
-  // Store the latest fetchAllData function in a ref to avoid dependency issues
-  // Initialize as null and update in useEffect after fetchAllData is defined
-  const fetchAllDataRef = useRef<typeof fetchAllData | null>(null)
   
   // Initial fetch ONLY - no automatic reloading
   // Use a separate ref to track if we've done the initial fetch to prevent re-runs
