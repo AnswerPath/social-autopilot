@@ -423,6 +423,7 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
       const response = await fetch(
         `/api/analytics/export?startDate=${startDate}&endDate=${endDate}&format=csv`,
         {
+          credentials: 'include',
           headers: {
             'x-user-id': userId
           }
@@ -457,7 +458,7 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
     } finally {
       setExporting(false)
     }
-  }, [dateRange, getDateRangeStrings, toast])
+  }, [dateRange, getDateRangeStrings, toast, userId])
 
   // Track if initial fetch has been done
   const hasInitialFetch = useRef(false)
