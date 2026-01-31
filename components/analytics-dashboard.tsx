@@ -84,7 +84,11 @@ export function AnalyticsDashboard() {
       </div>
     )
   }
-  
+
+  return <AnalyticsDashboardContent user={user} />
+}
+
+function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
   // Memoize userId to prevent unnecessary recreations - use ref to track if it actually changed
   const userIdRef = useRef<string | null>(null)
   const userId = useMemo(() => {

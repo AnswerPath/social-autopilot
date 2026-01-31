@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { storeXUsername, getXUsername } from '@/lib/apify-storage';
+import { getCurrentUser, createAuthError } from '@/lib/auth-utils';
+import { AuthErrorType } from '@/lib/auth-types';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { userId, username } = body;
-
-    if (!userId || !username) {
+    const user = await getCurrentUser(request);
+    if (!user) {
+      console.warn('X username POST: unauthenticated request rejected');
       return NextResponse.json(
-        { error: 'Missing required fields: userId and username' },
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { username } = body;
+
+    if (!username) {
+      return NextResponse.json(
+        { error: 'Missing required field: username' },
         { status: 400 }
       );
     }
@@ -22,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await storeXUsername(userId, cleanUsername);
+    const result = await storeXUsername(user.id, cleanUsername);
     if (!result.success) {
       return NextResponse.json(
         { error: result.error },
@@ -45,17 +56,16 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const user = await getCurrentUser(request);
+    if (!user) {
+      console.warn('X username GET: unauthenticated request rejected');
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
-        { status: 400 }
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
       );
     }
 
-    const result = await getXUsername(userId);
+    const result = await getXUsername(user.id);
     if (!result.success) {
       return NextResponse.json(
         { success: false, username: null },
@@ -75,4 +85,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

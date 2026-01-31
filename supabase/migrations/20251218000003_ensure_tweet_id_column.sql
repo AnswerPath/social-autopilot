@@ -11,15 +11,18 @@ BEGIN
         WHERE table_name = 'post_analytics' 
         AND column_name = 'tweet_id'
     ) THEN
-        -- Add tweet_id column as TEXT NOT NULL
-        -- It should store the same value as post_id (the tweet ID)
+        -- (1) Add tweet_id column as nullable to avoid NOT NULL failure on non-empty tables
         ALTER TABLE post_analytics 
-        ADD COLUMN tweet_id TEXT NOT NULL;
+        ADD COLUMN tweet_id TEXT;
         
-        -- Populate tweet_id from post_id for existing rows
+        -- (2) Populate tweet_id from post_id for existing rows
         UPDATE post_analytics 
         SET tweet_id = post_id 
-        WHERE tweet_id IS NULL OR tweet_id = '';
+        WHERE tweet_id IS NULL;
+        
+        -- (3) Now set NOT NULL after all rows are populated (no temp DEFAULT, final schema is clean)
+        ALTER TABLE post_analytics 
+        ALTER COLUMN tweet_id SET NOT NULL;
         
         -- Create index on tweet_id for performance
         CREATE INDEX IF NOT EXISTS idx_post_analytics_tweet_id 

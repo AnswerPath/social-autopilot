@@ -15,6 +15,7 @@ interface PostingTimeRecommendation {
   confidence: number
   reasoning: string
   averageEngagementRate: number
+  postCount: number
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -52,7 +53,8 @@ export function PostingRecommendations() {
         return
       }
 
-      setRecommendations(result.recommendations || [])
+      const raw = (result.recommendations || []) as (Omit<PostingTimeRecommendation, 'postCount'> & { postCount?: number })[]
+      setRecommendations(raw.map((r) => ({ ...r, postCount: r.postCount ?? 0 })))
       setError(null)
     } catch (err) {
       console.error('Error fetching recommendations:', err)
