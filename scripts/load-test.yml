@@ -1,0 +1,17 @@
+# Lightweight load test for critical API paths.
+# Run: npx artillery run scripts/load-test.yml
+# Requires: npm install -g artillery (or npx artillery)
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 20
+      arrivalRate: 3
+scenarios:
+  - name: "scheduler queue"
+    flow:
+      - get:
+          url: "/api/scheduler/queue"
+  - name: "error monitoring health"
+    flow:
+      - get:
+          url: "/api/settings/error-monitoring?action=health"

@@ -1,9 +1,11 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { postTweet } from '@/lib/twitter-api-node'
+import { logger } from '@/lib/logger'
 
 /**
  * Job queue service for processing scheduled posts
  */
+const log = logger.child({ service: 'job-queue' })
 
 export interface JobStatus {
   pending: number
@@ -84,6 +86,7 @@ export async function processQueue(): Promise<{
       .limit(50) // Process up to 50 jobs at a time
 
     if (fetchError) {
+      log.error({ err: fetchError }, 'Failed to fetch due jobs')
       throw new Error(`Failed to fetch due jobs: ${fetchError.message}`)
     }
 
@@ -185,6 +188,7 @@ export async function processQueue(): Promise<{
             })
           } else {
             // Mark as permanently failed
+            log.warn({ jobId: job.id, retryCount, error: postResult.error }, 'Job marked failed after max retries')
             await supabaseAdmin
               .from('scheduled_posts')
               .update({
@@ -206,6 +210,7 @@ export async function processQueue(): Promise<{
         const maxRetries = job.max_retries || 3
         const retryCount = (job.retry_count || 0) + 1
         const errorMessage = jobError instanceof Error ? jobError.message : 'Unknown error'
+        log.error({ jobId: job.id, err: jobError, retryCount, maxRetries }, 'Job processing error')
 
         if (shouldRetry(retryCount, maxRetries)) {
           const retryDelay = calculateRetryDelay(retryCount)

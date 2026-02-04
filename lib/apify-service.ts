@@ -1,4 +1,5 @@
 import { ApifyClient } from 'apify-client';
+import { ApiErrorHandler, CircuitBreaker } from '@/lib/error-handling';
 
 export interface ApifyCredentials {
   apiKey: string;
@@ -47,12 +48,14 @@ export interface ApifyAnalyticsResult {
 export class ApifyService {
   private client: ApifyClient;
   private credentials: ApifyCredentials;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(credentials: ApifyCredentials) {
     this.credentials = credentials;
     this.client = new ApifyClient({
       token: credentials.apiKey,
     });
+    this.circuitBreaker = new CircuitBreaker();
   }
 
   /**
@@ -60,47 +63,51 @@ export class ApifyService {
    * Note: This method uses the watcher.data/search-x-by-keywords actor
    */
   async searchXByKeywords(keywords: string, limit: number = 50): Promise<ApifyMentionsResult> {
-    try {
-      const actorId = 'watcher.data/search-x-by-keywords';
-      
-      const run = await this.client.actor(actorId).call({
-        keywords,
-        limit,
-        // Add other parameters as needed for the specific actor
-      });
-
-      if (run.status === 'SUCCEEDED') {
-        // Get the dataset items from the run
-        const dataset = this.client.run(run.id).dataset();
-        const items = await dataset.listItems();
-        
-        // Transform the output to match our interface
-        const mentions = Array.isArray(items.items) ? items.items : [];
-        return {
-          success: true,
-          mentions: mentions.map((mention: any) => ({
-            id: mention.id || mention.tweetId || mention.url,
-            text: mention.text || mention.content || mention.tweet,
-            author: mention.author || mention.username || mention.user,
-            timestamp: mention.timestamp || mention.createdAt || mention.date,
-            url: mention.url || mention.tweetUrl || `https://twitter.com/user/status/${mention.id}`,
-          })),
-        };
-      } else {
-        return {
-          success: false,
-          mentions: [],
-          error: `Actor run failed with status: ${run.status}`,
-        };
-      }
-    } catch (error) {
-      console.error('Apify search X by keywords error:', error);
-      return {
-        success: false,
-        mentions: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+    return this.circuitBreaker.execute(async () =>
+      ApiErrorHandler.executeWithRetry(
+        async () => {
+          try {
+            const actorId = 'watcher.data/search-x-by-keywords';
+            const run = await this.client.actor(actorId).call({
+              keywords,
+              limit,
+            });
+            if (run.status === 'SUCCEEDED') {
+              const dataset = this.client.run(run.id).dataset();
+              const items = await dataset.listItems();
+              const mentions = Array.isArray(items.items) ? items.items : [];
+              return {
+                success: true,
+                mentions: mentions.map((mention: any) => ({
+                  id: mention.id || mention.tweetId || mention.url,
+                  text: mention.text || mention.content || mention.tweet,
+                  author: mention.author || mention.username || mention.user,
+                  timestamp: mention.timestamp || mention.createdAt || mention.date,
+                  url: mention.url || mention.tweetUrl || `https://twitter.com/user/status/${mention.id}`,
+                })),
+              };
+            }
+            return {
+              success: false,
+              mentions: [],
+              error: `Actor run failed with status: ${run.status}`,
+            };
+          } catch (error) {
+            throw ApiErrorHandler.normalizeError(error, 'apify', {
+              endpoint: 'searchXByKeywords',
+              userId: this.credentials.userId,
+            });
+          }
+        },
+        'apify',
+        undefined,
+        { endpoint: 'searchXByKeywords', userId: this.credentials.userId }
+      )
+    ).catch((err) => ({
+      success: false as const,
+      mentions: [] as ApifyMentionsResult['mentions'],
+      error: err?.message ?? 'Unknown error occurred',
+    }));
   }
 
   /**

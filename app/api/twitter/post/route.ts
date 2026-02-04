@@ -3,6 +3,8 @@ import { postTweet, scheduleTweet } from '@/lib/twitter-api-node'
 import { SchedulingService } from '@/lib/scheduling-service'
 import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
 import { recordRevision } from '@/lib/approval/revisions'
+import { createLogger } from '@/lib/logger'
+import { withApiErrorHandler } from '@/lib/api-error-wrapper'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +12,9 @@ function getUserId(): string {
   return 'demo-user'
 }
 
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
+  const requestId = request.headers.get('x-request-id') ?? undefined
+  const log = createLogger({ requestId, service: 'api/twitter/post' })
   try {
     const body = await request.json()
     const { text, mediaIds, scheduledTime, requiresApproval } = body
@@ -109,8 +113,7 @@ export async function POST(request: NextRequest) {
         try {
           await ensureWorkflowAssignment((scheduleResult.post as any).id, userId)
         } catch (err) {
-          // Non-fatal; approvals UI may have limited metadata without assignment
-          console.error('Failed to ensure workflow assignment for immediate post', err)
+          log.warn({ err }, 'Failed to ensure workflow assignment for immediate post')
         }
 
         try {
@@ -127,7 +130,7 @@ export async function POST(request: NextRequest) {
             'create'
           )
         } catch (err) {
-          console.error('Failed to record revision for immediate approval post', err)
+          log.warn({ err }, 'Failed to record revision for immediate approval post')
         }
 
         return NextResponse.json({
@@ -149,10 +152,9 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error: any) {
-    console.error('API Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
-      { status: 500 }
-    )
+    log.error({ err: error }, 'API Error')
+    throw error
   }
 }
+
+export const POST = withApiErrorHandler(postHandler)

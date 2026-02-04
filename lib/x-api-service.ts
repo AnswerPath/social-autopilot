@@ -1,5 +1,8 @@
 import { TwitterApi } from 'twitter-api-v2';
 import { ApiErrorHandler, ErrorType, CircuitBreaker } from './error-handling';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ service: 'x-api-service' });
 
 export interface XApiCredentials {
   apiKey: string;
@@ -54,7 +57,7 @@ export class XApiService {
                   });
                   mediaIds.push(mediaId);
                 } catch (error) {
-                  console.error('Failed to upload media:', error);
+                  log.warn({ err: error, mediaUrl }, 'Failed to upload media');
                   // Continue without this media
                 }
               }
@@ -103,7 +106,7 @@ export class XApiService {
             });
             mediaIds.push(mediaId);
           } catch (error) {
-            console.error('Failed to upload media:', error);
+            log.warn({ err: error, mediaUrl }, 'Failed to upload media');
           }
         }
       }
@@ -121,7 +124,7 @@ export class XApiService {
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('X API reply error:', error);
+      log.error({ err: error, tweetId }, 'X API reply error');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -147,7 +150,7 @@ export class XApiService {
         rateLimit: rateLimitInfo,
       };
     } catch (error: any) {
-      console.error('X API connection test failed:', error);
+      log.error({ err: error }, 'X API connection test failed');
       
       // Extract rate limit info from error if available
       const rateLimitInfo = this.extractRateLimitInfoFromError(error);
@@ -214,7 +217,7 @@ export class XApiService {
         };
       }
     } catch (error) {
-      console.error('X API get user profile error:', error);
+      log.error({ err: error, username }, 'X API get user profile error');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -242,7 +245,7 @@ export class XApiService {
         rateLimit: rateLimitInfo,
       };
     } catch (error: any) {
-      console.error('X API get user tweets error:', error);
+      log.error({ err: error, userId }, 'X API get user tweets error');
       
       // Extract rate limit info from error if available
       const rateLimitInfo = this.extractRateLimitInfoFromError(error);

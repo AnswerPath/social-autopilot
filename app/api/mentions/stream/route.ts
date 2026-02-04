@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUnifiedCredentials } from '@/lib/unified-credentials';
 import { createMentionMonitoringService } from '@/lib/mention-monitoring';
 import { XApiCredentials } from '@/lib/x-api-service';
+import { isEnabled } from '@/lib/feature-flags';
 
 /**
  * Store active monitoring services per user
@@ -23,6 +24,12 @@ export const activeMonitors = new Map<string, any>();
 
 export async function GET(request: NextRequest) {
   try {
+    if (!isEnabled('mention_stream_enabled')) {
+      return NextResponse.json(
+        { error: 'Mention stream is temporarily disabled.' },
+        { status: 503 }
+      );
+    }
     const userId = request.headers.get('x-user-id') || 'demo-user';
     
     // FIRST: Check for real credentials BEFORE checking existing monitors
