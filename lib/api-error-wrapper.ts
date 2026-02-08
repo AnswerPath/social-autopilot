@@ -10,7 +10,6 @@ import {
   ApiErrorHandler,
   ErrorMonitor,
   ErrorType,
-  createUserFriendlyMessage,
   type ApiError,
 } from '@/lib/error-handling';
 import { createLogger } from '@/lib/logger';
@@ -44,7 +43,7 @@ export function withApiErrorHandler(handler: RouteHandler): RouteHandler {
       });
       log.error({ err: error, apiError }, 'API route error');
       const status = statusFromError(apiError);
-      const clientMessage = createUserFriendlyMessage(apiError);
+      const clientMessage = ApiErrorHandler.createUserFriendlyMessage(apiError);
       return NextResponse.json(
         { error: clientMessage, requestId: requestId || undefined },
         { status }

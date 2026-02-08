@@ -21,6 +21,7 @@ import { UserInfoCard } from "./auth/user-info-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ManagerApprovalDashboard } from "./approval/manager-dashboard"
 import { ApprovalNotificationCenter } from "./approval/notification-center"
+import { UserMenu } from "./auth/user-menu"
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -262,6 +263,7 @@ export function Dashboard() {
                 <Plus className="h-4 w-4 mr-2" />
                 Create Post
               </Button>
+              <UserMenu />
             </div>
           </div>
         </header>
