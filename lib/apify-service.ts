@@ -134,12 +134,6 @@ export class ApifyService {
    * Note: This is a placeholder - you'll need to specify which Apify actor to use
    */
   async getAnalytics(username: string): Promise<ApifyAnalyticsResult> {
-    const actorId = process.env.APIFY_TWITTER_ANALYTICS_ACTOR_ID;
-    if (!actorId || actorId === 'your-actor-id') {
-      throw new Error(
-        "APIFY_TWITTER_ANALYTICS_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'."
-      );
-    }
     const emptyAnalytics = {
       followers: 0,
       following: 0,
@@ -147,6 +141,15 @@ export class ApifyService {
       engagement: 0,
       reach: 0,
     };
+    const actorId = process.env.APIFY_TWITTER_ANALYTICS_ACTOR_ID;
+    if (!actorId || actorId === 'your-actor-id') {
+      return {
+        success: false,
+        analytics: emptyAnalytics,
+        error:
+          "APIFY_TWITTER_ANALYTICS_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'.",
+      };
+    }
     return this.circuitBreaker
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
@@ -1551,9 +1554,11 @@ export class ApifyService {
   async getUserProfile(username: string): Promise<any> {
     const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID;
     if (!actorId || actorId === 'your-actor-id') {
-      throw new Error(
-        "APIFY_TWITTER_PROFILE_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'."
-      );
+      return {
+        success: false,
+        error:
+          "APIFY_TWITTER_PROFILE_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'.",
+      };
     }
     return this.circuitBreaker
       .execute(async () =>
