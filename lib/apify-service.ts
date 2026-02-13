@@ -1657,14 +1657,29 @@ export class ApifyService {
    * Get available actors for the current API key
    */
   async getAvailableActors(): Promise<any[]> {
-    try {
-      // Use the actors collection to list available actors
-      const actors = await this.client.actors().list();
-      return actors.items || [];
-    } catch (error) {
-      console.error('Failed to get available actors:', error);
-      return [];
-    }
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            try {
+              const actors = await this.client.actors().list();
+              return actors.items || [];
+            } catch (error) {
+              throw ApiErrorHandler.normalizeError(error, 'apify', {
+                endpoint: 'getAvailableActors',
+                userId: this.credentials.userId,
+              });
+            }
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getAvailableActors', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => {
+        console.error('Failed to get available actors:', err);
+        return [];
+      });
   }
 
   /**
@@ -1672,37 +1687,47 @@ export class ApifyService {
    * Useful for retrying failed stores without using more Apify credits
    */
   async getLastSuccessfulRunId(actorId: string): Promise<{ success: boolean; runId?: string; error?: string }> {
-    try {
-      console.log(`🔍 Finding last successful run for actor: ${actorId}`);
-      
-      // List recent runs for the actor
-      const runs = await this.client.actor(actorId).runs().list({
-        limit: 10,
-        status: 'SUCCEEDED',
-        desc: true, // Most recent first
-      });
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            try {
+              console.log(`🔍 Finding last successful run for actor: ${actorId}`);
+              const runs = await this.client.actor(actorId).runs().list({
+                limit: 10,
+                status: 'SUCCEEDED',
+                desc: true, // Most recent first
+              });
 
-      if (!runs.items || runs.items.length === 0) {
-        return {
-          success: false,
-          error: 'No successful runs found for this actor',
-        };
-      }
+              if (!runs.items || runs.items.length === 0) {
+                return {
+                  success: false,
+                  error: 'No successful runs found for this actor',
+                };
+              }
 
-      const lastRun = runs.items[0];
-      console.log(`✅ Found last successful run: ${lastRun.id} (finished at ${lastRun.finishedAt})`);
-      
-      return {
-        success: true,
-        runId: lastRun.id,
-      };
-    } catch (error) {
-      console.error('Failed to get last successful run:', error);
-      return {
+              const lastRun = runs.items[0];
+              console.log(`✅ Found last successful run: ${lastRun.id} (finished at ${lastRun.finishedAt})`);
+              return {
+                success: true,
+                runId: lastRun.id,
+              };
+            } catch (error) {
+              throw ApiErrorHandler.normalizeError(error, 'apify', {
+                endpoint: 'getLastSuccessfulRunId',
+                userId: this.credentials.userId,
+              });
+            }
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getLastSuccessfulRunId', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => ({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 }
 
