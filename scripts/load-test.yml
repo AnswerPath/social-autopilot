@@ -2,11 +2,23 @@
 # Run: npx artillery run scripts/load-test.yml
 # Requires: npm install -g artillery (or npx artillery)
 # Covers critical paths per docs/APM_AND_MONITORING.md
+#
+# Authentication: A beforeScenario hook (load-test-auth-processor.js) performs
+# a login request and injects the session cookies into subsequent requests.
+# All scenario requests send the Cookie header (variable: authCookie) so
+# protected endpoints return real responses.
+#
+# Env (optional): LOAD_TEST_EMAIL, LOAD_TEST_PASSWORD. Defaults (dev): demo@socialautopilot.com / demo123456.
+# Optional: LOAD_TEST_TARGET to override config.target (e.g. https://staging.example.com).
 config:
   target: "http://localhost:3000"
+  processor: "./load-test-auth-processor.js"
   phases:
     - duration: 20
       arrivalRate: 3
+  defaults:
+    headers:
+      Cookie: "{{ authCookie }}"
 scenarios:
   - name: "scheduler queue"
     flow:

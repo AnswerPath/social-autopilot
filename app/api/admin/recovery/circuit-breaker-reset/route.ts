@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth-utils';
-import { UserRole } from '@/lib/auth-types';
+import { isAdmin } from '@/lib/admin-auth';
 import { CircuitBreakerRegistry } from '@/lib/error-handling';
 
 export const runtime = 'nodejs';
-
-function isAdmin(request: NextRequest): Promise<boolean> {
-  return (async () => {
-    const authHeader = request.headers.get('authorization');
-    const token = process.env.ADMIN_RECOVERY_TOKEN;
-    if (token && authHeader?.startsWith('Bearer ') && authHeader.slice(7) === token) {
-      return true;
-    }
-    const user = await getCurrentUser(request);
-    return !!(user && user.role === UserRole.ADMIN);
-  })();
-}
 
 /**
  * Admin-only: Reset all registered circuit breakers to CLOSED state.
