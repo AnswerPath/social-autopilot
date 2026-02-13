@@ -38,6 +38,25 @@ Thresholds are documented here; actual alert rules are configured in Sentry (see
 
 Traces are sampled (e.g. 10% in prod) to control volume; adjust via `SENTRY_TRACES_SAMPLE_RATE`.
 
-## Pilot Validation
+## Pilot Validation Checklist
 
-After setup: run a few requests to critical routes (e.g. GET `/api/scheduler/queue`, POST to analytics sync) and confirm transactions appear in Sentry Performance. Optional: light load test with Artillery/k6 to validate throughput and latency under load.
+After APM setup, validate that performance data reaches Sentry:
+
+1. **Set environment variables**
+   - `SENTRY_DSN` (or `NEXT_PUBLIC_SENTRY_DSN`) must be set to enable Sentry
+   - Optionally set `SENTRY_TRACES_SAMPLE_RATE` (e.g. `1` for 100% during pilot, `0.1` for 10% in prod)
+
+2. **Run the load test**
+   - Start the app: `npm run dev` (or production build)
+   - Run: `npx artillery run scripts/load-test.yml`
+   - The load test hits: scheduler queue, error monitoring health, twitter profile, analytics summary, scheduled posts list, analytics posts
+
+3. **Verify transactions in Sentry**
+   - Open Sentry → Performance → Transactions
+   - Confirm transactions appear for the critical paths (e.g. `/api/scheduler/queue`, `/api/analytics/summary`)
+   - Check that traces show duration and span data
+
+4. **Threshold accuracy (optional)**
+   - In Sentry Performance, compare p95 latency and error rate against the baseline thresholds
+   - If p95 > 5s or error rate > 5%, investigate before enabling alerts
+   - Configure Sentry alert rules to match the thresholds in the table above (see [ALERTING_AND_ESCALATION.md](ALERTING_AND_ESCALATION.md))

@@ -1,6 +1,7 @@
 # Lightweight load test for critical API paths.
 # Run: npx artillery run scripts/load-test.yml
 # Requires: npm install -g artillery (or npx artillery)
+# Covers critical paths per docs/APM_AND_MONITORING.md
 config:
   target: "http://localhost:3000"
   phases:
@@ -15,3 +16,19 @@ scenarios:
     flow:
       - get:
           url: "/api/settings/error-monitoring?action=health"
+  - name: "twitter profile"
+    flow:
+      - get:
+          url: "/api/twitter/profile"
+  - name: "analytics summary"
+    flow:
+      - get:
+          url: "/api/analytics/summary"
+  - name: "scheduled posts list"
+    flow:
+      - get:
+          url: "/api/scheduled-posts"
+  - name: "analytics posts"
+    flow:
+      - get:
+          url: "/api/analytics/posts"

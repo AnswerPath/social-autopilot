@@ -1,5 +1,5 @@
 import { TwitterApi } from 'twitter-api-v2';
-import { ApiErrorHandler, ErrorType, CircuitBreaker } from './error-handling';
+import { ApiErrorHandler, ErrorType, CircuitBreaker, CircuitBreakerRegistry } from './error-handling';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ service: 'x-api-service' });
@@ -33,6 +33,7 @@ export class XApiService {
       accessSecret: credentials.accessTokenSecret,
     });
     this.circuitBreaker = new CircuitBreaker();
+    CircuitBreakerRegistry.getInstance().register(this.circuitBreaker);
   }
 
   /**

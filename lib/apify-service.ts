@@ -1,5 +1,5 @@
 import { ApifyClient } from 'apify-client';
-import { ApiErrorHandler, CircuitBreaker } from '@/lib/error-handling';
+import { ApiErrorHandler, CircuitBreaker, CircuitBreakerRegistry } from '@/lib/error-handling';
 
 export interface ApifyCredentials {
   apiKey: string;
@@ -56,6 +56,7 @@ export class ApifyService {
       token: credentials.apiKey,
     });
     this.circuitBreaker = new CircuitBreaker();
+    CircuitBreakerRegistry.getInstance().register(this.circuitBreaker);
   }
 
   /**

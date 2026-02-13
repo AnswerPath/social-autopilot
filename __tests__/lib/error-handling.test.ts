@@ -186,6 +186,21 @@ describe('CircuitBreaker', () => {
     await cb.execute(async () => 'ok');
     expect(cb.getState()).toBe('CLOSED');
   });
+
+  it('reset() closes an OPEN circuit without waiting for timeout', async () => {
+    const cb = new CircuitBreaker(2, 10000);
+    await cb.execute(async () => {
+      throw new Error('fail');
+    }).catch(() => {});
+    await cb.execute(async () => {
+      throw new Error('fail');
+    }).catch(() => {});
+    expect(cb.getState()).toBe('OPEN');
+    cb.reset();
+    expect(cb.getState()).toBe('CLOSED');
+    const result = await cb.execute(async () => 'ok');
+    expect(result).toBe('ok');
+  });
 });
 
 describe('ErrorMonitor', () => {

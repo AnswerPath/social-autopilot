@@ -344,6 +344,56 @@ export class CircuitBreaker {
   getState(): string {
     return this.state;
   }
+
+  /**
+   * Reset the circuit breaker to CLOSED state (for recovery without app restart)
+   */
+  reset(): void {
+    this.failures = 0;
+    this.lastFailureTime = 0;
+    this.state = 'CLOSED';
+  }
+}
+
+const MAX_REGISTERED_BREAKERS = 100;
+
+/**
+ * Registry of circuit breakers for admin reset without app restart
+ */
+export class CircuitBreakerRegistry {
+  private static instance: CircuitBreakerRegistry;
+  private breakers: CircuitBreaker[] = [];
+
+  static getInstance(): CircuitBreakerRegistry {
+    if (!CircuitBreakerRegistry.instance) {
+      CircuitBreakerRegistry.instance = new CircuitBreakerRegistry();
+    }
+    return CircuitBreakerRegistry.instance;
+  }
+
+  register(breaker: CircuitBreaker): void {
+    if (this.breakers.length >= MAX_REGISTERED_BREAKERS) {
+      this.breakers.shift();
+    }
+    this.breakers.push(breaker);
+  }
+
+  resetAll(): number {
+    let count = 0;
+    for (const breaker of this.breakers) {
+      try {
+        breaker.reset();
+        count++;
+      } catch {
+        // ignore
+      }
+    }
+    return count;
+  }
+
+  getCount(): number {
+    return this.breakers.length;
+  }
 }
 
 /**
