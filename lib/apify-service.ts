@@ -98,16 +98,7 @@ export class ApifyService {
   async searchXByKeywords(keywords: string, limit: number = 50): Promise<ApifyMentionsResult> {
     return this.circuitBreaker.execute(async () =>
       ApiErrorHandler.executeWithRetry(
-        async () => {
-          try {
-            return await this.fetchMentionsFromSearchActor(keywords, limit);
-          } catch (error) {
-            throw ApiErrorHandler.normalizeError(error, 'apify', {
-              endpoint: 'searchXByKeywords',
-              userId: this.credentials.userId,
-            });
-          }
-        },
+        () => this.fetchMentionsFromSearchActor(keywords, limit),
         'apify',
         undefined,
         { endpoint: 'searchXByKeywords', userId: this.credentials.userId }
@@ -126,16 +117,7 @@ export class ApifyService {
   async getMentions(username: string, limit: number = 50): Promise<ApifyMentionsResult> {
     return this.circuitBreaker.execute(async () =>
       ApiErrorHandler.executeWithRetry(
-        async () => {
-          try {
-            return await this.fetchMentionsFromSearchActor(`@${username}`, limit);
-          } catch (error) {
-            throw ApiErrorHandler.normalizeError(error, 'apify', {
-              endpoint: 'getMentions',
-              userId: this.credentials.userId,
-            });
-          }
-        },
+        () => this.fetchMentionsFromSearchActor(`@${username}`, limit),
         'apify',
         undefined,
         { endpoint: 'getMentions', userId: this.credentials.userId }
@@ -152,6 +134,12 @@ export class ApifyService {
    * Note: This is a placeholder - you'll need to specify which Apify actor to use
    */
   async getAnalytics(username: string): Promise<ApifyAnalyticsResult> {
+    const actorId = process.env.APIFY_TWITTER_ANALYTICS_ACTOR_ID;
+    if (!actorId || actorId === 'your-actor-id') {
+      throw new Error(
+        "APIFY_TWITTER_ANALYTICS_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'."
+      );
+    }
     const emptyAnalytics = {
       followers: 0,
       following: 0,
@@ -163,36 +151,28 @@ export class ApifyService {
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
-              const actorId = process.env.APIFY_TWITTER_ANALYTICS_ACTOR_ID || 'your-actor-id';
-              const run = await this.client.actor(actorId).call({ username });
+            const run = await this.client.actor(actorId).call({ username });
 
-              if (run.status === 'SUCCEEDED') {
-                const dataset = this.client.run(run.id).dataset();
-                const items = await dataset.listItems();
-                const output = items.items && items.items.length > 0 ? items.items[0] : {};
-                return {
-                  success: true,
-                  analytics: {
-                    followers: (output as any).followers || (output as any).followersCount || 0,
-                    following: (output as any).following || (output as any).followingCount || 0,
-                    tweets: (output as any).tweets || (output as any).tweetsCount || (output as any).statusesCount || 0,
-                    engagement: (output as any).engagement || (output as any).engagementRate || 0,
-                    reach: (output as any).reach || (output as any).reachCount || 0,
-                  },
-                };
-              }
+            if (run.status === 'SUCCEEDED') {
+              const dataset = this.client.run(run.id).dataset();
+              const items = await dataset.listItems();
+              const output = items.items && items.items.length > 0 ? items.items[0] : {};
               return {
-                success: false,
-                analytics: emptyAnalytics,
-                error: `Actor run failed with status: ${run.status}`,
+                success: true,
+                analytics: {
+                  followers: (output as any).followers || (output as any).followersCount || 0,
+                  following: (output as any).following || (output as any).followingCount || 0,
+                  tweets: (output as any).tweets || (output as any).tweetsCount || (output as any).statusesCount || 0,
+                  engagement: (output as any).engagement || (output as any).engagementRate || 0,
+                  reach: (output as any).reach || (output as any).reachCount || 0,
+                },
               };
-            } catch (error) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'getAnalytics',
-                userId: this.credentials.userId,
-              });
             }
+            return {
+              success: false,
+              analytics: emptyAnalytics,
+              error: `Actor run failed with status: ${run.status}`,
+            };
           },
           'apify',
           undefined,
@@ -239,7 +219,6 @@ export class ApifyService {
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
       console.log(`🔍 Fetching post analytics from Apify for username: ${username}`);
       // TODO: Update with the actual new actor ID
       // IMPORTANT: The actor we use expects `accountUrls`. If we omit it (or send the wrong field),
@@ -1048,12 +1027,6 @@ export class ApifyService {
         success: true,
         posts: filteredPosts,
       };
-            } catch (error) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'getPostAnalytics',
-                userId: this.credentials.userId,
-              });
-            }
           },
           'apify',
           undefined,
@@ -1096,7 +1069,6 @@ export class ApifyService {
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
       // Clean and validate run ID
       // Extract from URL if provided (e.g., "https://console.apify.com/actors/runs/hv2W0bikTzwMTGQpX")
       let cleanRunId = runId.trim();
@@ -1564,12 +1536,6 @@ export class ApifyService {
         success: true,
         posts: filteredPosts,
       };
-            } catch (error: any) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'getPostAnalyticsFromRun',
-                userId: this.credentials.userId,
-              });
-            }
           },
           'apify',
           undefined,
@@ -1586,32 +1552,30 @@ export class ApifyService {
    * Get user profile information using Apify actors
    */
   async getUserProfile(username: string): Promise<any> {
+    const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID;
+    if (!actorId || actorId === 'your-actor-id') {
+      throw new Error(
+        "APIFY_TWITTER_PROFILE_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'."
+      );
+    }
     return this.circuitBreaker
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
-              const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID || 'your-actor-id';
-              const run = await this.client.actor(actorId).call({ username });
+            const run = await this.client.actor(actorId).call({ username });
 
-              if (run.status === 'SUCCEEDED') {
-                const dataset = this.client.run(run.id).dataset();
-                const items = await dataset.listItems();
-                return {
-                  success: true,
-                  profile: items.items && items.items.length > 0 ? items.items[0] : {},
-                };
-              }
+            if (run.status === 'SUCCEEDED') {
+              const dataset = this.client.run(run.id).dataset();
+              const items = await dataset.listItems();
               return {
-                success: false,
-                error: `Actor run failed with status: ${run.status}`,
+                success: true,
+                profile: items.items && items.items.length > 0 ? items.items[0] : {},
               };
-            } catch (error) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'getUserProfile',
-                userId: this.credentials.userId,
-              });
             }
+            return {
+              success: false,
+              error: `Actor run failed with status: ${run.status}`,
+            };
           },
           'apify',
           undefined,
@@ -1632,15 +1596,8 @@ export class ApifyService {
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
-              await this.client.user().get();
-              return { success: true };
-            } catch (error) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'testConnection',
-                userId: this.credentials.userId,
-              });
-            }
+            await this.client.user().get();
+            return { success: true };
           },
           'apify',
           undefined,
@@ -1661,15 +1618,8 @@ export class ApifyService {
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
-              const actors = await this.client.actors().list();
-              return actors.items || [];
-            } catch (error) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'getAvailableActors',
-                userId: this.credentials.userId,
-              });
-            }
+            const actors = await this.client.actors().list();
+            return actors.items || [];
           },
           'apify',
           undefined,
@@ -1691,33 +1641,26 @@ export class ApifyService {
       .execute(async () =>
         ApiErrorHandler.executeWithRetry(
           async () => {
-            try {
-              console.log(`🔍 Finding last successful run for actor: ${actorId}`);
-              const runs = await this.client.actor(actorId).runs().list({
-                limit: 10,
-                status: 'SUCCEEDED',
-                desc: true, // Most recent first
-              });
+            console.log(`🔍 Finding last successful run for actor: ${actorId}`);
+            const runs = await this.client.actor(actorId).runs().list({
+              limit: 10,
+              status: 'SUCCEEDED',
+              desc: true, // Most recent first
+            });
 
-              if (!runs.items || runs.items.length === 0) {
-                return {
-                  success: false,
-                  error: 'No successful runs found for this actor',
-                };
-              }
-
-              const lastRun = runs.items[0];
-              console.log(`✅ Found last successful run: ${lastRun.id} (finished at ${lastRun.finishedAt})`);
+            if (!runs.items || runs.items.length === 0) {
               return {
-                success: true,
-                runId: lastRun.id,
+                success: false,
+                error: 'No successful runs found for this actor',
               };
-            } catch (error) {
-              throw ApiErrorHandler.normalizeError(error, 'apify', {
-                endpoint: 'getLastSuccessfulRunId',
-                userId: this.credentials.userId,
-              });
             }
+
+            const lastRun = runs.items[0];
+            console.log(`✅ Found last successful run: ${lastRun.id} (finished at ${lastRun.finishedAt})`);
+            return {
+              success: true,
+              runId: lastRun.id,
+            };
           },
           'apify',
           undefined,
