@@ -19,6 +19,7 @@ import { config } from 'dotenv'
 const require = createRequire(import.meta.url)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+const log = require(join(__dirname, 'logger.js'))
 
 // Load environment variables
 config({ path: join(__dirname, '..', '.env.local') })
@@ -47,7 +48,7 @@ const MAX_CONSECUTIVE_ERRORS = 10
 async function runScheduler() {
   // Prevent concurrent executions
   if (isProcessing) {
-    console.log('⏭️  Skipping: Previous run still in progress')
+    log.info('Skipping: Previous run still in progress')
     return
   }
 
@@ -55,7 +56,7 @@ async function runScheduler() {
   const startTime = Date.now()
 
   try {
-    console.log(`\n🔄 [${new Date().toISOString()}] Processing scheduled posts queue...`)
+    log.info('Processing scheduled posts queue')
     
     // Call the dispatch API endpoint
     const response = await fetch(`${API_URL}/api/scheduler/dispatch`, {
@@ -78,38 +79,22 @@ async function runScheduler() {
     consecutiveErrors = 0
 
     if (result.processed > 0) {
-      console.log(`✅ Processed ${result.processed} post(s) in ${duration}ms`)
-      
-      // Log details for each processed post
+      log.info({ processed: result.processed, duration }, 'Processed posts')
       if (result.results && Array.isArray(result.results)) {
         result.results.forEach((r) => {
-          if (r.status === 'published') {
-            console.log(`   📤 Post ${r.id}: Published successfully`)
-          } else if (r.status === 'failed') {
-            console.log(`   ❌ Post ${r.id}: Failed - ${r.error || 'Unknown error'}`)
-          } else if (r.status === 'scheduled_retry') {
-            console.log(`   🔄 Post ${r.id}: Scheduled for retry - ${r.error || 'Unknown error'}`)
-          } else if (r.status === 'skipped') {
-            console.log(`   ⏭️  Post ${r.id}: Skipped - ${r.error || 'Unknown error'}`)
-          }
+          log.info({ jobId: r.id, status: r.status, error: r.error }, 'Job result')
         })
       }
     } else {
-      console.log(`ℹ️  No posts to process (${duration}ms)`)
+      log.info({ duration }, 'No posts to process')
     }
 
   } catch (error) {
     consecutiveErrors++
     const duration = Date.now() - startTime
-    
-    console.error(`❌ Error processing queue (${duration}ms):`, error.message)
-    if (error.stack) {
-      console.error('   Stack:', error.stack)
-    }
-    
-    // If too many consecutive errors, exit and let PM2/systemd restart
+    log.error({ err: error, duration, consecutiveErrors }, 'Error processing queue')
     if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-      console.error(`\n💥 Too many consecutive errors (${consecutiveErrors}). Exiting...`)
+      log.fatal({ consecutiveErrors }, 'Too many consecutive errors, exiting')
       process.exit(1)
     }
   } finally {
@@ -140,7 +125,7 @@ async function startHealthCheck() {
         res.end('Not Found')
       }
     }).listen(port, () => {
-      console.log(`🏥 Health check server running on port ${port}`)
+      log.info({ port }, 'Health check server running')
     })
   }
 }
@@ -149,52 +134,31 @@ async function startHealthCheck() {
  * Main entry point
  */
 async function main() {
-  console.log('🚀 Scheduled Posts Worker Starting...')
-  console.log(`   Interval: ${config_interval / 1000}s`)
-  console.log(`   API URL: ${API_URL}`)
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`)
-  
-  // Check that the API is accessible
+  log.info({ intervalSec: config_interval / 1000, apiUrl: API_URL, env: process.env.NODE_ENV || 'development' }, 'Scheduled Posts Worker starting')
   try {
-    const healthCheck = await fetch(`${API_URL}/api/scheduler/dispatch`, {
-      method: 'GET',
-      headers: { 'X-Scheduler-Worker': 'true' }
-    })
-    console.log('✅ API endpoint is accessible')
+    await fetch(`${API_URL}/api/scheduler/dispatch`, { method: 'GET', headers: { 'X-Scheduler-Worker': 'true' } })
+    log.info('API endpoint is accessible')
   } catch (error) {
-    console.warn('⚠️  Warning: Could not reach API endpoint:', error.message)
-    console.warn('   Make sure your Next.js app is running if using localhost')
+    log.warn({ err: error }, 'Could not reach API endpoint; ensure Next.js app is running if using localhost')
   }
-  
-  // Start health check server if enabled
   if (process.env.ENABLE_HEALTH_CHECK === 'true') {
     await startHealthCheck()
   }
-  
-  // Process immediately on startup
   await runScheduler()
-  
-  // Then process on interval
   setInterval(runScheduler, config_interval)
-  
-  console.log(`\n✅ Worker running. Processing every ${config_interval / 1000} seconds...`)
-  console.log('   Press Ctrl+C to stop\n')
-  
-  // Graceful shutdown
+  log.info({ intervalSec: config_interval / 1000 }, 'Worker running')
   process.on('SIGINT', () => {
-    console.log('\n\n🛑 Shutting down gracefully...')
+    log.info('Shutting down gracefully')
     process.exit(0)
   })
-  
   process.on('SIGTERM', () => {
-    console.log('\n\n🛑 Shutting down gracefully...')
+    log.info('Shutting down gracefully')
     process.exit(0)
   })
 }
 
-// Run the worker
 main().catch(error => {
-  console.error('💥 Fatal error starting worker:', error)
+  log.fatal({ err: error }, 'Fatal error starting worker')
   process.exit(1)
 })
 

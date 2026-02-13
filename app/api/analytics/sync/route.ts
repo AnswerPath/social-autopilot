@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { createAnalyticsSyncScheduler } from '@/lib/analytics/analytics-sync-scheduler';
+import { createLogger } from '@/lib/logger';
+import { isEnabled } from '@/lib/feature-flags';
+
+const SYNC_TIMEOUT_MS = 90_000; // 90 seconds
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Sync timeout')), ms)
+    ),
+  ]);
+}
 
 /**
  * POST /api/analytics/sync
@@ -17,6 +31,8 @@ import { createAnalyticsSyncScheduler } from '@/lib/analytics/analytics-sync-sch
  * Note: Post sync always fetches from X API user timeline, not from scheduled_posts
  */
 export async function POST(request: NextRequest) {
+  const requestId = request.headers.get('x-request-id') ?? undefined;
+  const log = createLogger({ requestId, service: 'api/analytics/sync' });
   try {
     const body = await request.json();
     const { userId, syncType = 'both', options } = body;
@@ -35,11 +51,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const useV2 = isEnabled('analytics_sync_v2', { userId });
+    if (useV2) log.info({ userId }, 'Analytics sync v2 flag enabled');
     const scheduler = createAnalyticsSyncScheduler();
-    const result = await scheduler.syncUserAnalytics(
-      userId,
-      syncType === 'posts' ? 'post_analytics' : syncType === 'followers' ? 'follower_analytics' : 'both',
-      options
+    const result = await withTimeout(
+      scheduler.syncUserAnalytics(
+        userId,
+        syncType === 'posts' ? 'post_analytics' : syncType === 'followers' ? 'follower_analytics' : 'both',
+        { ...options, useV2 }
+      ),
+      SYNC_TIMEOUT_MS
     );
 
     if (!result.success) {
@@ -56,11 +77,23 @@ export async function POST(request: NextRequest) {
       postsProcessed: result.postsProcessed,
     });
   } catch (error) {
-    console.error('Error in POST /api/analytics/sync:', error);
+    const isTimeout = error instanceof Error && error.message === 'Sync timeout';
+    if (isTimeout) {
+      log.warn('Analytics sync timeout');
+      Sentry.captureMessage('Analytics sync timeout', 'warning');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Request timed out. Please try again or use a smaller date range.',
+        },
+        { status: 503 }
+      );
+    }
+    log.error({ err: error }, 'Error in POST /api/analytics/sync');
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to start analytics sync' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to start analytics sync',
       },
       { status: 500 }
     );

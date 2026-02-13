@@ -1,4 +1,5 @@
 import { ApifyClient } from 'apify-client';
+import { ApiErrorHandler, CircuitBreaker, CircuitBreakerRegistry } from '@/lib/error-handling';
 
 export interface ApifyCredentials {
   apiKey: string;
@@ -47,12 +48,47 @@ export interface ApifyAnalyticsResult {
 export class ApifyService {
   private client: ApifyClient;
   private credentials: ApifyCredentials;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(credentials: ApifyCredentials) {
     this.credentials = credentials;
     this.client = new ApifyClient({
       token: credentials.apiKey,
     });
+    this.circuitBreaker = new CircuitBreaker();
+    CircuitBreakerRegistry.getInstance().register(this.circuitBreaker);
+  }
+
+  /**
+   * Shared helper: runs watcher.data/search-x-by-keywords actor, fetches dataset items,
+   * and maps them to ApifyMentionsResult. Used by searchXByKeywords and getMentions.
+   */
+  private async fetchMentionsFromSearchActor(keywords: string, limit: number): Promise<ApifyMentionsResult> {
+    const actorId = 'watcher.data/search-x-by-keywords';
+    const run = await this.client.actor(actorId).call({ keywords, limit });
+
+    if (run.status !== 'SUCCEEDED') {
+      return {
+        success: false,
+        mentions: [],
+        error: `Actor run failed with status: ${run.status}`,
+      };
+    }
+
+    const dataset = this.client.run(run.id).dataset();
+    const items = await dataset.listItems();
+    const rawMentions = Array.isArray(items.items) ? items.items : [];
+
+    return {
+      success: true,
+      mentions: rawMentions.map((mention: any) => ({
+        id: mention.id || mention.tweetId || mention.url,
+        text: mention.text || mention.content || mention.tweet,
+        author: mention.author || mention.username || mention.user,
+        timestamp: mention.timestamp || mention.createdAt || mention.date,
+        url: mention.url || mention.tweetUrl || `https://twitter.com/user/status/${mention.id}`,
+      })),
+    };
   }
 
   /**
@@ -60,47 +96,18 @@ export class ApifyService {
    * Note: This method uses the watcher.data/search-x-by-keywords actor
    */
   async searchXByKeywords(keywords: string, limit: number = 50): Promise<ApifyMentionsResult> {
-    try {
-      const actorId = 'watcher.data/search-x-by-keywords';
-      
-      const run = await this.client.actor(actorId).call({
-        keywords,
-        limit,
-        // Add other parameters as needed for the specific actor
-      });
-
-      if (run.status === 'SUCCEEDED') {
-        // Get the dataset items from the run
-        const dataset = this.client.run(run.id).dataset();
-        const items = await dataset.listItems();
-        
-        // Transform the output to match our interface
-        const mentions = Array.isArray(items.items) ? items.items : [];
-        return {
-          success: true,
-          mentions: mentions.map((mention: any) => ({
-            id: mention.id || mention.tweetId || mention.url,
-            text: mention.text || mention.content || mention.tweet,
-            author: mention.author || mention.username || mention.user,
-            timestamp: mention.timestamp || mention.createdAt || mention.date,
-            url: mention.url || mention.tweetUrl || `https://twitter.com/user/status/${mention.id}`,
-          })),
-        };
-      } else {
-        return {
-          success: false,
-          mentions: [],
-          error: `Actor run failed with status: ${run.status}`,
-        };
-      }
-    } catch (error) {
-      console.error('Apify search X by keywords error:', error);
-      return {
-        success: false,
-        mentions: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+    return this.circuitBreaker.execute(async () =>
+      ApiErrorHandler.executeWithRetry(
+        () => this.fetchMentionsFromSearchActor(keywords, limit),
+        'apify',
+        undefined,
+        { endpoint: 'searchXByKeywords', userId: this.credentials.userId }
+      )
+    ).catch((err) => ({
+      success: false as const,
+      mentions: [] as ApifyMentionsResult['mentions'],
+      error: err?.message ?? 'Unknown error occurred',
+    }));
   }
 
   /**
@@ -108,47 +115,18 @@ export class ApifyService {
    * Note: This method uses the watcher.data/search-x-by-keywords actor
    */
   async getMentions(username: string, limit: number = 50): Promise<ApifyMentionsResult> {
-    try {
-      const actorId = 'watcher.data/search-x-by-keywords';
-      
-      const run = await this.client.actor(actorId).call({
-        keywords: `@${username}`,
-        limit,
-        // Add other parameters as needed for the specific actor
-      });
-
-      if (run.status === 'SUCCEEDED') {
-        // Get the dataset items from the run
-        const dataset = this.client.run(run.id).dataset();
-        const items = await dataset.listItems();
-        
-        // Transform the output to match our interface
-        const mentions = Array.isArray(items.items) ? items.items : [];
-        return {
-          success: true,
-          mentions: mentions.map((mention: any) => ({
-            id: mention.id || mention.tweetId || mention.url,
-            text: mention.text || mention.content || mention.tweet,
-            author: mention.author || mention.username || mention.user,
-            timestamp: mention.timestamp || mention.createdAt || mention.date,
-            url: mention.url || mention.tweetUrl || `https://twitter.com/user/status/${mention.id}`,
-          })),
-        };
-      } else {
-        return {
-          success: false,
-          mentions: [],
-          error: `Actor run failed with status: ${run.status}`,
-        };
-      }
-    } catch (error) {
-      console.error('Apify get mentions error:', error);
-      return {
-        success: false,
-        mentions: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+    return this.circuitBreaker.execute(async () =>
+      ApiErrorHandler.executeWithRetry(
+        () => this.fetchMentionsFromSearchActor(`@${username}`, limit),
+        'apify',
+        undefined,
+        { endpoint: 'getMentions', userId: this.credentials.userId }
+      )
+    ).catch((err) => ({
+      success: false as const,
+      mentions: [] as ApifyMentionsResult['mentions'],
+      error: err?.message ?? 'Unknown error occurred',
+    }));
   }
 
   /**
@@ -156,58 +134,59 @@ export class ApifyService {
    * Note: This is a placeholder - you'll need to specify which Apify actor to use
    */
   async getAnalytics(username: string): Promise<ApifyAnalyticsResult> {
-    try {
-      // TODO: Replace with actual Apify actor ID for Twitter analytics scraping
-      const actorId = process.env.APIFY_TWITTER_ANALYTICS_ACTOR_ID || 'your-actor-id';
-      
-      const run = await this.client.actor(actorId).call({
-        username,
-        // Add other required parameters based on the specific actor
-      });
-
-      if (run.status === 'SUCCEEDED') {
-        // Get the dataset items from the run
-        const dataset = this.client.run(run.id).dataset();
-        const items = await dataset.listItems();
-        
-        const output = items.items && items.items.length > 0 ? items.items[0] : {};
-        return {
-          success: true,
-          analytics: {
-            followers: (output as any).followers || (output as any).followersCount || 0,
-            following: (output as any).following || (output as any).followingCount || 0,
-            tweets: (output as any).tweets || (output as any).tweetsCount || (output as any).statusesCount || 0,
-            engagement: (output as any).engagement || (output as any).engagementRate || 0,
-            reach: (output as any).reach || (output as any).reachCount || 0,
-          },
-        };
-      } else {
-        return {
-          success: false,
-          analytics: {
-            followers: 0,
-            following: 0,
-            tweets: 0,
-            engagement: 0,
-            reach: 0,
-          },
-          error: `Actor run failed with status: ${run.status}`,
-        };
-      }
-    } catch (error) {
-      console.error('Apify get analytics error:', error);
+    const emptyAnalytics = {
+      followers: 0,
+      following: 0,
+      tweets: 0,
+      engagement: 0,
+      reach: 0,
+    };
+    const actorId = process.env.APIFY_TWITTER_ANALYTICS_ACTOR_ID;
+    if (!actorId || actorId === 'your-actor-id') {
       return {
         success: false,
-        analytics: {
-          followers: 0,
-          following: 0,
-          tweets: 0,
-          engagement: 0,
-          reach: 0,
-        },
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        analytics: emptyAnalytics,
+        error:
+          "APIFY_TWITTER_ANALYTICS_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'.",
       };
     }
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            const run = await this.client.actor(actorId).call({ username });
+
+            if (run.status === 'SUCCEEDED') {
+              const dataset = this.client.run(run.id).dataset();
+              const items = await dataset.listItems();
+              const output = items.items && items.items.length > 0 ? items.items[0] : {};
+              return {
+                success: true,
+                analytics: {
+                  followers: (output as any).followers || (output as any).followersCount || 0,
+                  following: (output as any).following || (output as any).followingCount || 0,
+                  tweets: (output as any).tweets || (output as any).tweetsCount || (output as any).statusesCount || 0,
+                  engagement: (output as any).engagement || (output as any).engagementRate || 0,
+                  reach: (output as any).reach || (output as any).reachCount || 0,
+                },
+              };
+            }
+            return {
+              success: false,
+              analytics: emptyAnalytics,
+              error: `Actor run failed with status: ${run.status}`,
+            };
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getAnalytics', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => ({
+        success: false,
+        analytics: emptyAnalytics,
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 
   /**
@@ -239,12 +218,19 @@ export class ApifyService {
     }>;
     error?: string;
   }> {
-    try {
+    return this.circuitBreaker
+      .execute(async () => {
       console.log(`🔍 Fetching post analytics from Apify for username: ${username}`);
-      // TODO: Update with the actual new actor ID
+
+      const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID;
+      if (!actorId || actorId === 'your-actor-id') {
+        throw new Error(
+          "APIFY_TWITTER_PROFILE_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'."
+        );
+      }
+
       // IMPORTANT: The actor we use expects `accountUrls`. If we omit it (or send the wrong field),
       // the actor may fall back to demo defaults (e.g. elonmusk, NASA).
-      const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID || 'delicious_zebu/advanced-x-twitter-profile-scraper';
       
       // Clean username (remove @ if present)
       const cleanUsername = username.replace('@', '');
@@ -603,37 +589,35 @@ export class ApifyService {
       console.log(`   Run ID: ${run.id}`);
       console.log(`   Run URL: https://console.apify.com/actors/runs/${run.id}`);
 
-      // Get the dataset items from the run
+      // Get the dataset items from the run (idempotent - wrap in retry to handle transient API errors)
       const dataset = this.client.run(run.id).dataset();
-      
-      // Get dataset info first to debug
-      const datasetInfo = await dataset.get();
-      if (datasetInfo) {
-        console.log(`📊 Dataset info:`, {
-          id: datasetInfo.id,
-          itemCount: datasetInfo.itemCount,
-          createdAt: datasetInfo.createdAt,
-        });
-      }
-      
-      // Try to get all items - check if pagination is needed
-      let items = await dataset.listItems({ limit: 1000 }); // Request up to 1000 items
-      
+      const items = await ApiErrorHandler.executeWithRetry(
+        async () => {
+          const datasetInfo = await dataset.get();
+          if (datasetInfo) {
+            console.log(`📊 Dataset info:`, {
+              id: datasetInfo.id,
+              itemCount: datasetInfo.itemCount,
+              createdAt: datasetInfo.createdAt,
+            });
+          }
+          let result = await dataset.listItems({ limit: 1000 });
+          if ((!result.items || result.items.length === 0) && result.total > 0) {
+            console.log(`⚠️ Dataset shows ${result.total} total items but received 0. Trying to fetch all items...`);
+            result = await dataset.listItems();
+          }
+          return result;
+        },
+        'apify',
+        undefined,
+        { endpoint: 'getPostAnalytics', userId: this.credentials.userId }
+      );
+
       console.log(`📊 Initial fetch:`, {
         total: items.total,
         count: items.items?.length || 0,
         hasMore: items.total > (items.items?.length || 0),
       });
-      
-      // If total indicates more items exist but we got empty array, try without limit
-      if ((!items.items || items.items.length === 0) && items.total > 0) {
-        console.log(`⚠️ Dataset shows ${items.total} total items but received 0. Trying to fetch all items...`);
-        items = await dataset.listItems(); // Try without explicit limit
-        console.log(`📊 Fetch without limit:`, {
-          total: items.total,
-          count: items.items?.length || 0,
-        });
-      }
       
       // Also check run logs for errors and warnings even if run succeeded
       try {
@@ -1048,13 +1032,11 @@ export class ApifyService {
         success: true,
         posts: filteredPosts,
       };
-    } catch (error) {
-      console.error('❌ Apify get post analytics error:', error);
-      return {
+      })
+      .catch((err) => ({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 
   /**
@@ -1083,7 +1065,10 @@ export class ApifyService {
     }>;
     error?: string;
   }> {
-    try {
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
       // Clean and validate run ID
       // Extract from URL if provided (e.g., "https://console.apify.com/actors/runs/hv2W0bikTzwMTGQpX")
       let cleanRunId = runId.trim();
@@ -1551,89 +1536,102 @@ export class ApifyService {
         success: true,
         posts: filteredPosts,
       };
-    } catch (error: any) {
-      console.error('❌ Apify get post analytics from run error:', error);
-      console.error(`   Error details:`, {
-        message: error?.message,
-        statusCode: error?.statusCode,
-        status: error?.status,
-        code: error?.code,
-        stack: error?.stack?.substring(0, 200),
-      });
-      
-      return {
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getPostAnalyticsFromRun', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => ({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 
   /**
    * Get user profile information using Apify actors
    */
   async getUserProfile(username: string): Promise<any> {
-    try {
-      // TODO: Replace with actual Apify actor ID for Twitter profile scraping
-      const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID || 'your-actor-id';
-      
-      const run = await this.client.actor(actorId).call({
-        username,
-        // Add other required parameters based on the specific actor
-      });
-
-      if (run.status === 'SUCCEEDED') {
-        // Get the dataset items from the run
-        const dataset = this.client.run(run.id).dataset();
-        const items = await dataset.listItems();
-        
-        return {
-          success: true,
-          profile: items.items && items.items.length > 0 ? items.items[0] : {},
-        };
-      } else {
-        return {
-          success: false,
-          error: `Actor run failed with status: ${run.status}`,
-        };
-      }
-    } catch (error) {
-      console.error('Apify get user profile error:', error);
+    const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID;
+    if (!actorId || actorId === 'your-actor-id') {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        error:
+          "APIFY_TWITTER_PROFILE_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'.",
       };
     }
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            const run = await this.client.actor(actorId).call({ username });
+
+            if (run.status === 'SUCCEEDED') {
+              const dataset = this.client.run(run.id).dataset();
+              const items = await dataset.listItems();
+              return {
+                success: true,
+                profile: items.items && items.items.length > 0 ? items.items[0] : {},
+              };
+            }
+            return {
+              success: false,
+              error: `Actor run failed with status: ${run.status}`,
+            };
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getUserProfile', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => ({
+        success: false,
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 
   /**
    * Test the Apify connection and API key validity
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
-    try {
-      // Test the connection by getting user info
-      const user = await this.client.user().get();
-      return { success: true };
-    } catch (error) {
-      console.error('Apify connection test failed:', error);
-      return {
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            await this.client.user().get();
+            return { success: true };
+          },
+          'apify',
+          undefined,
+          { endpoint: 'testConnection', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => ({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 
   /**
    * Get available actors for the current API key
    */
   async getAvailableActors(): Promise<any[]> {
-    try {
-      // Use the actors collection to list available actors
-      const actors = await this.client.actors().list();
-      return actors.items || [];
-    } catch (error) {
-      console.error('Failed to get available actors:', error);
-      return [];
-    }
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            const actors = await this.client.actors().list();
+            return actors.items || [];
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getAvailableActors', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => {
+        console.error('Failed to get available actors:', err);
+        return [];
+      });
   }
 
   /**
@@ -1641,37 +1639,40 @@ export class ApifyService {
    * Useful for retrying failed stores without using more Apify credits
    */
   async getLastSuccessfulRunId(actorId: string): Promise<{ success: boolean; runId?: string; error?: string }> {
-    try {
-      console.log(`🔍 Finding last successful run for actor: ${actorId}`);
-      
-      // List recent runs for the actor
-      const runs = await this.client.actor(actorId).runs().list({
-        limit: 10,
-        status: 'SUCCEEDED',
-        desc: true, // Most recent first
-      });
+    return this.circuitBreaker
+      .execute(async () =>
+        ApiErrorHandler.executeWithRetry(
+          async () => {
+            console.log(`🔍 Finding last successful run for actor: ${actorId}`);
+            const runs = await this.client.actor(actorId).runs().list({
+              limit: 10,
+              status: 'SUCCEEDED',
+              desc: true, // Most recent first
+            });
 
-      if (!runs.items || runs.items.length === 0) {
-        return {
-          success: false,
-          error: 'No successful runs found for this actor',
-        };
-      }
+            if (!runs.items || runs.items.length === 0) {
+              return {
+                success: false,
+                error: 'No successful runs found for this actor',
+              };
+            }
 
-      const lastRun = runs.items[0];
-      console.log(`✅ Found last successful run: ${lastRun.id} (finished at ${lastRun.finishedAt})`);
-      
-      return {
-        success: true,
-        runId: lastRun.id,
-      };
-    } catch (error) {
-      console.error('Failed to get last successful run:', error);
-      return {
+            const lastRun = runs.items[0];
+            console.log(`✅ Found last successful run: ${lastRun.id} (finished at ${lastRun.finishedAt})`);
+            return {
+              success: true,
+              runId: lastRun.id,
+            };
+          },
+          'apify',
+          undefined,
+          { endpoint: 'getLastSuccessfulRunId', userId: this.credentials.userId }
+        )
+      )
+      .catch((err) => ({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+        error: err?.message ?? 'Unknown error occurred',
+      }));
   }
 }
 

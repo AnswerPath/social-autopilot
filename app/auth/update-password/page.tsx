@@ -1,6 +1,7 @@
 'use client';
 
 import { PasswordResetConfirmForm } from '@/components/auth/password-reset-confirm-form';
+import { Suspense } from 'react';
 
 export default function UpdatePasswordPage() {
   return (
@@ -14,7 +15,9 @@ export default function UpdatePasswordPage() {
             Enter your new password below.
           </p>
         </div>
-        <PasswordResetConfirmForm />
+        <Suspense fallback={<div className="text-sm text-gray-600">Loading…</div>}>
+          <PasswordResetConfirmForm />
+        </Suspense>
       </div>
     </div>
   );

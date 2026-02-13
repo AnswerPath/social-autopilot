@@ -3,6 +3,9 @@
  * Handles X API and Apify service failures with retry logic and fallbacks
  */
 
+import * as Sentry from '@sentry/nextjs';
+import { logger } from '@/lib/logger';
+
 export enum ErrorType {
   AUTHENTICATION = 'authentication',
   RATE_LIMIT = 'rate_limit',
@@ -221,28 +224,43 @@ export class ApiErrorHandler {
   }
 
   /**
-   * Log error with appropriate severity
+   * Log error with appropriate severity (structured) and send to Sentry
    */
   private static logError(error: ApiError, attempt: number): void {
-    const logMessage = `API Error [${error.service}] (Attempt ${attempt + 1}): ${error.type} - ${error.message}`;
-    
+    const payload = {
+      service: error.service,
+      type: error.type,
+      severity: error.severity,
+      attempt: attempt + 1,
+      message: error.message,
+      endpoint: error.endpoint,
+      userId: error.userId,
+    };
     switch (error.severity) {
       case ErrorSeverity.CRITICAL:
-        console.error(`🚨 CRITICAL: ${logMessage}`);
+        logger.fatal(payload, 'API Error');
         break;
       case ErrorSeverity.HIGH:
-        console.error(`❌ HIGH: ${logMessage}`);
+        logger.error(payload, 'API Error');
         break;
       case ErrorSeverity.MEDIUM:
-        console.warn(`⚠️ MEDIUM: ${logMessage}`);
+        logger.warn(payload, 'API Error');
         break;
       case ErrorSeverity.LOW:
-        console.log(`ℹ️ LOW: ${logMessage}`);
+        logger.info(payload, 'API Error');
         break;
+      default:
+        logger.warn(payload, 'API Error');
     }
-
-    // In a real implementation, you would send this to a logging service
-    // like Sentry, LogRocket, or your own logging infrastructure
+    Sentry.withScope((scope) => {
+      scope.setTag('service', error.service);
+      scope.setTag('error_type', error.type);
+      scope.setTag('severity', error.severity);
+      scope.setContext('api_error', payload);
+      if (error.userId) scope.setUser({ id: error.userId });
+      const level = error.severity === ErrorSeverity.CRITICAL ? 'fatal' : error.severity === ErrorSeverity.HIGH ? 'error' : 'warning';
+      Sentry.captureMessage(`API Error [${error.service}] ${error.type}: ${error.message}`, level);
+    });
   }
 
   /**
@@ -326,6 +344,56 @@ export class CircuitBreaker {
   getState(): string {
     return this.state;
   }
+
+  /**
+   * Reset the circuit breaker to CLOSED state (for recovery without app restart)
+   */
+  reset(): void {
+    this.failures = 0;
+    this.lastFailureTime = 0;
+    this.state = 'CLOSED';
+  }
+}
+
+const MAX_REGISTERED_BREAKERS = 100;
+
+/**
+ * Registry of circuit breakers for admin reset without app restart
+ */
+export class CircuitBreakerRegistry {
+  private static instance: CircuitBreakerRegistry;
+  private breakers: CircuitBreaker[] = [];
+
+  static getInstance(): CircuitBreakerRegistry {
+    if (!CircuitBreakerRegistry.instance) {
+      CircuitBreakerRegistry.instance = new CircuitBreakerRegistry();
+    }
+    return CircuitBreakerRegistry.instance;
+  }
+
+  register(breaker: CircuitBreaker): void {
+    if (this.breakers.length >= MAX_REGISTERED_BREAKERS) {
+      this.breakers.shift();
+    }
+    this.breakers.push(breaker);
+  }
+
+  resetAll(): number {
+    let count = 0;
+    for (const breaker of this.breakers) {
+      try {
+        breaker.reset();
+        count++;
+      } catch {
+        // ignore
+      }
+    }
+    return count;
+  }
+
+  getCount(): number {
+    return this.breakers.length;
+  }
 }
 
 /**
@@ -361,14 +429,19 @@ export class ErrorMonitor {
   }
 
   private sendAlert(error: ApiError, count: number): void {
-    const alertMessage = `🚨 API Error Alert: ${error.service} - ${error.type} (${count} occurrences)`;
-    console.error(alertMessage);
-    
-    // In a real implementation, you would send this to:
-    // - Email/SMS notifications
-    // - Slack/Discord webhooks
-    // - PagerDuty/OpsGenie
-    // - Your monitoring dashboard
+    const message = `API Error Alert: ${error.service} - ${error.type} (${count} occurrences)`;
+    logger.error(
+      { service: error.service, type: error.type, severity: error.severity, count, message },
+      'ErrorMonitor alert'
+    );
+    Sentry.withScope((scope) => {
+      scope.setTag('service', error.service);
+      scope.setTag('error_type', error.type);
+      scope.setTag('severity', error.severity);
+      scope.setContext('alert', { count, message });
+      if (error.userId) scope.setUser({ id: error.userId });
+      Sentry.captureMessage(message, 'error');
+    });
   }
 
   getErrorStats(): Record<string, number> {

@@ -23,6 +23,17 @@ export async function GET(request: NextRequest) {
           message: 'Error counts reset successfully',
         });
 
+      case 'health':
+        const healthMonitor = ErrorMonitor.getInstance();
+        const healthStats = healthMonitor.getErrorStats();
+        return NextResponse.json({
+          success: true,
+          stats: healthStats,
+          circuitBreaker: {
+            note: 'Circuit breaker state is per X API / Apify client instance; not aggregated in this API.',
+          },
+        });
+
       default:
         return NextResponse.json(
           { error: 'Invalid action' },
@@ -30,7 +41,6 @@ export async function GET(request: NextRequest) {
         );
     }
   } catch (error) {
-    console.error('Error in error monitoring API:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -61,7 +71,6 @@ export async function POST(request: NextRequest) {
       error,
     });
   } catch (error) {
-    console.error('Error in error monitoring API:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

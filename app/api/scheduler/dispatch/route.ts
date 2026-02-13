@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processQueue } from '@/lib/job-queue'
+import { createLogger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -23,14 +24,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // Verify this is a Vercel cron job, scheduler worker, or allow manual calls in development
+  const requestId = request.headers.get('x-request-id') ?? undefined
+  const log = createLogger({ requestId, service: 'api/scheduler/dispatch' })
   const cronHeader = request.headers.get('x-vercel-cron')
   const workerHeader = request.headers.get('x-scheduler-worker')
   const isVercelCron = cronHeader === '1'
   const isSchedulerWorker = workerHeader === 'true'
   const isDevelopment = process.env.NODE_ENV === 'development'
-  
-  // Allow: Vercel cron jobs, scheduler worker, or manual calls in development
+
   if (!isDevelopment && !isVercelCron && !isSchedulerWorker) {
     return NextResponse.json({
       success: false,
@@ -40,13 +41,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await processQueue()
-
+    log.info({ processed: result.processed }, 'Dispatch completed')
     return NextResponse.json({
       success: true,
       processed: result.processed,
       results: result.results
     })
   } catch (error: any) {
+    log.error({ err: error }, 'Dispatch failed')
     return NextResponse.json({
       success: false,
       error: 'Dispatch failed',
