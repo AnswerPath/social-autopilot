@@ -216,14 +216,18 @@ export class ApifyService {
     error?: string;
   }> {
     return this.circuitBreaker
-      .execute(async () =>
-        ApiErrorHandler.executeWithRetry(
-          async () => {
+      .execute(async () => {
       console.log(`🔍 Fetching post analytics from Apify for username: ${username}`);
-      // TODO: Update with the actual new actor ID
+
+      const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID;
+      if (!actorId || actorId === 'your-actor-id') {
+        throw new Error(
+          "APIFY_TWITTER_PROFILE_ACTOR_ID must be set to a valid Apify actor ID and cannot be 'your-actor-id'."
+        );
+      }
+
       // IMPORTANT: The actor we use expects `accountUrls`. If we omit it (or send the wrong field),
       // the actor may fall back to demo defaults (e.g. elonmusk, NASA).
-      const actorId = process.env.APIFY_TWITTER_PROFILE_ACTOR_ID || 'delicious_zebu/advanced-x-twitter-profile-scraper';
       
       // Clean username (remove @ if present)
       const cleanUsername = username.replace('@', '');
@@ -582,37 +586,35 @@ export class ApifyService {
       console.log(`   Run ID: ${run.id}`);
       console.log(`   Run URL: https://console.apify.com/actors/runs/${run.id}`);
 
-      // Get the dataset items from the run
+      // Get the dataset items from the run (idempotent - wrap in retry to handle transient API errors)
       const dataset = this.client.run(run.id).dataset();
-      
-      // Get dataset info first to debug
-      const datasetInfo = await dataset.get();
-      if (datasetInfo) {
-        console.log(`📊 Dataset info:`, {
-          id: datasetInfo.id,
-          itemCount: datasetInfo.itemCount,
-          createdAt: datasetInfo.createdAt,
-        });
-      }
-      
-      // Try to get all items - check if pagination is needed
-      let items = await dataset.listItems({ limit: 1000 }); // Request up to 1000 items
-      
+      const items = await ApiErrorHandler.executeWithRetry(
+        async () => {
+          const datasetInfo = await dataset.get();
+          if (datasetInfo) {
+            console.log(`📊 Dataset info:`, {
+              id: datasetInfo.id,
+              itemCount: datasetInfo.itemCount,
+              createdAt: datasetInfo.createdAt,
+            });
+          }
+          let result = await dataset.listItems({ limit: 1000 });
+          if ((!result.items || result.items.length === 0) && result.total > 0) {
+            console.log(`⚠️ Dataset shows ${result.total} total items but received 0. Trying to fetch all items...`);
+            result = await dataset.listItems();
+          }
+          return result;
+        },
+        'apify',
+        undefined,
+        { endpoint: 'getPostAnalytics', userId: this.credentials.userId }
+      );
+
       console.log(`📊 Initial fetch:`, {
         total: items.total,
         count: items.items?.length || 0,
         hasMore: items.total > (items.items?.length || 0),
       });
-      
-      // If total indicates more items exist but we got empty array, try without limit
-      if ((!items.items || items.items.length === 0) && items.total > 0) {
-        console.log(`⚠️ Dataset shows ${items.total} total items but received 0. Trying to fetch all items...`);
-        items = await dataset.listItems(); // Try without explicit limit
-        console.log(`📊 Fetch without limit:`, {
-          total: items.total,
-          count: items.items?.length || 0,
-        });
-      }
       
       // Also check run logs for errors and warnings even if run succeeded
       try {
@@ -1027,12 +1029,7 @@ export class ApifyService {
         success: true,
         posts: filteredPosts,
       };
-          },
-          'apify',
-          undefined,
-          { endpoint: 'getPostAnalytics', userId: this.credentials.userId }
-        )
-      )
+      })
       .catch((err) => ({
         success: false,
         error: err?.message ?? 'Unknown error occurred',
