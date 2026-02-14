@@ -54,14 +54,16 @@ export async function POST(request: NextRequest) {
       request
     );
 
-    // Delete user data from related tables (in reverse dependency order)
+    // Delete user data from related tables (in reverse dependency order).
+    // Include user_credentials so X API, Twitter, Apify, and other credentials are removed.
     const tablesToDelete = [
       'audit_logs',
-      'permission_audit_logs', 
+      'permission_audit_logs',
       'user_sessions',
       'account_settings',
       'user_profiles',
       'user_permissions',
+      'user_credentials',
     ];
 
     for (const table of tablesToDelete) {

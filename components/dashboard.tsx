@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,10 +22,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ManagerApprovalDashboard } from "./approval/manager-dashboard"
 import { ApprovalNotificationCenter } from "./approval/notification-center"
 import { UserMenu } from "./auth/user-menu"
+import { FeatureTour } from "./tutorial/feature-tour"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ContextualHelp } from "./help/contextual-help"
+import { HelpMenu } from "./help/help-menu"
+import { GettingStartedCard } from "./onboarding/getting-started-card"
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showComposer, setShowComposer] = useState(false)
+  const [showTooltips, setShowTooltips] = useState(true)
 
   const [twitterProfile, setTwitterProfile] = useState<any>(null)
   const [recentTweets, setRecentTweets] = useState<any[]>([])
@@ -40,6 +46,15 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchTwitterData()
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/onboarding')
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d) => {
+        if (typeof d.showContextualTooltips === 'boolean') setShowTooltips(d.showContextualTooltips)
+      })
+      .catch(() => {})
   }, [])
 
   const fetchTwitterData = async () => {
@@ -226,23 +241,27 @@ export function Dashboard() {
   }
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="flex h-screen bg-gray-50">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} showTooltips={showTooltips} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {activeTab === "dashboard" && "Dashboard"}
-                {activeTab === "calendar" && "Content Calendar"}
-                {activeTab === "approvals" && "Approvals"}
-                {activeTab === "analytics" && "Analytics"}
-                {activeTab === "team" && "Team Management"}
-                {activeTab === "engagement" && "Engagement Monitor"}
-                {activeTab === "settings" && "Settings"}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {activeTab === "dashboard" && "Dashboard"}
+                  {activeTab === "calendar" && "Content Calendar"}
+                  {activeTab === "approvals" && "Approvals"}
+                  {activeTab === "analytics" && "Analytics"}
+                  {activeTab === "team" && "Team Management"}
+                  {activeTab === "engagement" && "Engagement Monitor"}
+                  {activeTab === "settings" && "Settings"}
+                </h1>
+                <ContextualHelp sectionId={activeTab} />
+              </div>
               <p className="text-gray-600">
                 {activeTab === "dashboard" && "Overview of your social media performance"}
                 {activeTab === "calendar" && "Manage and schedule your content"}
@@ -254,15 +273,28 @@ export function Dashboard() {
               </p>
             </div>
             <div className="flex items-center gap-4">
+              <HelpMenu />
               <Button variant="outline" size="sm" onClick={fetchTwitterData} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 {isLoading ? 'Loading...' : 'Refresh'}
               </Button>
               <ApprovalNotificationCenter />
-              <Button onClick={() => setShowComposer(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Post
-              </Button>
+              {showTooltips ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button onClick={() => setShowComposer(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Post
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Compose and schedule a new post</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button onClick={() => setShowComposer(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Post
+                </Button>
+              )}
               <UserMenu />
             </div>
           </div>
@@ -272,10 +304,11 @@ export function Dashboard() {
         <main className="flex-1 overflow-auto p-6">
           {activeTab === "dashboard" && (
             <div className="space-y-6">
-              {/* User Info Card */}
+              {/* User Info Card + Getting Started */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 space-y-4">
                   <UserInfoCard />
+                  <GettingStartedCard />
                 </div>
                 <div className="lg:col-span-2">
                   {/* Data Source Indicator */}
@@ -477,6 +510,10 @@ export function Dashboard() {
           {activeTab === "settings" && <SettingsPage />}
         </main>
       </div>
+      <Suspense fallback={null}>
+        <FeatureTour />
+      </Suspense>
     </div>
+    </TooltipProvider>
   )
 }

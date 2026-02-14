@@ -46,7 +46,8 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
       await login(data)
       toast.success('Login successful!')
       onSuccess?.()
-      router.push('/dashboard') // Redirect to dashboard after login
+      // Redirect to home so onboarding check runs; user is then sent to /onboarding or /dashboard
+      router.push('/')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Login failed')
     }

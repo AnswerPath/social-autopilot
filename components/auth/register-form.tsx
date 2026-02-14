@@ -74,7 +74,8 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
       await registerUser(data)
       toast.success('Registration successful! Welcome to the platform.')
       onSuccess?.()
-      router.push('/dashboard') // Redirect to dashboard after registration
+      // Redirect to home so onboarding check runs; user is then sent to /onboarding or /dashboard
+      router.push('/')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Registration failed')
     }

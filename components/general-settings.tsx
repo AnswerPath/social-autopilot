@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,8 +10,49 @@ import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 
 export function GeneralSettings() {
+  const [showTooltips, setShowTooltips] = useState(true)
+  const [tooltipsLoading, setTooltipsLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/onboarding')
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d) => {
+        if (typeof d.showContextualTooltips === 'boolean') setShowTooltips(d.showContextualTooltips)
+      })
+      .finally(() => setTooltipsLoading(false))
+  }, [])
+
+  const onTooltipsChange = (checked: boolean) => {
+    setShowTooltips(checked)
+    fetch('/api/onboarding', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ showContextualTooltips: checked }),
+    }).catch(() => {})
+  }
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Help &amp; Tutorial</CardTitle>
+          <CardDescription>Control contextual help and tooltips</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label>Show contextual tooltips</Label>
+              <p className="text-sm text-gray-600">Show short tooltips on sidebar and key buttons when you hover</p>
+            </div>
+            <Switch
+              checked={showTooltips}
+              onCheckedChange={onTooltipsChange}
+              disabled={tooltipsLoading}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Profile Settings</CardTitle>
