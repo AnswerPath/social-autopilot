@@ -87,11 +87,14 @@ export async function PATCH(request: NextRequest) {
     if (UpdateSchema.resetTutorial(body.resetTutorial)) {
       const { error } = await supabaseAdmin
         .from('user_profiles')
-        .update({
-          tutorial_completed_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user.id)
+        .upsert(
+          {
+            user_id: user.id,
+            tutorial_completed_at: null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        )
       if (error) {
         console.error('Reset tutorial error:', error)
         return NextResponse.json({ error: 'Failed to reset tutorial' }, { status: 500 })
@@ -118,8 +121,7 @@ export async function PATCH(request: NextRequest) {
 
     const { error } = await supabaseAdmin
       .from('user_profiles')
-      .update(updates)
-      .eq('user_id', user.id)
+      .upsert({ user_id: user.id, ...updates }, { onConflict: 'user_id' })
 
     if (error) {
       console.error('Onboarding update error:', error)

@@ -14,7 +14,7 @@ const mockFrom = jest.fn()
 const mockSelect = jest.fn()
 const mockEq = jest.fn()
 const mockSingle = jest.fn()
-const mockUpdate = jest.fn()
+const mockUpsert = jest.fn()
 
 jest.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: jest.fn(() => ({
@@ -29,11 +29,11 @@ describe('Onboarding API', () => {
     jest.clearAllMocks()
     mockFrom.mockReturnValue({
       select: mockSelect,
-      update: mockUpdate,
+      upsert: mockUpsert,
     })
     mockSelect.mockReturnValue({ eq: mockEq })
     mockEq.mockReturnValue({ single: mockSingle })
-    mockUpdate.mockReturnValue({ eq: jest.fn().mockResolvedValue({ error: null }) })
+    mockUpsert.mockResolvedValue({ error: null })
   })
 
   describe('GET /api/onboarding', () => {
@@ -163,8 +163,6 @@ describe('Onboarding API', () => {
 
     it('updates step and returns success', async () => {
       getCurrentUser.mockResolvedValue({ id: 'user-1' })
-      const eqMock = jest.fn().mockResolvedValue({ error: null })
-      mockUpdate.mockReturnValue({ eq: eqMock })
 
       const { PATCH } = await import('@/app/api/onboarding/route')
       const request = new NextRequest('http://localhost:3000/api/onboarding', {
@@ -178,16 +176,14 @@ describe('Onboarding API', () => {
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
       expect(mockFrom).toHaveBeenCalledWith('user_profiles')
-      expect(mockUpdate).toHaveBeenCalled()
-      const updatePayload = mockUpdate.mock.calls[0][0]
-      expect(updatePayload.onboarding_step).toBe(2)
-      expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ user_id: 'user-1', onboarding_step: 2 }),
+        { onConflict: 'user_id' }
+      )
     })
 
     it('sets complete and onboarding_completed_at when complete: true', async () => {
       getCurrentUser.mockResolvedValue({ id: 'user-1' })
-      const eqMock = jest.fn().mockResolvedValue({ error: null })
-      mockUpdate.mockReturnValue({ eq: eqMock })
 
       const { PATCH } = await import('@/app/api/onboarding/route')
       const request = new NextRequest('http://localhost:3000/api/onboarding', {
@@ -200,15 +196,14 @@ describe('Onboarding API', () => {
 
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
-      const updatePayload = mockUpdate.mock.calls[0][0]
-      expect(updatePayload.onboarding_step).toBe(ONBOARDING_STEPS.COMPLETE)
-      expect(updatePayload.onboarding_completed_at).toBeDefined()
+      const upsertPayload = mockUpsert.mock.calls[0][0]
+      expect(upsertPayload.onboarding_step).toBe(ONBOARDING_STEPS.COMPLETE)
+      expect(upsertPayload.onboarding_completed_at).toBeDefined()
+      expect(mockUpsert).toHaveBeenCalledWith(expect.any(Object), { onConflict: 'user_id' })
     })
 
     it('sets tutorial_completed_at when tutorialCompleted: true', async () => {
       getCurrentUser.mockResolvedValue({ id: 'user-1' })
-      const eqMock = jest.fn().mockResolvedValue({ error: null })
-      mockUpdate.mockReturnValue({ eq: eqMock })
 
       const { PATCH } = await import('@/app/api/onboarding/route')
       const request = new NextRequest('http://localhost:3000/api/onboarding', {
@@ -221,14 +216,13 @@ describe('Onboarding API', () => {
 
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
-      const updatePayload = mockUpdate.mock.calls[0][0]
-      expect(updatePayload.tutorial_completed_at).toBeDefined()
+      const upsertPayload = mockUpsert.mock.calls[0][0]
+      expect(upsertPayload.tutorial_completed_at).toBeDefined()
+      expect(mockUpsert).toHaveBeenCalledWith(expect.any(Object), { onConflict: 'user_id' })
     })
 
     it('resets tutorial when resetTutorial: true', async () => {
       getCurrentUser.mockResolvedValue({ id: 'user-1' })
-      const eqMock = jest.fn().mockResolvedValue({ error: null })
-      mockUpdate.mockReturnValue({ eq: eqMock })
 
       const { PATCH } = await import('@/app/api/onboarding/route')
       const request = new NextRequest('http://localhost:3000/api/onboarding', {
@@ -242,14 +236,17 @@ describe('Onboarding API', () => {
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
       expect(data.tutorialCompleted).toBe(false)
-      const updatePayload = mockUpdate.mock.calls[0][0]
-      expect(updatePayload.tutorial_completed_at).toBeNull()
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: 'user-1',
+          tutorial_completed_at: null,
+        }),
+        { onConflict: 'user_id' }
+      )
     })
 
     it('updates show_contextual_tooltips when showContextualTooltips is boolean', async () => {
       getCurrentUser.mockResolvedValue({ id: 'user-1' })
-      const eqMock = jest.fn().mockResolvedValue({ error: null })
-      mockUpdate.mockReturnValue({ eq: eqMock })
 
       const { PATCH } = await import('@/app/api/onboarding/route')
       const request = new NextRequest('http://localhost:3000/api/onboarding', {
@@ -262,8 +259,9 @@ describe('Onboarding API', () => {
 
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
-      const updatePayload = mockUpdate.mock.calls[0][0]
-      expect(updatePayload.show_contextual_tooltips).toBe(false)
+      const upsertPayload = mockUpsert.mock.calls[0][0]
+      expect(upsertPayload.show_contextual_tooltips).toBe(false)
+      expect(mockUpsert).toHaveBeenCalledWith(expect.any(Object), { onConflict: 'user_id' })
     })
 
     it('returns success for empty body when no updates', async () => {
@@ -301,9 +299,7 @@ describe('Onboarding API', () => {
 
     it('returns 500 when update fails', async () => {
       getCurrentUser.mockResolvedValue({ id: 'user-1' })
-      mockUpdate.mockReturnValue({
-        eq: jest.fn().mockResolvedValue({ error: { message: 'DB error' } }),
-      })
+      mockUpsert.mockResolvedValue({ error: { message: 'DB error' } })
 
       const { PATCH } = await import('@/app/api/onboarding/route')
       const request = new NextRequest('http://localhost:3000/api/onboarding', {

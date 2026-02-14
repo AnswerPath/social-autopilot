@@ -401,22 +401,6 @@ describe.skip('API Routes Integration', () => {
       expect(response.status).toBe(500)
       expect(data.error).toBeDefined()
     })
-
-    it('should return 401 when unauthenticated for apify credentials', async () => {
-      const authUtils = require('@/lib/auth-utils')
-      authUtils.getCurrentUser.mockResolvedValueOnce(null)
-
-      const { POST } = require('@/app/api/settings/apify-credentials/route')
-      const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: 'test-apify-key' }),
-      })
-
-      const response = await POST(request)
-
-      expect(response.status).toBe(401)
-    })
   })
 
   describe('Authentication and Authorization', () => {
@@ -498,5 +482,28 @@ describe.skip('API Routes Integration', () => {
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
     })
+  })
+})
+
+describe('API Routes - Unauthenticated Access', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    global.fetch = mockFetch({ success: true })
+  })
+
+  it('should return 401 when unauthenticated for apify credentials', async () => {
+    const authUtils = require('@/lib/auth-utils')
+    authUtils.getCurrentUser.mockResolvedValueOnce(null)
+
+    const { POST } = require('@/app/api/settings/apify-credentials/route')
+    const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'test-apify-key' }),
+    })
+
+    const response = await POST(request)
+
+    expect(response.status).toBe(401)
   })
 })
