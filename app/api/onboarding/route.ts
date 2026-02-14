@@ -40,7 +40,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       currentStep: step,
-      completedSteps: completed ? [0, 1, 2, 3] : Array.from({ length: step }, (_, i) => i),
+      completedSteps: completed
+        ? Array.from({ length: ONBOARDING_STEPS.COMPLETE + 1 }, (_, i) => i)
+        : Array.from({ length: step }, (_, i) => i),
       completedAt: profile?.onboarding_completed_at ?? null,
       tutorialCompletedAt: profile?.tutorial_completed_at ?? null,
       completed,
@@ -57,7 +59,8 @@ export async function GET(request: NextRequest) {
 }
 
 const UpdateSchema = {
-  step: (v: unknown) => (typeof v === 'number' && v >= 0 && v <= 3 ? v : undefined),
+  step: (v: unknown) =>
+    typeof v === 'number' && v >= 0 && v <= ONBOARDING_STEPS.COMPLETE ? v : undefined,
   complete: (v: unknown) => v === true,
   tutorialCompleted: (v: unknown) => v === true,
   resetTutorial: (v: unknown) => v === true,

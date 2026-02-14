@@ -9,6 +9,7 @@ import { OnboardingProgress } from './onboarding-progress'
 import { Loader2, Zap, ArrowRight, ArrowLeft } from 'lucide-react'
 import { ONBOARDING_STEPS } from '@/lib/onboarding'
 import { StepConnectX } from './step-connect-x'
+import { toast } from 'sonner'
 
 interface OnboardingState {
   currentStep: number
@@ -149,12 +150,23 @@ export function OnboardingFlow() {
                   className="flex-1"
                   onClick={async () => {
                     setState((s) => ({ ...s, loading: true }))
-                    await fetch('/api/onboarding', {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ complete: true }),
-                    })
-                    router.replace('/dashboard?tour=1')
+                    try {
+                      const res = await fetch('/api/onboarding', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ complete: true }),
+                      })
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => ({}))
+                        toast.error(data.error || 'Failed to save. Please try again.')
+                        setState((s) => ({ ...s, loading: false }))
+                        return
+                      }
+                      router.replace('/dashboard?tour=1')
+                    } catch {
+                      toast.error('Network error. Please try again.')
+                      setState((s) => ({ ...s, loading: false }))
+                    }
                   }}
                   disabled={state.loading}
                 >

@@ -25,13 +25,21 @@ export function FeatureTour() {
         prevBtnText: 'Previous',
         doneBtnText: 'Done',
         steps,
-        onDestroyed: () => {
-          fetch('/api/onboarding', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tutorialCompleted: true }),
-          }).catch(() => {})
-          router.replace('/dashboard', { scroll: false })
+        onDestroyed: async () => {
+          try {
+            const res = await fetch('/api/onboarding', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tutorialCompleted: true }),
+            })
+            if (!res.ok) {
+              console.error('Failed to persist tutorial completion')
+            }
+          } catch (e) {
+            console.error('Tutorial completion persist error', e)
+          } finally {
+            router.replace('/dashboard', { scroll: false })
+          }
         },
       })
       driverRef.current.drive()

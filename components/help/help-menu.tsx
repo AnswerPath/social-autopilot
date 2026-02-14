@@ -10,17 +10,29 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { HelpCircle, BookOpen, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function HelpMenu() {
   const router = useRouter()
 
   const restartTutorial = async () => {
-    await fetch('/api/onboarding', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resetTutorial: true }),
-    })
-    router.push('/dashboard?tour=1')
+    try {
+      const response = await fetch('/api/onboarding', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resetTutorial: true }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        console.error('Failed to reset tutorial:', data.error || response.statusText)
+        toast.error(data.error || 'Failed to reset tutorial. Please try again.')
+        return
+      }
+      router.push('/dashboard?tour=1')
+    } catch (err) {
+      console.error('Restart tutorial error:', err)
+      toast.error('Network error. Please try again.')
+    }
   }
 
   return (

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { CheckCircle, Circle, RotateCcw, BookOpen } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function GettingStartedCard() {
   const [data, setData] = useState<{
@@ -21,14 +22,24 @@ export function GettingStartedCard() {
 
   if (!data || !data.completed) return null
 
-  const restartTutorial = () => {
-    fetch('/api/onboarding', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resetTutorial: true }),
-    }).then(() => {
+  const restartTutorial = async () => {
+    try {
+      const res = await fetch('/api/onboarding', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resetTutorial: true }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        console.error('Failed to reset tutorial:', data.error || res.statusText)
+        toast.error(data.error || 'Failed to reset tutorial. Please try again.')
+        return
+      }
       window.location.href = '/dashboard?tour=1'
-    })
+    } catch (err) {
+      console.error('Restart tutorial error:', err)
+      toast.error('Network error. Please try again.')
+    }
   }
 
   return (

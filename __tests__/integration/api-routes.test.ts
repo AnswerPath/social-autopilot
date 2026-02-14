@@ -11,6 +11,10 @@ jest.mock('@/lib/x-api-service')
 jest.mock('@/lib/token-management')
 jest.mock('@/lib/compliance')
 jest.mock('@/lib/error-handling')
+jest.mock('@/lib/auth-utils', () => ({
+  getCurrentUser: jest.fn().mockResolvedValue({ id: 'test-user' }),
+  createAuthError: jest.fn((type: string, msg: string) => ({ type, message: msg })),
+}))
 
 // Skip these tests as they require full API route environment with proper mocking
 describe.skip('API Routes Integration', () => {
@@ -28,7 +32,6 @@ describe.skip('API Routes Integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: 'test-apify-key',
-          userId: 'test-user',
         }),
       })
 
@@ -42,7 +45,7 @@ describe.skip('API Routes Integration', () => {
     it('should handle GET /api/settings/apify-credentials', async () => {
       const { GET } = require('@/app/api/settings/apify-credentials/route')
       
-      const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials?userId=test-user')
+      const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials')
 
       const response = await GET(request)
       const data = await response.json()
@@ -59,7 +62,6 @@ describe.skip('API Routes Integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: 'updated-apify-key',
-          userId: 'test-user',
         }),
       })
 
@@ -73,7 +75,7 @@ describe.skip('API Routes Integration', () => {
     it('should handle DELETE /api/settings/apify-credentials', async () => {
       const { DELETE } = require('@/app/api/settings/apify-credentials/route')
       
-      const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials?userId=test-user')
+      const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials')
 
       const response = await DELETE(request)
       const data = await response.json()
@@ -95,7 +97,6 @@ describe.skip('API Routes Integration', () => {
           apiKeySecret: 'test-x-api-secret',
           accessToken: 'test-access-token',
           accessTokenSecret: 'test-access-token-secret',
-          userId: 'test-user',
         }),
       })
 
@@ -109,7 +110,7 @@ describe.skip('API Routes Integration', () => {
     it('should handle GET /api/settings/x-api-credentials', async () => {
       const { GET } = require('@/app/api/settings/x-api-credentials/route')
       
-      const request = new NextRequest('http://localhost:3000/api/settings/x-api-credentials?userId=test-user')
+      const request = new NextRequest('http://localhost:3000/api/settings/x-api-credentials')
 
       const response = await GET(request)
       const data = await response.json()
@@ -391,7 +392,6 @@ describe.skip('API Routes Integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           apiKey: 'test-apify-key',
-          userId: 'test-user',
         }),
       })
 
@@ -400,6 +400,22 @@ describe.skip('API Routes Integration', () => {
 
       expect(response.status).toBe(500)
       expect(data.error).toBeDefined()
+    })
+
+    it('should return 401 when unauthenticated for apify credentials', async () => {
+      const authUtils = require('@/lib/auth-utils')
+      authUtils.getCurrentUser.mockResolvedValueOnce(null)
+
+      const { POST } = require('@/app/api/settings/apify-credentials/route')
+      const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'test-apify-key' }),
+      })
+
+      const response = await POST(request)
+
+      expect(response.status).toBe(401)
     })
   })
 
@@ -447,7 +463,6 @@ describe.skip('API Routes Integration', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             apiKey: 'test-apify-key',
-            userId: 'test-user',
           }),
         })
       )
@@ -469,7 +484,6 @@ describe.skip('API Routes Integration', () => {
       
       const largeBody = {
         apiKey: 'a'.repeat(1000),
-        userId: 'test-user',
       }
 
       const request = new NextRequest('http://localhost:3000/api/settings/apify-credentials', {

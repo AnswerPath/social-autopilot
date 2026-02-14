@@ -7,18 +7,30 @@ import {
 } from '@/lib/apify-storage';
 import { validateApifyCredentials } from '@/lib/apify-storage';
 import { ApifyCredentials } from '@/lib/apify-service';
+import { getCurrentUser, createAuthError } from '@/lib/auth-utils';
+import { AuthErrorType } from '@/lib/auth-types';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { userId, apiKey } = body;
-
-    if (!userId || !apiKey) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId and apiKey' },
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { apiKey } = body;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Missing required field: apiKey' },
         { status: 400 }
       );
     }
+
+    const userId = user.id;
 
     // Validate the API key format (basic validation)
     if (typeof apiKey !== 'string' || apiKey.length < 10) {
@@ -67,15 +79,15 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
-        { status: 400 }
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
       );
     }
+
+    const userId = user.id;
 
     const result = await getApifyCredentials(userId);
     if (!result.success) {
@@ -103,15 +115,25 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { userId, apiKey } = body;
-
-    if (!userId || !apiKey) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId and apiKey' },
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { apiKey } = body;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Missing required field: apiKey' },
         { status: 400 }
       );
     }
+
+    const userId = user.id;
 
     const credentials: ApifyCredentials = {
       apiKey,
@@ -151,15 +173,15 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
-        { status: 400 }
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
       );
     }
+
+    const userId = user.id;
 
     const result = await deleteApifyCredentials(userId);
     if (!result.success) {

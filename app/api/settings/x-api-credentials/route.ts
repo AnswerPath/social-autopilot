@@ -9,18 +9,30 @@ import {
 import { validateXApiCredentials } from '@/lib/x-api-storage';
 import { XApiCredentials } from '@/lib/x-api-service';
 import { activeMonitors } from '@/app/api/mentions/stream/route';
+import { getCurrentUser, createAuthError } from '@/lib/auth-utils';
+import { AuthErrorType } from '@/lib/auth-types';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { userId, apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
-
-    if (!userId || !apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, apiKey, apiKeySecret, accessToken, accessTokenSecret' },
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
+
+    if (!apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+      return NextResponse.json(
+        { error: 'Missing required fields: apiKey, apiKeySecret, accessToken, accessTokenSecret' },
         { status: 400 }
       );
     }
+
+    const userId = user.id;
 
     // Validate the API key format (basic validation)
     if (typeof apiKey !== 'string' || apiKey.length < 10) {
@@ -97,15 +109,15 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
-        { status: 400 }
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
       );
     }
+
+    const userId = user.id;
 
     const result = await getXApiCredentials(userId);
     if (!result.success) {
@@ -133,15 +145,25 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { userId, apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
-
-    if (!userId || !apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, apiKey, apiKeySecret, accessToken, accessTokenSecret' },
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
+
+    if (!apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+      return NextResponse.json(
+        { error: 'Missing required fields: apiKey, apiKeySecret, accessToken, accessTokenSecret' },
         { status: 400 }
       );
     }
+
+    const userId = user.id;
 
     const credentials: XApiCredentials = {
       apiKey,
@@ -209,15 +231,15 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
+    const user = await getCurrentUser(request);
+    if (!user) {
       return NextResponse.json(
-        { error: 'Missing userId parameter' },
-        { status: 400 }
+        { error: createAuthError(AuthErrorType.SESSION_EXPIRED, 'Authentication required') },
+        { status: 401 }
       );
     }
+
+    const userId = user.id;
 
     const result = await deleteXApiCredentials(userId);
     if (!result.success) {

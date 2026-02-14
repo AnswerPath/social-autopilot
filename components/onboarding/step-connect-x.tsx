@@ -26,11 +26,9 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
-  const [testSuccess, setTestSuccess] = useState<boolean | null>(null)
 
   const saveAndTest = async () => {
     setMessage(null)
-    setTestSuccess(null)
     const hasApify = apifyApiKey.trim().length > 0
     const hasX = [xApiKey, xApiKeySecret, xAccessToken, xAccessTokenSecret].every((s) => s.trim().length > 0)
 
@@ -39,13 +37,18 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
       return
     }
 
+    if ((hasApify || hasX) && !userId) {
+      setMessage({ type: 'error', text: 'Session expired. Please log in again to save credentials.' })
+      return
+    }
+
     setIsSaving(true)
     try {
-      if (hasApify && userId) {
+      if (hasApify) {
         const r = await fetch('/api/settings/apify-credentials', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, apiKey: apifyApiKey.trim() }),
+          body: JSON.stringify({ apiKey: apifyApiKey.trim() }),
         })
         if (!r.ok) {
           const d = await r.json()
@@ -54,12 +57,11 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           return
         }
       }
-      if (hasX && userId) {
+      if (hasX) {
         const r = await fetch('/api/settings/x-api-credentials', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId,
             apiKey: xApiKey.trim(),
             apiKeySecret: xApiKeySecret.trim(),
             accessToken: xAccessToken.trim(),
@@ -87,7 +89,6 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           }),
         })
         const testData = await testRes.json()
-        setTestSuccess(testRes.ok)
         setMessage(
           testRes.ok
             ? { type: 'success', text: testData.message || 'X connection successful!' }
@@ -100,7 +101,6 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           body: JSON.stringify({ apiKey: apifyApiKey.trim() }),
         })
         const testData = await testRes.json()
-        setTestSuccess(testRes.ok)
         setMessage(
           testRes.ok
             ? { type: 'success', text: testData.message || 'Apify connection successful!' }
