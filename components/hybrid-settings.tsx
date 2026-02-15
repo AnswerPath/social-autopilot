@@ -52,14 +52,14 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   const checkExistingCredentials = async () => {
     try {
       // Check Apify credentials
-      const apifyResponse = await fetch(`/api/settings/apify-credentials?userId=${userId}`);
+      const apifyResponse = await fetch('/api/settings/apify-credentials');
       if (apifyResponse.ok) {
         const apifyData = await apifyResponse.json();
         setHasApifyCredentials(apifyData.hasCredentials);
       }
 
       // Check X API credentials
-      const xApiResponse = await fetch(`/api/settings/x-api-credentials?userId=${userId}`);
+      const xApiResponse = await fetch('/api/settings/x-api-credentials');
       if (xApiResponse.ok) {
         const xApiData = await xApiResponse.json();
         setHasXApiCredentials(xApiData.hasCredentials);
@@ -147,7 +147,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
       const response = await fetch('/api/settings/apify-credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, apiKey: apifyApiKey.trim() }),
+        body: JSON.stringify({ apiKey: apifyApiKey.trim() }),
       });
 
       const data = await response.json();
@@ -176,7 +176,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     setApifyMessage(null);
 
     try {
-      const response = await fetch(`/api/settings/apify-credentials?userId=${userId}`, {
+      const response = await fetch('/api/settings/apify-credentials', {
         method: 'DELETE',
       });
 
@@ -302,7 +302,6 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
           apiKey: xApiKey.trim(),
           apiKeySecret: xApiKeySecret.trim(),
           accessToken: xAccessToken.trim(),
@@ -339,7 +338,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     setXApiMessage(null);
 
     try {
-      const response = await fetch(`/api/settings/x-api-credentials?userId=${userId}`, {
+      const response = await fetch('/api/settings/x-api-credentials', {
         method: 'DELETE',
       });
 

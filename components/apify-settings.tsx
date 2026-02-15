@@ -27,7 +27,7 @@ export function ApifySettings({ userId }: ApifySettingsProps) {
 
   const checkExistingCredentials = async () => {
     try {
-      const response = await fetch(`/api/settings/apify-credentials?userId=${userId}`);
+      const response = await fetch('/api/settings/apify-credentials');
       if (response.ok) {
         const data = await response.json();
         setHasCredentials(data.hasCredentials);
@@ -94,7 +94,7 @@ export function ApifySettings({ userId }: ApifySettingsProps) {
       const response = await fetch('/api/settings/apify-credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, apiKey: apiKey.trim() }),
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
       });
 
       const data = await response.json();
@@ -123,7 +123,7 @@ export function ApifySettings({ userId }: ApifySettingsProps) {
     setMessage(null);
 
     try {
-      const response = await fetch(`/api/settings/apify-credentials?userId=${userId}`, {
+      const response = await fetch('/api/settings/apify-credentials', {
         method: 'DELETE',
       });
 
@@ -156,7 +156,7 @@ export function ApifySettings({ userId }: ApifySettingsProps) {
       const response = await fetch('/api/settings/apify-credentials', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, apiKey: apiKey.trim() }),
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
       });
 
       const data = await response.json();

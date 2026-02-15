@@ -622,8 +622,77 @@
           "21",
           "22"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Design multi-step onboarding flow and user journey",
+            "description": "Create wireframes and mockups for the complete onboarding experience including user flow diagrams",
+            "dependencies": [],
+            "details": "Design the entire onboarding flow from initial signup to completion. Create wireframes for each step of the process. Map out user journey with decision points. Include designs for OAuth connection screens, feature introduction screens, and progress indicators. Ensure designs are responsive for all device types.",
+            "status": "done",
+            "testStrategy": "Usability testing with 5-7 users from different demographics. Review designs against accessibility guidelines.",
+            "updatedAt": "2026-02-14T04:17:49.518Z",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement X account OAuth connection with instructions",
+            "description": "Develop the OAuth integration with X platform and create clear user instructions for the connection process",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement OAuth 2.0 flow for X platform integration. Create secure token storage and refresh mechanisms. Design and implement clear visual instructions guiding users through the connection process. Add error handling for failed connections with helpful recovery options. Include skip option for users who want to connect later.",
+            "status": "done",
+            "testStrategy": "Integration testing with X API sandbox. Error case testing for various failure scenarios. Cross-browser compatibility testing.",
+            "parentId": "undefined",
+            "updatedAt": "2026-02-14T04:17:49.528Z"
+          },
+          {
+            "id": 3,
+            "title": "Develop interactive tutorial for key features",
+            "description": "Create guided interactive walkthroughs for scheduling, automation, and analytics features",
+            "dependencies": [
+              1
+            ],
+            "details": "Develop step-by-step interactive tutorials for each key feature. Create highlight overlays to focus user attention on relevant UI elements. Implement next/previous navigation controls. Add progress indicators for each tutorial section. Ensure tutorials can be revisited later from help menu. Create animations to demonstrate complex interactions.",
+            "status": "done",
+            "testStrategy": "User testing with both technical and non-technical users. Completion rate tracking. A/B testing of different tutorial approaches.",
+            "parentId": "undefined",
+            "updatedAt": "2026-02-14T04:17:49.535Z"
+          },
+          {
+            "id": 4,
+            "title": "Implement tooltips and contextual help system",
+            "description": "Create a system for displaying contextual help throughout the application with tooltips and guided assistance",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Develop a reusable tooltip component that can be triggered by hover, focus, or click events. Implement a contextual help system that displays relevant information based on user location and actions. Create a help content management system for easy updates. Ensure all help elements are accessible and work with screen readers. Add ability to dismiss or disable tooltips for experienced users.",
+            "status": "done",
+            "testStrategy": "Accessibility testing with screen readers. User testing to measure helpfulness of contextual information. Performance testing to ensure tooltips don't impact application responsiveness.",
+            "parentId": "undefined",
+            "updatedAt": "2026-02-14T04:17:49.537Z"
+          },
+          {
+            "id": 5,
+            "title": "Create onboarding progress tracking and follow-up system",
+            "description": "Implement backend and frontend components to track onboarding progress and trigger follow-up communications",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Develop a progress tracking system that monitors and stores user advancement through onboarding steps. Implement a dashboard showing completion status. Create welcome email templates and follow-up sequences based on user progress. Design and implement an FAQ section with searchable content. Add analytics to track completion rates and identify abandonment points.",
+            "status": "done",
+            "testStrategy": "Funnel analysis to identify drop-off points. A/B testing of different email sequences. Database performance testing for progress tracking system.",
+            "parentId": "undefined",
+            "updatedAt": "2026-02-14T04:17:49.540Z"
+          }
+        ],
+        "updatedAt": "2026-02-14T04:17:49.540Z"
       },
       {
         "id": "24",
@@ -768,9 +837,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-13T02:27:14.801Z",
+      "lastModified": "2026-02-14T04:17:49.540Z",
       "taskCount": 10,
-      "completedCount": 8,
+      "completedCount": 9,
       "tags": [
         "master"
       ]
