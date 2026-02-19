@@ -8,15 +8,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { useAccountSettings } from '@/hooks/use-account-settings';
-import { NotificationPreferences } from '@/lib/auth-types';
-import { Loader2, Bell, Mail, Smartphone, AlertTriangle, BarChart3, Shield, Megaphone, Calendar, Clock } from 'lucide-react';
+import { Loader2, Mail, Smartphone, Megaphone } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 const NotificationPreferencesSchema = z.object({
   email_notifications: z.boolean(),
   push_notifications: z.boolean(),
+  sms_notifications: z.boolean().optional(),
+  phone_number: z.string().optional().nullable(),
   mention_notifications: z.boolean(),
   post_approval_notifications: z.boolean(),
   analytics_notifications: z.boolean(),
@@ -24,7 +27,11 @@ const NotificationPreferencesSchema = z.object({
   marketing_emails: z.boolean(),
   weekly_digest: z.boolean(),
   daily_summary: z.boolean(),
-});
+  digest_frequency: z.enum(['immediate', 'daily', 'weekly']).optional(),
+}).refine(
+  (data) => !data.sms_notifications || (data.phone_number && data.phone_number.trim().length > 0),
+  { message: 'Please enter a phone number to receive SMS notifications.', path: ['phone_number'] }
+);
 
 type NotificationPreferencesFormData = z.infer<typeof NotificationPreferencesSchema>;
 
@@ -37,6 +44,8 @@ export function NotificationPreferencesForm() {
     defaultValues: {
       email_notifications: true,
       push_notifications: true,
+      sms_notifications: false,
+      phone_number: '',
       mention_notifications: true,
       post_approval_notifications: true,
       analytics_notifications: true,
@@ -44,12 +53,19 @@ export function NotificationPreferencesForm() {
       marketing_emails: false,
       weekly_digest: true,
       daily_summary: false,
+      digest_frequency: 'immediate',
     },
   });
 
   useEffect(() => {
     if (settings?.notification_preferences) {
-      form.reset(settings.notification_preferences);
+      const prefs = settings.notification_preferences as NotificationPreferencesFormData;
+      form.reset({
+        ...prefs,
+        sms_notifications: prefs.sms_notifications ?? false,
+        phone_number: prefs.phone_number ?? '',
+        digest_frequency: prefs.digest_frequency ?? 'immediate',
+      });
     }
   }, [settings, form]);
 
@@ -160,23 +176,23 @@ export function NotificationPreferencesForm() {
         </CardContent>
       </Card>
 
-      {/* Push Notifications */}
+      {/* Push & SMS */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Smartphone className="h-5 w-5" />
-            Push Notifications
+            Channels
           </CardTitle>
           <CardDescription>
-            Receive instant notifications on your device.
+            Choose how you receive notifications: in-app, push, and SMS.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="push_notifications">Push Notifications</Label>
+              <Label htmlFor="push_notifications">Push (in-app) Notifications</Label>
               <p className="text-sm text-muted-foreground">
-                Receive real-time notifications on your device
+                Real-time notifications in the app
               </p>
             </div>
             <Switch
@@ -185,6 +201,44 @@ export function NotificationPreferencesForm() {
               onCheckedChange={(checked) => form.setValue('push_notifications', checked)}
             />
           </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="sms_notifications">SMS Notifications</Label>
+              <p className="text-sm text-muted-foreground">
+                Receive urgent alerts via text message
+              </p>
+            </div>
+            <Switch
+              id="sms_notifications"
+              checked={form.watch('sms_notifications') ?? false}
+              onCheckedChange={(checked) => {
+                form.setValue('sms_notifications', checked);
+                if (checked && !form.getValues('phone_number')?.trim()) {
+                  toast.info('Add your phone number below to receive SMS notifications.');
+                }
+              }}
+            />
+          </div>
+          {form.watch('sms_notifications') && (
+            <div className="space-y-2 pt-2 border-t">
+              <Label htmlFor="phone_number">Phone number</Label>
+              <p className="text-sm text-muted-foreground">
+                Required for SMS. Use E.164 format (e.g. +1234567890).
+              </p>
+              <Input
+                id="phone_number"
+                type="tel"
+                placeholder="+1 234 567 8900"
+                {...form.register('phone_number')}
+                className={form.formState.errors.phone_number ? 'border-destructive' : ''}
+              />
+              {form.formState.errors.phone_number && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.phone_number.message}
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -240,6 +294,26 @@ export function NotificationPreferencesForm() {
               checked={form.watch('daily_summary')}
               onCheckedChange={(checked) => form.setValue('daily_summary', checked)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="digest_frequency">Digest frequency</Label>
+            <p className="text-sm text-muted-foreground">
+              When to receive non-urgent notifications
+            </p>
+            <Select
+              value={form.watch('digest_frequency') ?? 'immediate'}
+              onValueChange={(value: 'immediate' | 'daily' | 'weekly') => form.setValue('digest_frequency', value)}
+            >
+              <SelectTrigger id="digest_frequency">
+                <SelectValue placeholder="Immediate" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="immediate">Immediate</SelectItem>
+                <SelectItem value="daily">Daily digest</SelectItem>
+                <SelectItem value="weekly">Weekly digest</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

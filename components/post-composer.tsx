@@ -278,15 +278,11 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
         })
         
         if (!response.ok) {
-          // Log error with full details for debugging
-          const errorDetails = {
-            status: response.status,
-            statusText: response.statusText,
-            error: result.error,
-            details: result.details,
-            fullResult: result
-          }
-          console.error('Schedule post failed:', errorDetails)
+          const errorMsg = result.error || result.details || response.statusText || `HTTP ${response.status}`
+          console.error(
+            `Schedule post failed: status=${response.status}, error=${result.error ?? 'none'}, details=${result.details ?? 'none'}. Full:`,
+            result
+          )
         }
         
         if (response.ok && result.success) {

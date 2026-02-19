@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { 
-  AccountSettings, 
+  AccountSettings as AccountSettingsType, 
   NotificationPreferences, 
   SecuritySettings, 
   AccountPreferences,
@@ -12,11 +12,28 @@ import {
   AccountDeletionRequest 
 } from '@/lib/auth-types';
 
-export function useAccountSettings() {
+type AccountSettingsContextValue = {
+  user: ReturnType<typeof useAuth>['user'];
+  loading: boolean;
+  error: string | null;
+  settings: AccountSettingsType | null;
+  sessions: SessionInfo[];
+  fetchSettings: () => Promise<unknown>;
+  updateNotificationPreferences: (preferences: Partial<NotificationPreferences>) => Promise<AccountSettingsType | void>;
+  updateSecuritySettings: (security: Partial<SecuritySettings>) => Promise<AccountSettingsType | void>;
+  updateAccountPreferences: (preferences: Partial<AccountPreferences>) => Promise<AccountSettingsType | void>;
+  changePassword: (passwordData: PasswordChangeRequest) => Promise<unknown>;
+  revokeSession: (sessionId: string) => Promise<unknown>;
+  deleteAccount: (deletionData: AccountDeletionRequest) => Promise<unknown>;
+};
+
+const AccountSettingsContext = createContext<AccountSettingsContextValue | null>(null);
+
+export function AccountSettingsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AccountSettings | null>(null);
+  const [settings, setSettings] = useState<AccountSettingsType | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
 
   const fetchSettings = useCallback(async () => {
@@ -194,7 +211,7 @@ export function useAccountSettings() {
     }
   }, [user]);
 
-  return {
+  const value: AccountSettingsContextValue = {
     user,
     loading,
     error,
@@ -208,4 +225,18 @@ export function useAccountSettings() {
     revokeSession,
     deleteAccount,
   };
+
+  return (
+    <AccountSettingsContext.Provider value={value}>
+      {children}
+    </AccountSettingsContext.Provider>
+  );
+}
+
+export function useAccountSettings() {
+  const context = useContext(AccountSettingsContext);
+  if (!context) {
+    throw new Error('useAccountSettings must be used within an AccountSettingsProvider');
+  }
+  return context;
 }

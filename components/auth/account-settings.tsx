@@ -59,13 +59,6 @@ export function AccountSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Account Settings</h2>
-        <p className="text-muted-foreground">
-          Manage your account preferences, security settings, and notification preferences.
-        </p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -100,7 +93,7 @@ export function AccountSettings() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {settings?.notification_preferences?.email_notifications ? 'On' : 'Off'}
+              {settings?.notification_preferences?.email_notifications !== false ? 'On' : 'Off'}
             </div>
             <p className="text-xs text-muted-foreground">
               Email notifications

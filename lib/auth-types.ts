@@ -330,9 +330,14 @@ export interface UserProfile {
 }
 
 // Account Settings Types
+export type DigestFrequency = 'immediate' | 'daily' | 'weekly';
+
 export interface NotificationPreferences {
   email_notifications: boolean;
   push_notifications: boolean;
+  sms_notifications: boolean;
+  /** Phone number for SMS notifications (E.164). Required when sms_notifications is true. */
+  phone_number?: string | null;
   mention_notifications: boolean;
   post_approval_notifications: boolean;
   analytics_notifications: boolean;
@@ -340,6 +345,8 @@ export interface NotificationPreferences {
   marketing_emails: boolean;
   weekly_digest: boolean;
   daily_summary: boolean;
+  /** When to receive non-urgent notifications: immediate, daily digest, or weekly digest */
+  digest_frequency?: DigestFrequency;
 }
 
 export interface SecuritySettings {

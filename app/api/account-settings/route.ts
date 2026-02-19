@@ -10,6 +10,8 @@ import { createAuthError } from '@/lib/auth-utils';
 const NotificationPreferencesSchema = z.object({
   email_notifications: z.boolean(),
   push_notifications: z.boolean(),
+  sms_notifications: z.boolean().optional(),
+  phone_number: z.string().optional().nullable(),
   mention_notifications: z.boolean(),
   post_approval_notifications: z.boolean(),
   analytics_notifications: z.boolean(),
@@ -17,7 +19,11 @@ const NotificationPreferencesSchema = z.object({
   marketing_emails: z.boolean(),
   weekly_digest: z.boolean(),
   daily_summary: z.boolean(),
-});
+  digest_frequency: z.enum(['immediate', 'daily', 'weekly']).optional(),
+}).refine(
+  (data) => !data.sms_notifications || (data.phone_number && data.phone_number.trim().length > 0),
+  { message: 'Phone number is required when SMS notifications are enabled', path: ['phone_number'] }
+);
 
 const SecuritySettingsSchema = z.object({
   two_factor_enabled: z.boolean(),
@@ -59,8 +65,49 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (settingsError && settingsError.code !== 'PGRST116') {
+      console.error('Account settings fetch error:', settingsError);
       return NextResponse.json({ error: 'Failed to fetch account settings' }, { status: 500 });
     }
+
+    // When no row exists (PGRST116), return defaults so UI and card stay in sync
+    const defaultNotificationPrefs = {
+      email_notifications: true,
+      push_notifications: true,
+      sms_notifications: false,
+      phone_number: null as string | null,
+      mention_notifications: true,
+      post_approval_notifications: true,
+      analytics_notifications: true,
+      security_notifications: true,
+      marketing_emails: false,
+      weekly_digest: true,
+      daily_summary: false,
+      digest_frequency: 'immediate' as const,
+    };
+    const resolvedSettings = settings ?? {
+      id: '',
+      user_id: user.id,
+      notification_preferences: defaultNotificationPrefs,
+      security_settings: {
+        two_factor_enabled: false,
+        login_notifications: true,
+        session_timeout_minutes: 60,
+        require_password_for_sensitive_actions: true,
+        failed_login_attempts: 0,
+      },
+      account_preferences: {
+        language: 'en',
+        timezone: 'UTC',
+        date_format: 'MM/DD/YYYY',
+        time_format: '12h',
+        theme: 'system',
+        compact_mode: false,
+        auto_save_drafts: true,
+        default_post_visibility: 'public',
+      },
+      created_at: '',
+      updated_at: '',
+    };
 
     // Get active sessions
     const { data: sessions, error: sessionsError } = await supabaseAdmin
@@ -70,6 +117,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (sessionsError) {
+      console.error('User sessions fetch error:', sessionsError);
       return NextResponse.json({ error: 'Failed to fetch sessions' }, { status: 500 });
     }
 
@@ -86,7 +134,7 @@ export async function GET(request: NextRequest) {
     })) || [];
 
     return NextResponse.json({
-      settings: settings || null,
+      settings: resolvedSettings,
       sessions: formattedSessions,
     });
   } catch (error) {
@@ -151,6 +199,8 @@ export async function PUT(request: NextRequest) {
         notification_preferences: {
           email_notifications: true,
           push_notifications: true,
+          sms_notifications: false,
+          phone_number: null as string | null,
           mention_notifications: true,
           post_approval_notifications: true,
           analytics_notifications: true,
@@ -158,6 +208,7 @@ export async function PUT(request: NextRequest) {
           marketing_emails: false,
           weekly_digest: true,
           daily_summary: false,
+          digest_frequency: 'immediate' as const,
         },
         security_settings: {
           two_factor_enabled: false,

@@ -188,9 +188,14 @@ export class SchedulingService {
         .single()
 
       if (error) {
+        const errMsg =
+          error.message ||
+          (error as { details?: string }).details ||
+          (error as { hint?: string }).hint ||
+          'Database error when saving scheduled post'
         return {
           success: false,
-          error: error.message
+          error: errMsg
         }
       }
 
@@ -200,9 +205,11 @@ export class SchedulingService {
         conflictCheck
       }
     } catch (error) {
+      const errMsg =
+        error instanceof Error ? error.message : String(error ?? 'Failed to schedule post')
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to schedule post'
+        error: errMsg
       }
     }
   }
