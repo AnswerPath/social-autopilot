@@ -51,7 +51,7 @@ export async function queueApprovalNotifications({
       channel,
       eventType: 'approval' as const,
       notificationType,
-      payload: payload ?? undefined,
+      payload,
       postId: postId ?? null,
       priority: 'urgent' as const,
       scheduleFor
@@ -63,6 +63,7 @@ export async function queueApprovalNotifications({
 
 /**
  * Get approval notifications for a recipient (from unified notifications table).
+ * Limited to 50 most recent; pagination not surfaced (caller gets a single page).
  */
 export async function getApprovalNotifications(recipientId: string): Promise<ApprovalNotification[]> {
   const { notifications } = await getNotificationsForUser(recipientId, {

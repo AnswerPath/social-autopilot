@@ -31,14 +31,15 @@ const AccountSettingsContext = createContext<AccountSettingsContextValue | null>
 
 export function AccountSettingsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loadingCount, setLoadingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AccountSettingsType | null>(null);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const loading = loadingCount > 0;
 
   const fetchSettings = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings');
@@ -51,17 +52,16 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       setSessions(data.sessions || []);
       return data;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch account settings';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to fetch account settings');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user]);
 
   const updateNotificationPreferences = useCallback(async (preferences: Partial<NotificationPreferences>) => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings', {
@@ -77,17 +77,16 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       setSettings(data.settings);
       return data.settings;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update notification preferences';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to update notification preferences');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user]);
 
   const updateSecuritySettings = useCallback(async (security: Partial<SecuritySettings>) => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings', {
@@ -103,17 +102,16 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       setSettings(data.settings);
       return data.settings;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update security settings';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to update security settings');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user]);
 
   const updateAccountPreferences = useCallback(async (preferences: Partial<AccountPreferences>) => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings', {
@@ -129,17 +127,16 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       setSettings(data.settings);
       return data.settings;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update account preferences';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to update account preferences');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user]);
 
   const changePassword = useCallback(async (passwordData: PasswordChangeRequest) => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings/password', {
@@ -153,17 +150,16 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       }
       return await response.json();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to change password';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to change password');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user]);
 
   const revokeSession = useCallback(async (sessionId: string) => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings/sessions', {
@@ -179,17 +175,16 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       await fetchSettings();
       return await response.json();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to revoke session';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to revoke session');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user, fetchSettings]);
 
   const deleteAccount = useCallback(async (deletionData: AccountDeletionRequest) => {
     if (!user) return;
-    setLoading(true);
+    setLoadingCount((c) => c + 1);
     setError(null);
     try {
       const response = await fetch('/api/account-settings/delete-account', {
@@ -203,11 +198,10 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
       }
       return await response.json();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to delete account';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to delete account');
       throw err;
     } finally {
-      setLoading(false);
+      setLoadingCount((c) => Math.max(0, c - 1));
     }
   }, [user]);
 

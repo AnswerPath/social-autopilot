@@ -34,13 +34,22 @@ const EVENT_LABELS: Record<NotificationEventType, string> = {
 
 const POLL_INTERVAL_MS = 45000
 
+async function parseErrorResponse(response: Response, fallback: string): Promise<string> {
+  const text = await response.text()
+  try {
+    const data = JSON.parse(text) as { error?: string }
+    return data?.error || text || fallback
+  } catch {
+    return text || fallback
+  }
+}
+
 export function NotificationCenter() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [hasMore, setHasMore] = useState(false)
-  const [offset, setOffset] = useState(0)
   const [marking, setMarking] = useState(false)
   const [eventFilter, setEventFilter] = useState<NotificationEventType | 'all'>('all')
   const offsetRef = useRef(0)
@@ -58,18 +67,18 @@ export function NotificationCenter() {
         params.set('offset', String(currentOffset))
         if (eventFilter !== 'all') params.set('event_type', eventFilter)
         const response = await fetch(`/api/notifications?${params}`)
+        if (!response.ok) {
+          throw new Error(await parseErrorResponse(response, 'Failed to fetch notifications'))
+        }
         const data = await response.json()
-        if (!response.ok) throw new Error(data.error || 'Failed to fetch notifications')
         const list = (data.notifications || []) as NotificationItem[]
         setNotifications((prev) => (reset ? list : [...prev, ...list]))
         setUnreadCount(data.unreadCount ?? 0)
         setHasMore(data.hasMore ?? false)
         if (reset) {
           offsetRef.current = limit
-          setOffset(limit)
         } else {
           offsetRef.current = currentOffset + list.length
-          setOffset((o) => o + list.length)
         }
       } catch (err) {
         toast({
@@ -89,8 +98,9 @@ export function NotificationCenter() {
       const params = new URLSearchParams({ limit: '1' })
       if (eventFilter !== 'all') params.set('event_type', eventFilter)
       const res = await fetch(`/api/notifications?${params}`)
+      if (!res.ok) return
       const data = await res.json()
-      if (res.ok && typeof data.unreadCount === 'number') setUnreadCount(data.unreadCount)
+      if (typeof data.unreadCount === 'number') setUnreadCount(data.unreadCount)
     } catch {
       // ignore
     }
@@ -117,8 +127,10 @@ export function NotificationCenter() {
           ...(eventFilter !== 'all' && { event_type: eventFilter })
         })
       })
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Failed to mark read'))
+      }
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Failed to mark read')
       setUnreadCount(data.unreadCount ?? 0)
       await loadNotifications(true)
     } catch (err) {

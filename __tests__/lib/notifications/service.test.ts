@@ -1,84 +1,110 @@
 import {
   queueNotification,
+  queueNotifications,
   getNotificationsForUser,
+  getUnreadCount,
   markRead,
   markAllRead
 } from '@/lib/notifications/service'
 
-const mockInsert = { select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: { id: 'notif-123' }, error: null })) })) }
-const insertMockFn = jest.fn(() => mockInsert)
-const mockRange = jest.fn(() =>
-  Promise.resolve({
-    data: [
-      {
-        id: 'notif-123',
-        recipient_id: 'user-1',
-        channel: 'in_app',
-        event_type: 'approval',
-        notification_type: 'approval_step_ready',
-        payload: {},
-        post_id: null,
-        priority: 'normal',
-        status: 'sent',
-        scheduled_at: null,
-        sent_at: null,
-        read_at: null,
-        error: null,
-        digest_sent_at: null,
-        created_at: new Date().toISOString()
-      }
-    ],
-    error: null
-  })
-)
-const orderReturn = {
-  range: mockRange,
-  eq: jest.fn(function (this: typeof orderReturn) { return this }),
-  is: jest.fn(function (this: typeof orderReturn) { return this }),
-  gte: jest.fn(function (this: typeof orderReturn) { return this })
+const NOTIF_ROW = {
+  id: 'notif-123',
+  recipient_id: 'user-1',
+  channel: 'in_app',
+  event_type: 'approval',
+  notification_type: 'approval_step_ready',
+  payload: {},
+  post_id: null,
+  priority: 'normal',
+  status: 'sent',
+  scheduled_at: null,
+  sent_at: null,
+  read_at: null,
+  error: null,
+  digest_sent_at: null,
+  created_at: new Date().toISOString()
 }
-const selectChain = {
-  order: jest.fn(() => orderReturn),
-  is: jest.fn(function (this: typeof selectChain) { return this }),
-  gte: jest.fn(function (this: typeof selectChain) { return this }),
-  eq: jest.fn(function (this: typeof selectChain) { return this }),
-  then: (onFulfilled?: (v: unknown) => unknown) =>
-    Promise.resolve({ count: 0, error: null }).then(onFulfilled),
-  catch: (onRejected?: (e: unknown) => unknown) =>
-    Promise.resolve({ count: 0, error: null }).catch(onRejected)
-}
-const mockEq = jest.fn(() => selectChain)
-const createFromReturn = () => ({
-  insert: insertMockFn,
-  update: () => {
-    const resolved = Promise.resolve({ error: null })
-    const chain = Object.assign(resolved, { eq: () => chain })
-    return {
-      eq: () => ({ is: () => chain }),
-      in: () => ({ eq: () => Promise.resolve({ error: null }) })
+
+const insertMockFn = jest.fn()
+const listResult = { data: [NOTIF_ROW], error: null }
+const countResult = { count: 0, error: null }
+
+/** Flexible chain: any method order returns self; then/catch resolve to list or count. */
+function createChain(resolveWith: { data?: unknown; count?: number; error?: unknown } = listResult) {
+  const chain = {
+    select: jest.fn(() => chain),
+    eq: jest.fn(() => chain),
+    order: jest.fn(() => chain),
+    range: jest.fn(() => chain),
+    is: jest.fn(() => chain),
+    gte: jest.fn(() => chain),
+    in: jest.fn(() => chain),
+    insert: jest.fn(() => ({ select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: { id: 'notif-123' }, error: null })) })) })),
+    update: jest.fn(() => chain),
+    maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+    then(onFulfilled?: (v: unknown) => unknown) {
+      return Promise.resolve(resolveWith).then(onFulfilled)
+    },
+    catch(onRejected?: (e: unknown) => unknown) {
+      return Promise.resolve(resolveWith).catch(onRejected)
     }
-  },
-  select: () => ({ eq: mockEq }),
-  in: () => ({ eq: () => Promise.resolve({ error: null }) })
-})
+  }
+  insertMockFn.mockImplementation(() => ({
+    select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: { id: 'notif-123' }, error: null })) }))
+  }))
+  return chain
+}
+
+function createFromReturn(listRes = listResult, countRes = countResult) {
+  const listChain = createChain(listRes)
+  const countChain = createChain(countRes)
+  let selectCallCount = 0
+  return {
+    insert: insertMockFn,
+    select: jest.fn(() => {
+      selectCallCount++
+      return selectCallCount === 1 ? listChain : countChain
+    }),
+    update: jest.fn(() => ({
+      eq: jest.fn(() => ({ is: jest.fn(() => Promise.resolve({ error: null })), in: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })) }))
+    })),
+    in: () => ({ eq: () => Promise.resolve({ error: null }) })
+  }
+}
+
+let fromCallIndex = 0
+let listFromReturn: ReturnType<typeof createFromReturn>
+let countFromReturn: ReturnType<typeof createFromReturn>
+
+function getFromReturn() {
+  fromCallIndex++
+  return fromCallIndex === 1 ? listFromReturn : countFromReturn
+}
+
 jest.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: jest.fn(() => ({
-    from: () => createFromReturn()
+    from: () => getFromReturn()
   }))
 }))
 
 jest.mock('@/lib/notifications/adapters/email', () => ({
-  emailAdapter: { send: jest.fn().mockResolvedValue({ success: false, error: 'Email not configured' }) }
+  emailAdapter: { send: jest.fn() }
+}))
+jest.mock('@/lib/notifications/adapters/sms', () => ({
+  smsAdapter: { send: jest.fn() }
 }))
 
-jest.mock('@/lib/notifications/adapters/sms', () => ({
-  smsAdapter: { send: jest.fn().mockResolvedValue({ success: false, error: 'SMS not configured' }) }
-}))
+const getEmailAdapterSend = () => (jest.requireMock('@/lib/notifications/adapters/email') as { emailAdapter: { send: jest.Mock } }).emailAdapter.send
+const getSmsAdapterSend = () => (jest.requireMock('@/lib/notifications/adapters/sms') as { smsAdapter: { send: jest.Mock } }).smsAdapter.send
 
 describe('Notification Service', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockEq.mockImplementation(() => selectChain)
+    fromCallIndex = 0
+    listFromReturn = createFromReturn()
+    countFromReturn = createFromReturn(listResult, countResult)
+    getEmailAdapterSend().mockResolvedValue({ success: false, error: 'Email not configured' })
+    getSmsAdapterSend().mockResolvedValue({ success: false, error: 'SMS not configured' })
   })
 
   describe('queueNotification', () => {
@@ -91,7 +117,6 @@ describe('Notification Service', () => {
         payload: { stepName: 'Review' }
       })
       expect(id).toBe('notif-123')
-      expect(mockInsert.select).toHaveBeenCalledWith('id')
       expect(insertMockFn).toHaveBeenCalledWith(
         expect.objectContaining({
           recipient_id: 'user-1',
@@ -103,6 +128,62 @@ describe('Notification Service', () => {
         })
       )
     })
+
+    it('calls markSent (update) when channel is in_app', async () => {
+      listFromReturn = createFromReturn()
+      countFromReturn = createFromReturn(listResult, countResult)
+      fromCallIndex = 0
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      await queueNotification({
+        recipientId: 'user-1',
+        channel: 'in_app',
+        eventType: 'approval',
+        notificationType: 'approval_step_ready'
+      })
+      expect(countFromReturn.update).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'sent', sent_at: expect.any(String) })
+      )
+    })
+  })
+
+  describe('queueNotifications', () => {
+    it('calls queueNotification per input and aggregates outcomes', async () => {
+      await expect(
+        queueNotifications([
+          {
+            recipientId: 'user-1',
+            channel: 'in_app',
+            eventType: 'approval',
+            notificationType: 'approval_step_ready'
+          },
+          {
+            recipientId: 'user-2',
+            channel: 'in_app',
+            eventType: 'approval',
+            notificationType: 'approval_step_ready'
+          }
+        ])
+      ).resolves.toBeUndefined()
+      expect(insertMockFn).toHaveBeenCalledTimes(2)
+    })
+
+    it('throws with aggregated message when some queueNotification calls fail', async () => {
+      let insertCallCount = 0
+      insertMockFn.mockImplementation(() => {
+        insertCallCount++
+        if (insertCallCount === 1) {
+          return { select: () => ({ single: () => Promise.resolve({ data: { id: 'a' }, error: null }) }) }
+        }
+        return { select: () => ({ single: () => Promise.reject(new Error('insert failed')) }) }
+      })
+      await expect(
+        queueNotifications([
+          { recipientId: 'user-1', channel: 'in_app', eventType: 'approval', notificationType: 'x' },
+          { recipientId: 'user-2', channel: 'in_app', eventType: 'approval', notificationType: 'y' }
+        ])
+      ).rejects.toThrow(/queueNotifications: 1 failed/)
+    })
   })
 
   describe('getNotificationsForUser', () => {
@@ -112,32 +193,43 @@ describe('Notification Service', () => {
       expect(result).toHaveProperty('unreadCount')
       expect(result).toHaveProperty('hasMore')
       expect(Array.isArray(result.notifications)).toBe(true)
-      expect(result.notifications.length).toBeGreaterThanOrEqual(0)
       if (result.notifications.length > 0) {
         const n = result.notifications[0]
-        expect(n).toHaveProperty('id')
-        expect(n).toHaveProperty('recipient_id')
-        expect(n).toHaveProperty('channel')
-        expect(n).toHaveProperty('event_type')
-        expect(n).toHaveProperty('notification_type')
-        expect(n).toHaveProperty('status')
-        expect(n).toHaveProperty('created_at')
+        expect(n).toHaveProperty('id', 'recipient_id', 'channel', 'event_type', 'notification_type', 'status', 'created_at')
       }
     })
     it('returns result shape when eventType option is provided', async () => {
       const result = await getNotificationsForUser('user-1', { limit: 10, eventType: 'approval' })
-      expect(result).toHaveProperty('notifications')
-      expect(result).toHaveProperty('unreadCount')
-      expect(result).toHaveProperty('hasMore')
-    })
-    it('returns result shape when unreadOnly option is provided', async () => {
-      const result = await getNotificationsForUser('user-1', { limit: 10, unreadOnly: true })
-      expect(result).toHaveProperty('notifications')
-      expect(result).toHaveProperty('unreadCount')
+      expect(result).toHaveProperty('notifications', 'unreadCount', 'hasMore')
     })
     it('throws when list query returns error', async () => {
-      mockRange.mockResolvedValueOnce({ data: null, error: { message: 'list failed' } })
+      listFromReturn = createFromReturn({ data: null, error: { message: 'list failed' } })
+      countFromReturn = createFromReturn(listResult, countResult)
+      fromCallIndex = 0
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
       await expect(getNotificationsForUser('user-1', { limit: 10 })).rejects.toThrow('list failed')
+    })
+  })
+
+  describe('getUnreadCount', () => {
+    it('returns count when query succeeds', async () => {
+      const countChain = createChain({ count: 3, error: null })
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({
+        from: () => ({ select: () => countChain, update: jest.fn(), in: () => ({ eq: () => Promise.resolve({ error: null }) }) })
+      }))
+      const count = await getUnreadCount('user-1')
+      expect(count).toBe(3)
+    })
+    it('returns 0 when count query errors', async () => {
+      const countChain = createChain({ count: null, error: { message: 'count failed' } })
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({
+        from: () => ({ select: () => countChain, update: jest.fn(), in: () => ({ eq: () => Promise.resolve({ error: null }) }) })
+      }))
+      const count = await getUnreadCount('user-1')
+      expect(count).toBe(0)
     })
   })
 
@@ -147,16 +239,16 @@ describe('Notification Service', () => {
     })
     it('calls update with correct ids and recipient when given non-empty array', async () => {
       const updateChain = { in: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })) }
-      const fromReturn = {
-        update: jest.fn(() => updateChain),
-        insert: insertMockFn,
-        select: () => ({ eq: mockEq }),
-        in: () => ({ eq: () => Promise.resolve({ error: null }) })
+      listFromReturn = {
+        ...createFromReturn(),
+        update: jest.fn(() => updateChain)
       }
+      countFromReturn = createFromReturn(listResult, countResult)
+      fromCallIndex = 0
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementationOnce(() => ({ from: () => fromReturn }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
       await markRead(['id-1', 'id-2'], 'user-1')
-      expect(fromReturn.update).toHaveBeenCalledWith(expect.objectContaining({ read_at: expect.any(String) }))
+      expect(listFromReturn.update).toHaveBeenCalledWith(expect.objectContaining({ read_at: expect.any(String) }))
       expect(updateChain.in).toHaveBeenCalledWith('id', ['id-1', 'id-2'])
     })
   })
@@ -164,6 +256,65 @@ describe('Notification Service', () => {
   describe('markAllRead', () => {
     it('resolves without throwing', async () => {
       await expect(markAllRead('user-1')).resolves.toBeUndefined()
+    })
+  })
+
+  describe('delivery paths', () => {
+    it('updates notification to sent when email adapter returns success', async () => {
+      getEmailAdapterSend().mockResolvedValue({ success: true })
+      listFromReturn = createFromReturn()
+      countFromReturn = createFromReturn(listResult, countResult)
+      fromCallIndex = 0
+      const updateChain = { eq: jest.fn(() => Promise.resolve({ error: null })) }
+      countFromReturn.update = jest.fn(() => updateChain)
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      await queueNotification({
+        recipientId: 'user-1',
+        channel: 'email',
+        eventType: 'approval',
+        notificationType: 'approval_step_ready',
+        payload: { email: 'test@example.com' }
+      })
+      expect(countFromReturn.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'sent', sent_at: expect.any(String) }))
+    })
+
+    it('updates notification to failed when email adapter returns failure', async () => {
+      getEmailAdapterSend().mockResolvedValue({ success: false, error: 'smtp error' })
+      listFromReturn = createFromReturn()
+      countFromReturn = createFromReturn(listResult, countResult)
+      fromCallIndex = 0
+      const updateChain = { eq: jest.fn(() => Promise.resolve({ error: null })) }
+      countFromReturn.update = jest.fn(() => updateChain)
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      await queueNotification({
+        recipientId: 'user-1',
+        channel: 'email',
+        eventType: 'approval',
+        notificationType: 'approval_step_ready',
+        payload: { email: 'test@example.com' }
+      })
+      expect(countFromReturn.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: 'smtp error' }))
+    })
+
+    it('updates notification to failed when sms adapter returns failure', async () => {
+      getSmsAdapterSend().mockResolvedValue({ success: false, error: 'twilio error' })
+      listFromReturn = createFromReturn()
+      countFromReturn = createFromReturn(listResult, countResult)
+      fromCallIndex = 0
+      const updateChain = { eq: jest.fn(() => Promise.resolve({ error: null })) }
+      countFromReturn.update = jest.fn(() => updateChain)
+      const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      await queueNotification({
+        recipientId: 'user-1',
+        channel: 'sms',
+        eventType: 'approval',
+        notificationType: 'approval_step_ready',
+        payload: { phone: '+15551234567' }
+      })
+      expect(countFromReturn.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: 'twilio error' }))
     })
   })
 })

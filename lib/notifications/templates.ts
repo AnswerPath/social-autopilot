@@ -16,7 +16,7 @@ export interface NotificationTemplate {
  */
 export function renderTemplate(
   templateBody: string,
-  variables: Record<string, string | number | undefined>
+  variables: Record<string, string | number | boolean | undefined>
 ): string {
   return templateBody.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     const value = variables[key]
@@ -80,10 +80,12 @@ export async function renderNotificationContent(
   locale: string = 'en'
 ): Promise<{ subject: string; body: string }> {
   const template = await getTemplate(eventType, notificationType, channel, locale)
-  const vars: Record<string, string | number | undefined> = {}
+  const vars: Record<string, string | number | boolean | undefined> = {}
   if (payload) {
     for (const [k, v] of Object.entries(payload)) {
-      if (v !== null && v !== undefined) vars[k] = typeof v === 'object' ? JSON.stringify(v) : (v as string | number)
+      if (v !== null && v !== undefined) {
+        vars[k] = typeof v === 'object' ? JSON.stringify(v) : (typeof v === 'boolean' ? v : (v as string | number))
+      }
     }
   }
 

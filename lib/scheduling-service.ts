@@ -3,6 +3,19 @@ import { convertToUtc, convertFromUtc, formatInTimezone, getUserTimezone } from 
 import { differenceInMinutes, isAfter, isFuture } from 'date-fns'
 
 /**
+ * Normalize a thrown value to a string message for user-facing errors.
+ */
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message
+  const o = error as { message?: string; details?: string; hint?: string }
+  if (typeof o?.message === 'string') return o.message
+  if (typeof o?.details === 'string') return o.details
+  if (typeof o?.hint === 'string') return o.hint
+  if (typeof error === 'object' && error !== null) return JSON.stringify(error)
+  return String(error ?? fallback)
+}
+
+/**
  * Scheduling service for managing scheduled posts with timezone support and conflict detection
  */
 
@@ -188,14 +201,9 @@ export class SchedulingService {
         .single()
 
       if (error) {
-        const errMsg =
-          error.message ||
-          (error as { details?: string }).details ||
-          (error as { hint?: string }).hint ||
-          'Database error when saving scheduled post'
         return {
           success: false,
-          error: errMsg
+          error: toErrorMessage(error, 'Database error when saving scheduled post')
         }
       }
 
@@ -205,19 +213,9 @@ export class SchedulingService {
         conflictCheck
       }
     } catch (error) {
-      const errMsg =
-        error instanceof Error
-          ? error.message
-          : typeof (error as { details?: string })?.details === 'string'
-            ? (error as { details: string }).details
-            : typeof (error as { hint?: string })?.hint === 'string'
-              ? (error as { hint: string }).hint
-              : typeof error === 'object' && error !== null
-                ? JSON.stringify(error)
-                : String(error ?? 'Failed to schedule post')
       return {
         success: false,
-        error: errMsg
+        error: toErrorMessage(error, 'Failed to schedule post')
       }
     }
   }
@@ -274,14 +272,9 @@ export class SchedulingService {
         .single()
 
       if (error) {
-        const errMsg =
-          (error as { message?: string }).message ??
-          (error as { details?: string }).details ??
-          (error as { hint?: string }).hint ??
-          'Failed to reschedule post'
         return {
           success: false,
-          error: errMsg
+          error: toErrorMessage(error, 'Failed to reschedule post')
         }
       }
 
@@ -291,17 +284,9 @@ export class SchedulingService {
         conflictCheck
       }
     } catch (error) {
-      const errMsg =
-        error instanceof Error
-          ? error.message
-          : typeof (error as { details?: string })?.details === 'string'
-            ? (error as { details: string }).details
-            : typeof (error as { hint?: string })?.hint === 'string'
-              ? (error as { hint: string }).hint
-              : 'Failed to reschedule post'
       return {
         success: false,
-        error: errMsg
+        error: toErrorMessage(error, 'Failed to reschedule post')
       }
     }
   }

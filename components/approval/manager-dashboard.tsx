@@ -19,6 +19,16 @@ import { useToast } from '@/hooks/use-toast'
 import { PostComposer } from '@/components/post-composer'
 import type { CalendarPost } from '@/lib/calendar-utils'
 
+const ALLOWED_STATUSES: CalendarPost['status'][] = [
+  'draft',
+  'pending_approval',
+  'approved',
+  'rejected',
+  'changes_requested',
+  'published',
+  'failed',
+]
+
 interface DashboardRow {
   post_id: string
   status: string
@@ -75,12 +85,11 @@ export function ManagerApprovalDashboard() {
       if (!p) {
         throw new Error('Post not found')
       }
-      if (latestRequestTokenRef.current !== token) return
       const calendarPost: CalendarPost = {
         id: p.id,
         content: p.content ?? '',
         scheduledAt: p.scheduled_at ?? new Date().toISOString(),
-        status: (p.status || 'pending_approval') as CalendarPost['status'],
+        status: ALLOWED_STATUSES.includes(p.status) ? p.status : 'pending_approval',
         timezone: p.scheduled_timezone ?? p.user_timezone,
         mediaUrls: p.media_urls ?? [],
       }

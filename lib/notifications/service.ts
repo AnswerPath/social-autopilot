@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { createLogger } from '@/lib/logger'
 import { resolveUserEmailById, resolveRecipientPhone } from './helpers'
 import { emailAdapter } from './adapters/email'
 import { smsAdapter } from './adapters/sms'
@@ -15,6 +16,14 @@ import type {
 
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 100
+const log = createLogger({ service: 'notifications' })
+
+async function markNotificationFailedAndRethrow(id: string, error: unknown): Promise<never> {
+  const supabase = getSupabaseAdmin()
+  const errMsg = error instanceof Error ? error.message : String(error)
+  await supabase.from('notifications').update({ status: 'failed', error: errMsg }).eq('id', id)
+  throw error
+}
 
 /**
  * Queue a single notification: persist to DB and optionally trigger immediate delivery for in_app.
@@ -54,11 +63,7 @@ export async function queueNotification(input: QueueNotificationInput): Promise<
     try {
       await deliverEmail(id, input.recipientId, input.eventType, input.notificationType, input.payload)
     } catch (e) {
-      await getSupabaseAdmin()
-        .from('notifications')
-        .update({ status: 'failed', error: e instanceof Error ? e.message : 'Delivery failed' })
-        .eq('id', id)
-      throw e
+      await markNotificationFailedAndRethrow(id, e)
     }
   }
 
@@ -66,11 +71,7 @@ export async function queueNotification(input: QueueNotificationInput): Promise<
     try {
       await deliverSms(id, input.recipientId, input.eventType, input.notificationType, input.payload)
     } catch (e) {
-      await getSupabaseAdmin()
-        .from('notifications')
-        .update({ status: 'failed', error: e instanceof Error ? e.message : 'Delivery failed' })
-        .eq('id', id)
-      throw e
+      await markNotificationFailedAndRethrow(id, e)
     }
   }
 
@@ -93,10 +94,19 @@ export async function queueNotifications(inputs: QueueNotificationInput[]): Prom
 
 async function markSent(id: string): Promise<void> {
   const supabase = getSupabaseAdmin()
-  await supabase
-    .from('notifications')
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
-    .eq('id', id)
+  try {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) {
+      log.error({ err: error, notificationId: id }, 'Failed updating notification status for id=%s: %s', id, error.message)
+      throw error
+    }
+  } catch (err) {
+    log.error({ err, notificationId: id }, 'Failed updating notification status for id=%s', id)
+    throw err
+  }
 }
 
 async function deliverEmail(
@@ -195,11 +205,15 @@ export async function getNotificationsForUser(
     throw new Error(listError.message)
   }
 
-  const countResult = await supabase
+  let countQuery = supabase
     .from('notifications')
     .select('id', { count: 'exact', head: true })
     .eq('recipient_id', recipientId)
     .is('read_at', null)
+  if (options.eventType) {
+    countQuery = countQuery.eq('event_type', options.eventType)
+  }
+  const countResult = await countQuery
 
   if (countResult.error) {
     console.error('[notifications] getNotificationsForUser count failed', countResult.error)

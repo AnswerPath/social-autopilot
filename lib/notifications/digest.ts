@@ -1,7 +1,11 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { createLogger } from '@/lib/logger'
 import { resolveUserEmailById } from './helpers'
 import { emailAdapter } from './adapters/email'
 import type { NotificationRecord } from './types'
+import { format } from 'date-fns'
+
+const log = createLogger({ service: 'digest' })
 
 /**
  * Get user IDs that have daily_summary or weekly_digest enabled.
@@ -19,7 +23,7 @@ export async function getDigestEligibleUserIds(
     .contains('notification_preferences', { [key]: true })
 
   if (error) {
-    console.error('[digest] getDigestEligibleUserIds failed', error)
+    log.error({ err: error }, '[digest] getDigestEligibleUserIds failed')
     return []
   }
 
@@ -45,7 +49,7 @@ export async function getNotificationsForDigest(
     .limit(100)
 
   if (error) {
-    console.error('[digest] getNotificationsForDigest failed', error)
+    log.error({ err: error }, '[digest] getNotificationsForDigest failed')
     return []
   }
   return (data ?? []) as NotificationRecord[]
@@ -63,8 +67,8 @@ export async function markDigestSent(notificationIds: string[]): Promise<void> {
     .update({ digest_sent_at: now })
     .in('id', notificationIds)
   if (error) {
-    console.error('[digest] markDigestSent failed', { notificationIds, error })
-    throw new Error(error.message)
+    log.error({ err: error, notificationIds }, '[digest] markDigestSent failed')
+    throw new Error('Failed to mark digest as sent', { cause: error })
   }
 }
 
@@ -77,7 +81,7 @@ function buildDigestBody(notifications: NotificationRecord[], kind: 'daily' | 'w
   for (const n of notifications) {
     const type = n.notification_type.replace(/_/g, ' ')
     const payload = n.payload ? ` - ${JSON.stringify(n.payload)}` : ''
-    lines.push(`- ${type}${payload} (${new Date(n.created_at).toLocaleString()})`)
+    lines.push(`- ${type}${payload} (${format(new Date(n.created_at), 'yyyy-MM-dd HH:mm:ss')})`)
   }
   return lines.join('\n')
 }
@@ -86,6 +90,7 @@ function buildDigestBody(notifications: NotificationRecord[], kind: 'daily' | 'w
  * Resolve user email from auth for digest delivery.
  */
 async function resolveUserEmail(userId: string, notifications: NotificationRecord[]): Promise<string | null> {
+  if (notifications.length === 0) return resolveUserEmailById(userId, undefined)
   const payloadEmail = (notifications[0]?.payload as Record<string, string> | undefined)?.email
   return resolveUserEmailById(userId, payloadEmail)
 }
@@ -110,8 +115,11 @@ export async function sendDigestToUser(
   return { sent: result.success, error: result.error }
 }
 
+const DIGEST_CONCURRENCY = 5
+
 /**
  * Run digest job for daily or weekly. Call from cron.
+ * Processes users with bounded concurrency to avoid DB/email overload.
  */
 export async function runDigestJob(kind: 'daily' | 'weekly'): Promise<{ usersProcessed: number; errors: string[] }> {
   const since = new Date()
@@ -122,14 +130,25 @@ export async function runDigestJob(kind: 'daily' | 'weekly'): Promise<{ usersPro
   const errors: string[] = []
   let usersProcessed = 0
 
-  for (const userId of userIds) {
-    try {
-      const notifications = await getNotificationsForDigest(userId, since)
-      const result = await sendDigestToUser(userId, notifications, kind)
-      if (result.sent && notifications.length > 0) usersProcessed++
-      else if (result.error) errors.push(`${userId}: ${result.error}`)
-    } catch (e) {
-      errors.push(`${userId}: ${e instanceof Error ? e.message : 'Unknown error'}`)
+  for (let i = 0; i < userIds.length; i += DIGEST_CONCURRENCY) {
+    const chunk = userIds.slice(i, i + DIGEST_CONCURRENCY)
+    const results = await Promise.allSettled(
+      chunk.map(async (userId) => {
+        const notifications = await getNotificationsForDigest(userId, since)
+        const result = await sendDigestToUser(userId, notifications, kind)
+        return { userId, notifications, result }
+      })
+    )
+    for (let j = 0; j < results.length; j++) {
+      const outcome = results[j]
+      const userId = chunk[j]
+      if (outcome.status === 'fulfilled') {
+        const { notifications, result } = outcome.value
+        if (result.sent && notifications.length > 0) usersProcessed++
+        else if (result.error) errors.push(`${userId}: ${result.error}`)
+      } else {
+        errors.push(`${userId}: ${outcome.reason instanceof Error ? outcome.reason.message : 'Unknown error'}`)
+      }
     }
   }
 
