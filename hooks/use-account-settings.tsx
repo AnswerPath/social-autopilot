@@ -171,9 +171,13 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to revoke session');
       }
-      // Refresh sessions list
-      await fetchSettings();
-      return await response.json();
+      const result = await response.json();
+      try {
+        await fetchSettings();
+      } catch (refreshErr) {
+        setError(refreshErr instanceof Error ? refreshErr.message : 'Failed to refresh sessions');
+      }
+      return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to revoke session');
       throw err;

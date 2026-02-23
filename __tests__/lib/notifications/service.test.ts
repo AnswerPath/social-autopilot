@@ -58,12 +58,15 @@ function createChain(resolveWith: { data?: unknown; count?: number; error?: unkn
 function createFromReturn(listRes = listResult, countRes = countResult) {
   const listChain = createChain(listRes)
   const countChain = createChain(countRes)
-  let selectCallCount = 0
   return {
+    listChain,
+    countChain,
     insert: insertMockFn,
-    select: jest.fn(() => {
-      selectCallCount++
-      return selectCallCount === 1 ? listChain : countChain
+    select: jest.fn((...args: unknown[]) => {
+      const opts = args[1] as { count?: string; head?: boolean } | undefined
+      if (args[0] === '*' && opts?.count === 'exact' && !opts?.head) return listChain
+      if (args[0] === 'id' && opts?.count === 'exact' && opts?.head === true) return countChain
+      return listChain
     }),
     update: jest.fn(() => ({
       eq: jest.fn(() => ({ is: jest.fn(() => Promise.resolve({ error: null })), in: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })) }))
@@ -72,18 +75,37 @@ function createFromReturn(listRes = listResult, countRes = countResult) {
   }
 }
 
-let fromCallIndex = 0
 let listFromReturn: ReturnType<typeof createFromReturn>
 let countFromReturn: ReturnType<typeof createFromReturn>
 
-function getFromReturn() {
-  fromCallIndex++
-  return fromCallIndex === 1 ? listFromReturn : countFromReturn
+/** Returns a from() mock: select() dispatches by args (list vs count); update() routes by .eq('id', id) to count chain, else list chain; insert uses shared insertMockFn. */
+function createFromMock() {
+  return {
+    insert: insertMockFn,
+    select: jest.fn((...args: unknown[]) => {
+      const opts = args[1] as { count?: string; head?: boolean } | undefined
+      if (args[0] === '*' && opts?.count === 'exact' && !opts?.head) return listFromReturn.listChain
+      if (args[0] === 'id' && opts?.count === 'exact' && opts?.head === true) return countFromReturn.countChain
+      return listFromReturn.listChain
+    }),
+    update: jest.fn((payload: unknown) => {
+      const listChain = listFromReturn.update(payload) as { eq: jest.Mock; in: jest.Mock }
+      const countChain = countFromReturn.update(payload) as { eq: jest.Mock; in: jest.Mock }
+      return {
+        eq: jest.fn((key: string, val: unknown) => {
+          if (key === 'id' && typeof val === 'string' && !Array.isArray(val)) return countChain.eq(key, val)
+          return listChain.eq(key, val)
+        }),
+        in: jest.fn((key: string, val: unknown) => listChain.in(key, val)),
+        is: jest.fn(() => listChain)
+      }
+    })
+  }
 }
 
 jest.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: jest.fn(() => ({
-    from: () => getFromReturn()
+    from: () => createFromMock()
   }))
 }))
 
@@ -100,9 +122,9 @@ const getSmsAdapterSend = () => (jest.requireMock('@/lib/notifications/adapters/
 describe('Notification Service', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    fromCallIndex = 0
     listFromReturn = createFromReturn()
     countFromReturn = createFromReturn(listResult, countResult)
+    // Defaults intentionally return failure; tests that need success must override these mocks.
     getEmailAdapterSend().mockResolvedValue({ success: false, error: 'Email not configured' })
     getSmsAdapterSend().mockResolvedValue({ success: false, error: 'SMS not configured' })
   })
@@ -132,9 +154,8 @@ describe('Notification Service', () => {
     it('calls markSent (update) when channel is in_app', async () => {
       listFromReturn = createFromReturn()
       countFromReturn = createFromReturn(listResult, countResult)
-      fromCallIndex = 0
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => createFromMock() }))
       await queueNotification({
         recipientId: 'user-1',
         channel: 'in_app',
@@ -195,19 +216,31 @@ describe('Notification Service', () => {
       expect(Array.isArray(result.notifications)).toBe(true)
       if (result.notifications.length > 0) {
         const n = result.notifications[0]
-        expect(n).toHaveProperty('id', 'recipient_id', 'channel', 'event_type', 'notification_type', 'status', 'created_at')
+        expect(n).toEqual(
+          expect.objectContaining({
+            id: expect.anything(),
+            recipient_id: expect.anything(),
+            channel: expect.anything(),
+            event_type: expect.anything(),
+            notification_type: expect.anything(),
+            status: expect.anything(),
+            created_at: expect.anything()
+          })
+        )
       }
     })
     it('returns result shape when eventType option is provided', async () => {
       const result = await getNotificationsForUser('user-1', { limit: 10, eventType: 'approval' })
-      expect(result).toHaveProperty('notifications', 'unreadCount', 'hasMore')
+      expect(result).toHaveProperty('notifications')
+      expect(result).toHaveProperty('unreadCount')
+      expect(result).toHaveProperty('hasMore')
+      expect(Array.isArray(result.notifications)).toBe(true)
     })
     it('throws when list query returns error', async () => {
       listFromReturn = createFromReturn({ data: null, error: { message: 'list failed' } })
       countFromReturn = createFromReturn(listResult, countResult)
-      fromCallIndex = 0
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => createFromMock() }))
       await expect(getNotificationsForUser('user-1', { limit: 10 })).rejects.toThrow('list failed')
     })
   })
@@ -244,9 +277,8 @@ describe('Notification Service', () => {
         update: jest.fn(() => updateChain)
       }
       countFromReturn = createFromReturn(listResult, countResult)
-      fromCallIndex = 0
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => createFromMock() }))
       await markRead(['id-1', 'id-2'], 'user-1')
       expect(listFromReturn.update).toHaveBeenCalledWith(expect.objectContaining({ read_at: expect.any(String) }))
       expect(updateChain.in).toHaveBeenCalledWith('id', ['id-1', 'id-2'])
@@ -264,11 +296,10 @@ describe('Notification Service', () => {
       getEmailAdapterSend().mockResolvedValue({ success: true })
       listFromReturn = createFromReturn()
       countFromReturn = createFromReturn(listResult, countResult)
-      fromCallIndex = 0
       const updateChain = { eq: jest.fn(() => Promise.resolve({ error: null })) }
       countFromReturn.update = jest.fn(() => updateChain)
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => createFromMock() }))
       await queueNotification({
         recipientId: 'user-1',
         channel: 'email',
@@ -283,11 +314,10 @@ describe('Notification Service', () => {
       getEmailAdapterSend().mockResolvedValue({ success: false, error: 'smtp error' })
       listFromReturn = createFromReturn()
       countFromReturn = createFromReturn(listResult, countResult)
-      fromCallIndex = 0
       const updateChain = { eq: jest.fn(() => Promise.resolve({ error: null })) }
       countFromReturn.update = jest.fn(() => updateChain)
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => createFromMock() }))
       await queueNotification({
         recipientId: 'user-1',
         channel: 'email',
@@ -302,11 +332,10 @@ describe('Notification Service', () => {
       getSmsAdapterSend().mockResolvedValue({ success: false, error: 'twilio error' })
       listFromReturn = createFromReturn()
       countFromReturn = createFromReturn(listResult, countResult)
-      fromCallIndex = 0
       const updateChain = { eq: jest.fn(() => Promise.resolve({ error: null })) }
       countFromReturn.update = jest.fn(() => updateChain)
       const getSupabaseAdminMock = jest.requireMock('@/lib/supabase').getSupabaseAdmin
-      getSupabaseAdminMock.mockImplementation(() => ({ from: () => getFromReturn() }))
+      getSupabaseAdminMock.mockImplementation(() => ({ from: () => createFromMock() }))
       await queueNotification({
         recipientId: 'user-1',
         channel: 'sms',

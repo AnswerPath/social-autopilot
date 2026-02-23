@@ -3,9 +3,32 @@ import { createLogger } from '@/lib/logger'
 import { resolveUserEmailById } from './helpers'
 import { emailAdapter } from './adapters/email'
 import type { NotificationRecord } from './types'
-import { format } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 
 const log = createLogger({ service: 'digest' })
+
+const BATCH_SIZE = 100
+
+/**
+ * Resolve user timezone from account_settings for digest timestamps. Falls back to UTC.
+ */
+export async function getUserTimezoneForDigest(userId: string): Promise<string> {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('account_settings')
+    .select('account_preferences')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error || !data?.account_preferences) return 'UTC'
+  const prefs = data.account_preferences as { timezone?: string }
+  const tz = prefs.timezone && typeof prefs.timezone === 'string' ? prefs.timezone : 'UTC'
+  try {
+    formatInTimeZone(new Date(), tz, 'yyyy-MM-dd')
+    return tz
+  } catch {
+    return 'UTC'
+  }
+}
 
 /**
  * Get user IDs that have daily_summary or weekly_digest enabled.
@@ -32,27 +55,43 @@ export async function getDigestEligibleUserIds(
 
 /**
  * Get in-app notifications for a user that are not yet included in a digest, within the time window.
+ * Fetches in batches so all matching notifications are processed; throws on DB error.
  */
 export async function getNotificationsForDigest(
   recipientId: string,
   since: Date
 ): Promise<NotificationRecord[]> {
   const supabase = getSupabaseAdmin()
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('recipient_id', recipientId)
-    .eq('channel', 'in_app')
-    .is('digest_sent_at', null)
-    .gte('created_at', since.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(100)
+  const accumulated: NotificationRecord[] = []
+  let offset = 0
 
-  if (error) {
-    log.error({ err: error }, '[digest] getNotificationsForDigest failed')
-    return []
+  while (true) {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_id', recipientId)
+      .eq('channel', 'in_app')
+      .is('digest_sent_at', null)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1)
+
+    if (error) {
+      log.error({ err: error }, '[digest] getNotificationsForDigest failed')
+      throw new Error('Failed to fetch notifications for digest', { cause: error })
+    }
+
+    const batch = (data ?? []) as NotificationRecord[]
+    accumulated.push(...batch)
+
+    if (batch.length === BATCH_SIZE) {
+      log.warn({ recipientId, offset }, '[digest] getNotificationsForDigest hit batch cap; more rows may exist')
+    }
+    if (batch.length < BATCH_SIZE) break
+    offset += BATCH_SIZE
   }
-  return (data ?? []) as NotificationRecord[]
+
+  return accumulated
 }
 
 /**
@@ -73,15 +112,51 @@ export async function markDigestSent(notificationIds: string[]): Promise<void> {
 }
 
 /**
+ * Format notification payload for digest: human-facing keys only, short line.
+ * Omits internal keys (ids, internal flags). Returns '' if no public fields.
+ */
+function formatPayloadForDigest(
+  payload: Record<string, unknown> | null,
+  _notificationType?: string
+): string {
+  if (!payload || typeof payload !== 'object') return ''
+  const allowed: Record<string, string> = {
+    approver: 'Approver',
+    post_title: 'Post',
+    stepName: 'Step',
+    step_name: 'Step',
+    email: 'Email',
+    message: 'Message'
+  }
+  const parts: string[] = []
+  for (const [key, label] of Object.entries(allowed)) {
+    const val = payload[key]
+    if (val === undefined || val === null) continue
+    if (typeof val === 'string' && val.length > 0) parts.push(`${label}: ${val}`)
+    else if (typeof val === 'number' || typeof val === 'boolean') parts.push(`${label}: ${String(val)}`)
+  }
+  return parts.length > 0 ? ` - ${parts.join(', ')}` : ''
+}
+
+/**
  * Build plain-text digest body from notifications.
  */
-function buildDigestBody(notifications: NotificationRecord[], kind: 'daily' | 'weekly'): string {
+function buildDigestBody(
+  notifications: NotificationRecord[],
+  kind: 'daily' | 'weekly',
+  userTimezone: string = 'UTC'
+): string {
   const title = kind === 'daily' ? 'Daily' : 'Weekly'
   const lines = [`Your ${title} notification summary:\n`]
   for (const n of notifications) {
     const type = n.notification_type.replace(/_/g, ' ')
-    const payload = n.payload ? ` - ${JSON.stringify(n.payload)}` : ''
-    lines.push(`- ${type}${payload} (${format(new Date(n.created_at), 'yyyy-MM-dd HH:mm:ss')})`)
+    const payloadStr = formatPayloadForDigest(n.payload, n.notification_type)
+    const ts = formatInTimeZone(
+      new Date(n.created_at),
+      userTimezone,
+      'yyyy-MM-dd HH:mm:ss zzz'
+    )
+    lines.push(`- ${type}${payloadStr} (${ts})`)
   }
   return lines.join('\n')
 }
@@ -106,8 +181,9 @@ export async function sendDigestToUser(
   if (notifications.length === 0) return { sent: true }
   const to = await resolveUserEmail(userId, notifications)
   if (!to) return { sent: false, error: 'Recipient email not found' }
+  const userTimezone = await getUserTimezoneForDigest(userId)
   const subject = kind === 'daily' ? 'Daily notification summary' : 'Weekly notification digest'
-  const body = buildDigestBody(notifications, kind)
+  const body = buildDigestBody(notifications, kind, userTimezone)
   const result = await emailAdapter.send(to, subject, body)
   if (result.success) {
     await markDigestSent(notifications.map((n) => n.id))
