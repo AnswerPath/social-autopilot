@@ -47,7 +47,7 @@ export async function getDigestEligibleUserIds(
 
   if (error) {
     log.error({ err: error }, '[digest] getDigestEligibleUserIds failed')
-    return []
+    throw new Error('Failed to get digest-eligible user IDs', { cause: error })
   }
 
   return (data ?? []).map((row) => row.user_id)
@@ -172,6 +172,12 @@ async function resolveUserEmail(userId: string, notifications: NotificationRecor
 
 /**
  * Send digest email to a user. Resolves email from payload or auth.
+ *
+ * At-least-once delivery: if emailAdapter.send succeeds but markDigestSent fails,
+ * the same notifications may be re-sent on the next digest run. Mitigations:
+ * make markDigestSent idempotent, add retries/backoff around markDigestSent,
+ * and log failures so operators are aware of possible duplicate digests.
+ * Involved: sendDigestToUser, emailAdapter.send, markDigestSent, buildDigestBody.
  */
 export async function sendDigestToUser(
   userId: string,

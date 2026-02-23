@@ -29,7 +29,7 @@ const insertMockFn = jest.fn()
 const listResult = { data: [NOTIF_ROW], error: null }
 const countResult = { count: 0, error: null }
 
-/** Flexible chain: any method order returns self; then/catch resolve to list or count. */
+/** Flexible chain: any method order returns self; then/catch resolve to list or count. Does not set insertMockFn. */
 function createChain(resolveWith: { data?: unknown; count?: number; error?: unknown } = listResult) {
   const chain = {
     select: jest.fn(() => chain),
@@ -49,9 +49,6 @@ function createChain(resolveWith: { data?: unknown; count?: number; error?: unkn
       return Promise.resolve(resolveWith).catch(onRejected)
     }
   }
-  insertMockFn.mockImplementation(() => ({
-    select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: { id: 'notif-123' }, error: null })) }))
-  }))
   return chain
 }
 
@@ -77,8 +74,10 @@ function createFromReturn(listRes = listResult, countRes = countResult) {
 
 let listFromReturn: ReturnType<typeof createFromReturn>
 let countFromReturn: ReturnType<typeof createFromReturn>
+/** Set by createFromMock().update() so tests can assert on the chain (e.g. eq calls). */
+let lastFromMockUpdateReturn: { eq: jest.Mock; in: jest.Mock; is: jest.Mock } | null = null
 
-/** Returns a from() mock: select() dispatches by args (list vs count); update() routes by .eq('id', id) to count chain, else list chain; insert uses shared insertMockFn. */
+/** Returns a from() mock: select() dispatches by args (list vs count); update() defers to chain methods—only the invoked path (eq/in/is) calls the underlying list/count update. */
 function createFromMock() {
   return {
     insert: insertMockFn,
@@ -89,16 +88,16 @@ function createFromMock() {
       return listFromReturn.listChain
     }),
     update: jest.fn((payload: unknown) => {
-      const listChain = listFromReturn.update(payload) as { eq: jest.Mock; in: jest.Mock }
-      const countChain = countFromReturn.update(payload) as { eq: jest.Mock; in: jest.Mock }
-      return {
+      const chain = {
         eq: jest.fn((key: string, val: unknown) => {
-          if (key === 'id' && typeof val === 'string' && !Array.isArray(val)) return countChain.eq(key, val)
-          return listChain.eq(key, val)
+          if (key === 'id' && typeof val === 'string') return countFromReturn.update(payload).eq(key, val)
+          return listFromReturn.update(payload).eq(key, val)
         }),
-        in: jest.fn((key: string, val: unknown) => listChain.in(key, val)),
-        is: jest.fn(() => listChain)
+        in: jest.fn((key: string, val: unknown) => listFromReturn.update(payload).in(key, val)),
+        is: jest.fn(() => listFromReturn.update(payload))
       }
+      lastFromMockUpdateReturn = chain
+      return chain
     })
   }
 }
@@ -122,6 +121,10 @@ const getSmsAdapterSend = () => (jest.requireMock('@/lib/notifications/adapters/
 describe('Notification Service', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    lastFromMockUpdateReturn = null
+    insertMockFn.mockImplementation(() => ({
+      select: jest.fn(() => ({ single: jest.fn(() => Promise.resolve({ data: { id: 'notif-123' }, error: null })) }))
+    }))
     listFromReturn = createFromReturn()
     countFromReturn = createFromReturn(listResult, countResult)
     // Defaults intentionally return failure; tests that need success must override these mocks.
@@ -286,8 +289,12 @@ describe('Notification Service', () => {
   })
 
   describe('markAllRead', () => {
-    it('resolves without throwing', async () => {
+    it('resolves without throwing and updates DB with recipient_id and read_at', async () => {
       await expect(markAllRead('user-1')).resolves.toBeUndefined()
+      expect(listFromReturn.update).toHaveBeenCalledWith(
+        expect.objectContaining({ read_at: expect.any(String) })
+      )
+      expect(lastFromMockUpdateReturn?.eq).toHaveBeenCalledWith('recipient_id', 'user-1')
     })
   })
 
