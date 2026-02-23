@@ -52,7 +52,7 @@ export async function getTemplate(
   if (data) return data as NotificationTemplate
 
   if (locale !== 'en') {
-    const { data: enData } = await supabase
+    const { data: enData, error: enError } = await supabase
       .from('notification_templates')
       .select('*')
       .eq('event_type', eventType)
@@ -60,6 +60,9 @@ export async function getTemplate(
       .eq('channel', channel)
       .eq('locale', 'en')
       .maybeSingle()
+    if (enError) {
+      console.error('[notifications] getTemplate fallback (en) failed', enError)
+    }
     return (enData as NotificationTemplate) ?? null
   }
 

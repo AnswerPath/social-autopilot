@@ -7,6 +7,21 @@ import { AuthErrorType } from '@/lib/auth-types';
 import { createAuthError } from '@/lib/auth-utils';
 
 // Validation schemas
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  email_notifications: true,
+  push_notifications: true,
+  sms_notifications: false,
+  phone_number: null as string | null,
+  mention_notifications: true,
+  post_approval_notifications: true,
+  analytics_notifications: true,
+  security_notifications: true,
+  marketing_emails: false,
+  weekly_digest: true,
+  daily_summary: false,
+  digest_frequency: 'immediate' as const,
+} as const;
+
 const NotificationPreferencesSchema = z.object({
   email_notifications: z.boolean(),
   push_notifications: z.boolean(),
@@ -24,6 +39,8 @@ const NotificationPreferencesSchema = z.object({
   (data) => !data.sms_notifications || (data.phone_number && data.phone_number.trim().length > 0),
   { message: 'Phone number is required when SMS notifications are enabled', path: ['phone_number'] }
 );
+
+const NotificationPreferencesPatchSchema = NotificationPreferencesSchema.partial();
 
 const SecuritySettingsSchema = z.object({
   two_factor_enabled: z.boolean(),
@@ -44,7 +61,7 @@ const AccountPreferencesSchema = z.object({
 });
 
 const AccountSettingsUpdateSchema = z.object({
-  notification_preferences: NotificationPreferencesSchema.optional(),
+  notification_preferences: NotificationPreferencesPatchSchema.optional(),
   security_settings: SecuritySettingsSchema.optional(),
   account_preferences: AccountPreferencesSchema.optional(),
 });
@@ -52,7 +69,7 @@ const AccountSettingsUpdateSchema = z.object({
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser(request);
   if (!user) {
-    return createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated');
+    return NextResponse.json(createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated'), { status: 401 });
   }
 
   try {
@@ -70,24 +87,10 @@ export async function GET(request: NextRequest) {
     }
 
     // When no row exists (PGRST116), return defaults so UI and card stay in sync
-    const defaultNotificationPrefs = {
-      email_notifications: true,
-      push_notifications: true,
-      sms_notifications: false,
-      phone_number: null as string | null,
-      mention_notifications: true,
-      post_approval_notifications: true,
-      analytics_notifications: true,
-      security_notifications: true,
-      marketing_emails: false,
-      weekly_digest: true,
-      daily_summary: false,
-      digest_frequency: 'immediate' as const,
-    };
     const resolvedSettings = settings ?? {
       id: '',
       user_id: user.id,
-      notification_preferences: defaultNotificationPrefs,
+      notification_preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
       security_settings: {
         two_factor_enabled: false,
         login_notifications: true,
@@ -146,7 +149,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const user = await getCurrentUser(request);
   if (!user) {
-    return createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated');
+    return NextResponse.json(createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated'), { status: 401 });
   }
 
   try {
@@ -168,7 +171,12 @@ export async function PUT(request: NextRequest) {
     };
 
     if (validatedData.notification_preferences) {
-      updateData.notification_preferences = validatedData.notification_preferences;
+      const merged = { ...DEFAULT_NOTIFICATION_PREFERENCES, ...validatedData.notification_preferences };
+      const parsed = NotificationPreferencesSchema.safeParse(merged);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Invalid notification preferences', details: parsed.error.errors }, { status: 400 });
+      }
+      updateData.notification_preferences = parsed.data;
     }
 
     if (validatedData.security_settings) {
@@ -196,20 +204,7 @@ export async function PUT(request: NextRequest) {
     } else {
       // Create new settings with defaults
       const defaultSettings = {
-        notification_preferences: {
-          email_notifications: true,
-          push_notifications: true,
-          sms_notifications: false,
-          phone_number: null as string | null,
-          mention_notifications: true,
-          post_approval_notifications: true,
-          analytics_notifications: true,
-          security_notifications: true,
-          marketing_emails: false,
-          weekly_digest: true,
-          daily_summary: false,
-          digest_frequency: 'immediate' as const,
-        },
+        notification_preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
         security_settings: {
           two_factor_enabled: false,
           login_notifications: true,

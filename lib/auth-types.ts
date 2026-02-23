@@ -332,6 +332,11 @@ export interface UserProfile {
 // Account Settings Types
 export type DigestFrequency = 'immediate' | 'daily' | 'weekly';
 
+/**
+ * Notification preferences. When both digest_frequency and the legacy flags
+ * (weekly_digest, daily_summary) are present, digest_frequency is the source of
+ * truth for digest behavior; the booleans are kept for backward compatibility.
+ */
 export interface NotificationPreferences {
   email_notifications: boolean;
   push_notifications: boolean;
@@ -343,7 +348,9 @@ export interface NotificationPreferences {
   analytics_notifications: boolean;
   security_notifications: boolean;
   marketing_emails: boolean;
+  /** @deprecated Prefer digest_frequency. Used for backward compatibility and DB filtering. */
   weekly_digest: boolean;
+  /** @deprecated Prefer digest_frequency. Used for backward compatibility and DB filtering. */
   daily_summary: boolean;
   /** When to receive non-urgent notifications: immediate, daily digest, or weekly digest */
   digest_frequency?: DigestFrequency;

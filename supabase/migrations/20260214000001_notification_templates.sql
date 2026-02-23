@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS notification_templates (
     UNIQUE(event_type, notification_type, channel, locale)
 );
 
-CREATE INDEX IF NOT EXISTS idx_notification_templates_lookup ON notification_templates(event_type, notification_type, channel, locale);
+-- UNIQUE constraint above already creates an index; no separate index needed.
 
 CREATE TRIGGER trigger_update_notification_templates
     BEFORE UPDATE ON notification_templates

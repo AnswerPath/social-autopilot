@@ -15,6 +15,9 @@ import { Loader2, Mail, Smartphone, Megaphone } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
+// E.164: optional +, then 1-15 digits (no leading zero after +)
+const E164_REGEX = /^\+?[1-9]\d{1,14}$/
+
 const NotificationPreferencesSchema = z.object({
   email_notifications: z.boolean(),
   push_notifications: z.boolean(),
@@ -31,6 +34,9 @@ const NotificationPreferencesSchema = z.object({
 }).refine(
   (data) => !data.sms_notifications || (data.phone_number && data.phone_number.trim().length > 0),
   { message: 'Please enter a phone number to receive SMS notifications.', path: ['phone_number'] }
+).refine(
+  (data) => !data.sms_notifications || !data.phone_number?.trim() || E164_REGEX.test(data.phone_number.replace(/\s/g, '')),
+  { message: 'Phone number must be in E.164 format (e.g. +1234567890).', path: ['phone_number'] }
 );
 
 type NotificationPreferencesFormData = z.infer<typeof NotificationPreferencesSchema>;

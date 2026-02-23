@@ -5,6 +5,15 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY
 const RESEND_FROM =
   process.env.RESEND_FROM ?? 'Social Autopilot <onboarding@resend.dev>'
 
+let resendClient: Resend | null = null
+function getResend(): Resend {
+  if (!resendClient) {
+    if (!RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set')
+    resendClient = new Resend(RESEND_API_KEY)
+  }
+  return resendClient
+}
+
 /**
  * Email adapter using Resend. Requires RESEND_API_KEY.
  * Optional RESEND_FROM (e.g. "App Name <notifications@yourdomain.com>");
@@ -31,7 +40,7 @@ async function sendEmail(
   }
 
   try {
-    const resend = new Resend(RESEND_API_KEY)
+    const resend = getResend()
     const { data, error } = await resend.emails.send({
       from: RESEND_FROM,
       to: [to],
@@ -40,7 +49,8 @@ async function sendEmail(
     })
 
     if (error) {
-      console.error('[notifications] Resend send failed', { to, error })
+      const toSanitized = typeof to === 'string' && to.length > 10 ? to.slice(0, 10) + '...' : (to ?? '')
+      console.error('[notifications] Resend send failed', { to: toSanitized, error })
       return { success: false, error: error.message }
     }
 
@@ -51,7 +61,8 @@ async function sendEmail(
     return { success: false, error: 'No id returned from Resend' }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[notifications] Resend exception', { to, message })
+    const toSanitized = typeof to === 'string' && to.length > 10 ? to.slice(0, 10) + '...' : (to ?? '')
+    console.error('[notifications] Resend exception', { to: toSanitized, message })
     return { success: false, error: message }
   }
 }

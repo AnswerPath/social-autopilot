@@ -10,26 +10,33 @@ import {
 } from '@/lib/notifications/service'
 import type { NotificationEventType } from '@/lib/notifications/types'
 
+const ALLOWED_EVENT_TYPES: NotificationEventType[] = ['approval', 'mention', 'analytics', 'system']
+const EVENT_TYPE_SET = new Set<string>(ALLOWED_EVENT_TYPES)
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser(request)
   if (!user) {
-    return createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated')
+    return NextResponse.json(createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated'), { status: 401 })
   }
 
   try {
     const { searchParams } = new URL(request.url)
-    const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 100)
-    const offset = parseInt(searchParams.get('offset') ?? '0', 10)
-    const eventType = searchParams.get('event_type') as NotificationEventType | null
+    let limit = parseInt(searchParams.get('limit') ?? '50', 10)
+    let offset = parseInt(searchParams.get('offset') ?? '0', 10)
+    limit = Number.isNaN(limit) ? 50 : Math.min(limit, 100)
+    offset = Number.isNaN(offset) ? 0 : offset
+
+    const rawEvent = searchParams.get('event_type')
+    const eventType: NotificationEventType | undefined = rawEvent && EVENT_TYPE_SET.has(rawEvent) ? (rawEvent as NotificationEventType) : undefined
     const unreadOnly = searchParams.get('unread_only') === 'true'
     const since = searchParams.get('since') ?? undefined
 
     const result = await getNotificationsForUser(user.id, {
       limit,
       offset,
-      eventType: eventType ?? undefined,
+      eventType,
       unreadOnly,
       since
     })
@@ -51,7 +58,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser(request)
   if (!user) {
-    return createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated')
+    return NextResponse.json(createAuthError(AuthErrorType.UNAUTHORIZED, 'User not authenticated'), { status: 401 })
   }
 
   try {
@@ -66,7 +73,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'mark-all-read') {
-      const eventType = (body.event_type as NotificationEventType) || undefined
+      const rawEvent = body.event_type
+      const eventType: NotificationEventType | undefined = rawEvent && EVENT_TYPE_SET.has(rawEvent) ? (rawEvent as NotificationEventType) : undefined
       await markAllRead(user.id, eventType)
       const unreadCount = await getUnreadCount(user.id)
       return NextResponse.json({ success: true, unreadCount })

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -57,13 +57,17 @@ export function ManagerApprovalDashboard() {
   const [statistics, setStatistics] = useState<ApprovalStatistics | null>(null)
   const [postForView, setPostForView] = useState<CalendarPost | null>(null)
   const [loadingPostId, setLoadingPostId] = useState<string | null>(null)
+  const latestRequestTokenRef = useRef<object | null>(null)
   const { toast } = useToast()
 
   async function openViewPost(postId: string) {
+    const token = {}
+    latestRequestTokenRef.current = token
     setLoadingPostId(postId)
     try {
       const response = await fetch(`/api/approval/${postId}`)
       const result = await response.json()
+      if (latestRequestTokenRef.current !== token) return
       if (!response.ok) {
         throw new Error(result.error || 'Failed to load post')
       }
@@ -71,6 +75,7 @@ export function ManagerApprovalDashboard() {
       if (!p) {
         throw new Error('Post not found')
       }
+      if (latestRequestTokenRef.current !== token) return
       const calendarPost: CalendarPost = {
         id: p.id,
         content: p.content ?? '',
@@ -81,13 +86,14 @@ export function ManagerApprovalDashboard() {
       }
       setPostForView(calendarPost)
     } catch (error) {
+      if (latestRequestTokenRef.current !== token) return
       toast({
         title: 'Could not load post',
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
     } finally {
-      setLoadingPostId(null)
+      if (latestRequestTokenRef.current === token) setLoadingPostId(null)
     }
   }
 

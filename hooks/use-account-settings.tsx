@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { 
   AccountSettings as AccountSettingsType, 
@@ -211,20 +211,36 @@ export function AccountSettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  const value: AccountSettingsContextValue = {
-    user,
-    loading,
-    error,
-    settings,
-    sessions,
-    fetchSettings,
-    updateNotificationPreferences,
-    updateSecuritySettings,
-    updateAccountPreferences,
-    changePassword,
-    revokeSession,
-    deleteAccount,
-  };
+  const value = useMemo<AccountSettingsContextValue>(
+    () => ({
+      user,
+      loading,
+      error,
+      settings,
+      sessions,
+      fetchSettings,
+      updateNotificationPreferences,
+      updateSecuritySettings,
+      updateAccountPreferences,
+      changePassword,
+      revokeSession,
+      deleteAccount,
+    }),
+    [
+      user,
+      loading,
+      error,
+      settings,
+      sessions,
+      fetchSettings,
+      updateNotificationPreferences,
+      updateSecuritySettings,
+      updateAccountPreferences,
+      changePassword,
+      revokeSession,
+      deleteAccount,
+    ]
+  );
 
   return (
     <AccountSettingsContext.Provider value={value}>

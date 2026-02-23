@@ -206,7 +206,15 @@ export class SchedulingService {
       }
     } catch (error) {
       const errMsg =
-        error instanceof Error ? error.message : String(error ?? 'Failed to schedule post')
+        error instanceof Error
+          ? error.message
+          : typeof (error as { details?: string })?.details === 'string'
+            ? (error as { details: string }).details
+            : typeof (error as { hint?: string })?.hint === 'string'
+              ? (error as { hint: string }).hint
+              : typeof error === 'object' && error !== null
+                ? JSON.stringify(error)
+                : String(error ?? 'Failed to schedule post')
       return {
         success: false,
         error: errMsg
@@ -266,9 +274,14 @@ export class SchedulingService {
         .single()
 
       if (error) {
+        const errMsg =
+          (error as { message?: string }).message ??
+          (error as { details?: string }).details ??
+          (error as { hint?: string }).hint ??
+          'Failed to reschedule post'
         return {
           success: false,
-          error: error.message
+          error: errMsg
         }
       }
 
@@ -278,9 +291,17 @@ export class SchedulingService {
         conflictCheck
       }
     } catch (error) {
+      const errMsg =
+        error instanceof Error
+          ? error.message
+          : typeof (error as { details?: string })?.details === 'string'
+            ? (error as { details: string }).details
+            : typeof (error as { hint?: string })?.hint === 'string'
+              ? (error as { hint: string }).hint
+              : 'Failed to reschedule post'
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to reschedule post'
+        error: errMsg
       }
     }
   }

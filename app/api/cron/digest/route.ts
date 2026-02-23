@@ -6,14 +6,15 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Digest cron: runs daily and weekly notification digests.
- * Secured by x-vercel-cron (Vercel) or NODE_ENV=development.
+ * Secured by CRON_SECRET Bearer token or NODE_ENV=development.
  */
 export async function GET(request: NextRequest) {
-  const cronHeader = request.headers.get('x-vercel-cron')
-  const isVercelCron = cronHeader === '1'
   const isDev = process.env.NODE_ENV === 'development'
+  const authHeader = request.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  const isValidCron = cronSecret && authHeader === `Bearer ${cronSecret}`
 
-  if (!isDev && !isVercelCron) {
+  if (!isDev && !isValidCron) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   }
 

@@ -1,8 +1,7 @@
 import {
-  queueNotification,
+  queueNotifications,
   getNotificationsForUser,
   markRead as markNotificationsReadService,
-  getUnreadCount
 } from '@/lib/notifications/service'
 import type { NotificationChannel } from '@/lib/notifications/types'
 
@@ -23,7 +22,7 @@ export interface ApprovalNotification {
   created_at: string
 }
 
-export interface QueueNotificationInput {
+export interface QueueApprovalNotificationInput {
   postId?: string
   recipientIds: string[]
   notificationType: string
@@ -43,7 +42,7 @@ export async function queueApprovalNotifications({
   payload,
   channels = ['in_app'],
   scheduleFor
-}: QueueNotificationInput): Promise<void> {
+}: QueueApprovalNotificationInput): Promise<void> {
   if (!recipientIds.length) return
 
   const inputs = recipientIds.flatMap((recipientId) =>
@@ -59,9 +58,7 @@ export async function queueApprovalNotifications({
     }))
   )
 
-  for (const input of inputs) {
-    await queueNotification(input)
-  }
+  await queueNotifications(inputs)
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -43,6 +43,7 @@ export function NotificationCenter() {
   const [offset, setOffset] = useState(0)
   const [marking, setMarking] = useState(false)
   const [eventFilter, setEventFilter] = useState<NotificationEventType | 'all'>('all')
+  const offsetRef = useRef(0)
   const { toast } = useToast()
 
   const limit = 20
@@ -50,7 +51,7 @@ export function NotificationCenter() {
   const loadNotifications = useCallback(
     async (reset = false) => {
       setLoading(true)
-      const currentOffset = reset ? 0 : offset
+      const currentOffset = reset ? 0 : offsetRef.current
       try {
         const params = new URLSearchParams()
         params.set('limit', String(limit))
@@ -63,8 +64,13 @@ export function NotificationCenter() {
         setNotifications((prev) => (reset ? list : [...prev, ...list]))
         setUnreadCount(data.unreadCount ?? 0)
         setHasMore(data.hasMore ?? false)
-        if (reset) setOffset(limit)
-        else setOffset((o) => o + list.length)
+        if (reset) {
+          offsetRef.current = limit
+          setOffset(limit)
+        } else {
+          offsetRef.current = currentOffset + list.length
+          setOffset((o) => o + list.length)
+        }
       } catch (err) {
         toast({
           title: 'Notification error',
@@ -75,22 +81,24 @@ export function NotificationCenter() {
         setLoading(false)
       }
     },
-    [eventFilter, offset, toast]
+    [eventFilter, toast]
   )
 
   const loadUnreadCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications?limit=1')
+      const params = new URLSearchParams({ limit: '1' })
+      if (eventFilter !== 'all') params.set('event_type', eventFilter)
+      const res = await fetch(`/api/notifications?${params}`)
       const data = await res.json()
       if (res.ok && typeof data.unreadCount === 'number') setUnreadCount(data.unreadCount)
     } catch {
       // ignore
     }
-  }, [])
+  }, [eventFilter])
 
   useEffect(() => {
     if (open) loadNotifications(true)
-  }, [open, eventFilter])
+  }, [open, loadNotifications])
 
   useEffect(() => {
     if (!open) return
@@ -135,6 +143,7 @@ export function NotificationCenter() {
     if (n.event_type === 'approval') return 'Approval workflow update'
     if (n.event_type === 'mention') return 'New mention'
     if (n.event_type === 'analytics') return 'Analytics update'
+    if (n.event_type === 'system') return 'System notification'
     return 'Notification'
   }
 
@@ -169,11 +178,12 @@ export function NotificationCenter() {
           onValueChange={(v) => setEventFilter(v as NotificationEventType | 'all')}
           className="w-full"
         >
-          <TabsList className="w-full grid grid-cols-4 rounded-none border-b h-9">
+          <TabsList className="w-full grid grid-cols-5 rounded-none border-b h-9">
             <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
             <TabsTrigger value="approval" className="text-xs">{EVENT_LABELS.approval}</TabsTrigger>
             <TabsTrigger value="mention" className="text-xs">{EVENT_LABELS.mention}</TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs">{EVENT_LABELS.analytics}</TabsTrigger>
+            <TabsTrigger value="system" className="text-xs">{EVENT_LABELS.system}</TabsTrigger>
           </TabsList>
         </Tabs>
         <ScrollArea className="h-72">

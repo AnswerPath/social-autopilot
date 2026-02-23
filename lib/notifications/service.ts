@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { resolveUserEmailById, resolveRecipientPhone } from './helpers'
 import { emailAdapter } from './adapters/email'
 import { smsAdapter } from './adapters/sms'
 import { renderNotificationContent } from './templates'
@@ -50,11 +51,27 @@ export async function queueNotification(input: QueueNotificationInput): Promise<
   }
 
   if (id && input.channel === 'email') {
-    await deliverEmail(id, input.recipientId, input.eventType, input.notificationType, input.payload)
+    try {
+      await deliverEmail(id, input.recipientId, input.eventType, input.notificationType, input.payload)
+    } catch (e) {
+      await getSupabaseAdmin()
+        .from('notifications')
+        .update({ status: 'failed', error: e instanceof Error ? e.message : 'Delivery failed' })
+        .eq('id', id)
+      throw e
+    }
   }
 
   if (id && input.channel === 'sms') {
-    await deliverSms(id, input.recipientId, input.eventType, input.notificationType, input.payload)
+    try {
+      await deliverSms(id, input.recipientId, input.eventType, input.notificationType, input.payload)
+    } catch (e) {
+      await getSupabaseAdmin()
+        .from('notifications')
+        .update({ status: 'failed', error: e instanceof Error ? e.message : 'Delivery failed' })
+        .eq('id', id)
+      throw e
+    }
   }
 
   return id
@@ -64,8 +81,13 @@ export async function queueNotification(input: QueueNotificationInput): Promise<
  * Queue multiple notifications (fan-out per recipient and channel).
  */
 export async function queueNotifications(inputs: QueueNotificationInput[]): Promise<void> {
-  for (const input of inputs) {
-    await queueNotification(input)
+  const results = await Promise.allSettled(inputs.map((input) => queueNotification(input)))
+  const failures = results
+    .map((r, i) => (r.status === 'rejected' ? { index: i, reason: r.reason } : null))
+    .filter(Boolean) as { index: number; reason: unknown }[]
+  if (failures.length > 0) {
+    const message = failures.map((f) => `[${f.index}]: ${f.reason instanceof Error ? f.reason.message : String(f.reason)}`).join('; ')
+    throw new Error(`queueNotifications: ${failures.length} failed: ${message}`)
   }
 }
 
@@ -77,23 +99,6 @@ async function markSent(id: string): Promise<void> {
     .eq('id', id)
 }
 
-async function resolveRecipientEmail(
-  recipientId: string,
-  payload?: Record<string, unknown>
-): Promise<string | null> {
-  const fromPayload = payload?.email
-  if (typeof fromPayload === 'string' && fromPayload.includes('@')) {
-    return fromPayload
-  }
-  try {
-    const { data, error } = await getSupabaseAdmin().auth.admin.getUserById(recipientId)
-    if (!error && data?.user?.email) return data.user.email
-  } catch {
-    // ignore
-  }
-  return null
-}
-
 async function deliverEmail(
   id: string,
   recipientId: string,
@@ -102,7 +107,7 @@ async function deliverEmail(
   payload?: Record<string, unknown>
 ): Promise<void> {
   const supabase = getSupabaseAdmin()
-  const to = await resolveRecipientEmail(recipientId, payload)
+  const to = await resolveUserEmailById(recipientId, payload?.email)
   if (!to) {
     await supabase
       .from('notifications')
@@ -127,12 +132,20 @@ async function deliverEmail(
 
 async function deliverSms(
   id: string,
-  _recipientId: string,
+  recipientId: string,
   eventType: NotificationEventType,
   notificationType: string,
   payload?: Record<string, unknown>
 ): Promise<void> {
   const supabase = getSupabaseAdmin()
+  const phone = await resolveRecipientPhone(recipientId, payload)
+  if (!phone) {
+    await supabase
+      .from('notifications')
+      .update({ status: 'failed', error: 'Recipient phone not found' })
+      .eq('id', id)
+    return
+  }
   const { body } = await renderNotificationContent(
     eventType,
     notificationType,
@@ -140,7 +153,7 @@ async function deliverSms(
     payload ?? null,
     'en'
   )
-  const result = await smsAdapter.send((payload?.phone as string) || '', body)
+  const result = await smsAdapter.send(phone, body)
   if (result.success) {
     await supabase.from('notifications').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id)
   } else {
@@ -188,7 +201,10 @@ export async function getNotificationsForUser(
     .eq('recipient_id', recipientId)
     .is('read_at', null)
 
-  const unreadCount = countResult.count ?? 0
+  if (countResult.error) {
+    console.error('[notifications] getNotificationsForUser count failed', countResult.error)
+  }
+  const unreadCount = countResult.error ? 0 : (countResult.count ?? 0)
   const notifications = (list ?? []) as NotificationRecord[]
   const hasMore = notifications.length === limit
 
