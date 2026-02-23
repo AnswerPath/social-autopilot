@@ -128,18 +128,20 @@ export async function POST(request: NextRequest) {
     console.log('Schedule result:', JSON.stringify({ success: result.success, error: result.error }, null, 2))
 
     if (!result.success) {
+      const errorMessage = result.error || 'Scheduling failed'
       // Check if it's a conflict error
       if (result.conflictCheck && result.conflictCheck.hasConflict) {
         return NextResponse.json({ 
           success: false, 
-          error: result.error,
+          error: errorMessage,
           conflictCheck: result.conflictCheck
         }, { status: 409 }) // 409 Conflict
       }
       
       return NextResponse.json({ 
         success: false, 
-        error: result.error 
+        error: errorMessage,
+        details: result.error ? undefined : 'No details returned from scheduler'
       }, { status: 400 })
     }
 
@@ -173,7 +175,7 @@ export async function POST(request: NextRequest) {
           await ensureWorkflowAssignment(postId, userId)
         } catch (workflowError) {
           console.error('Failed to ensure workflow assignment for scheduled post', workflowError)
-          // Do not fail the main request – approvals UI may be limited but post creation succeeded.
+          // Do not fail the main request – post creation succeeded; approvals UI may be limited.
         }
       }
     }
@@ -184,11 +186,13 @@ export async function POST(request: NextRequest) {
       requiresApproval: (result.post as any)?.requires_approval || false,
       message: (result.post as any)?.requires_approval ? 'Post submitted for approval' : 'Post created successfully'
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error ?? 'Unknown error')
+    console.error('Exception in POST scheduled-posts:', error)
     return NextResponse.json({ 
       success: false, 
       error: 'Failed to create scheduled post',
-      details: error.message 
+      details: message 
     }, { status: 500 })
   }
 }

@@ -3,6 +3,19 @@ import { convertToUtc, convertFromUtc, formatInTimezone, getUserTimezone } from 
 import { differenceInMinutes, isAfter, isFuture } from 'date-fns'
 
 /**
+ * Normalize a thrown value to a string message for user-facing errors.
+ */
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message
+  const o = error as { message?: string; details?: string; hint?: string }
+  if (typeof o?.message === 'string') return o.message
+  if (typeof o?.details === 'string') return o.details
+  if (typeof o?.hint === 'string') return o.hint
+  if (typeof error === 'object' && error !== null) return JSON.stringify(error)
+  return String(error ?? fallback)
+}
+
+/**
  * Scheduling service for managing scheduled posts with timezone support and conflict detection
  */
 
@@ -190,7 +203,7 @@ export class SchedulingService {
       if (error) {
         return {
           success: false,
-          error: error.message
+          error: toErrorMessage(error, 'Database error when saving scheduled post')
         }
       }
 
@@ -202,7 +215,7 @@ export class SchedulingService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to schedule post'
+        error: toErrorMessage(error, 'Failed to schedule post')
       }
     }
   }
@@ -261,7 +274,7 @@ export class SchedulingService {
       if (error) {
         return {
           success: false,
-          error: error.message
+          error: toErrorMessage(error, 'Failed to reschedule post')
         }
       }
 
@@ -273,7 +286,7 @@ export class SchedulingService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to reschedule post'
+        error: toErrorMessage(error, 'Failed to reschedule post')
       }
     }
   }

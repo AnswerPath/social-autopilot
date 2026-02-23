@@ -20,7 +20,7 @@ import { SettingsPage } from "./settings-page"
 import { UserInfoCard } from "./auth/user-info-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ManagerApprovalDashboard } from "./approval/manager-dashboard"
-import { ApprovalNotificationCenter } from "./approval/notification-center"
+import { NotificationCenter } from "./notifications/notification-center"
 import { UserMenu } from "./auth/user-menu"
 import { FeatureTour } from "./tutorial/feature-tour"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -278,7 +278,7 @@ export function Dashboard() {
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 {isLoading ? 'Loading...' : 'Refresh'}
               </Button>
-              <ApprovalNotificationCenter />
+              <NotificationCenter />
               {showTooltips ? (
                 <Tooltip>
                   <TooltipTrigger asChild>

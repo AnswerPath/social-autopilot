@@ -86,6 +86,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NODE_ENV=development
 
+# Optional: Email notifications (Resend)
+RESEND_API_KEY=re_your_resend_api_key
+# RESEND_FROM=Social Autopilot <notifications@yourdomain.com>
+
 # Optional: Third-party Integrations
 TWITTER_CLIENT_ID=your-twitter-client-id
 TWITTER_CLIENT_SECRET=your-twitter-client-secret
@@ -115,6 +119,8 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes |
 | `NEXT_PUBLIC_APP_URL` | Your application URL | Yes |
 | `NODE_ENV` | Environment (development/production) | Yes |
+| `RESEND_API_KEY` | Resend API key for email notifications | No (email notifications disabled if missing) |
+| `RESEND_FROM` | Sender address (e.g. `App <notifications@yourdomain.com>`). Defaults to Resend onboarding domain for testing. | No |
 
 ### Database Setup
 

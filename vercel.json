@@ -1,9 +1,7 @@
 {
   "crons": [
-    {
-      "path": "/api/scheduler/dispatch",
-      "schedule": "*/1 * * * *"
-    }
+    {"path": "/api/scheduler/dispatch", "schedule": "*/1 * * * *"},
+    {"path": "/api/cron/digest", "schedule": "0 9 * * *"},
+    {"path": "/api/cron/digest?kind=weekly", "schedule": "0 9 * * 0"}
   ]
 }
-

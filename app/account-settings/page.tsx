@@ -1,6 +1,7 @@
 'use client';
 
 import { AccountSettings } from '@/components/auth/account-settings';
+import { AccountSettingsProvider } from '@/hooks/use-account-settings';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
@@ -30,7 +31,9 @@ export default function AccountSettingsPage() {
           </div>
 
           {/* Account Settings Component */}
-          <AccountSettings />
+          <AccountSettingsProvider>
+            <AccountSettings />
+          </AccountSettingsProvider>
         </div>
       </div>
     </ProtectedRoute>

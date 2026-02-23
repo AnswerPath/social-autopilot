@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -14,8 +14,20 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
-import { Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, RefreshCw, FileText } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { PostComposer } from '@/components/post-composer'
+import type { CalendarPost } from '@/lib/calendar-utils'
+
+const ALLOWED_STATUSES: CalendarPost['status'][] = [
+  'draft',
+  'pending_approval',
+  'approved',
+  'rejected',
+  'changes_requested',
+  'published',
+  'failed',
+]
 
 interface DashboardRow {
   post_id: string
@@ -53,7 +65,51 @@ export function ManagerApprovalDashboard() {
   const [loading, setLoading] = useState(false)
   const [bulkLoading, setBulkLoading] = useState<'approve' | 'reject' | null>(null)
   const [statistics, setStatistics] = useState<ApprovalStatistics | null>(null)
+  const [postForView, setPostForView] = useState<CalendarPost | null>(null)
+  const [loadingPostId, setLoadingPostId] = useState<string | null>(null)
+  const latestRequestTokenRef = useRef<object | null>(null)
   const { toast } = useToast()
+
+  async function openViewPost(postId: string) {
+    const token = {}
+    latestRequestTokenRef.current = token
+    setLoadingPostId(postId)
+    try {
+      const response = await fetch(`/api/approval/${postId}`)
+      const result = await response.json()
+      if (latestRequestTokenRef.current !== token) return
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to load post')
+      }
+      const p = result.post
+      if (!p) {
+        throw new Error('Post not found')
+      }
+      const calendarPost: CalendarPost = {
+        id: p.id,
+        content: p.content ?? '',
+        scheduledAt: p.scheduled_at ?? new Date().toISOString(),
+        status: ALLOWED_STATUSES.includes(p.status) ? p.status : 'pending_approval',
+        timezone: p.scheduled_timezone ?? p.user_timezone,
+        mediaUrls: p.media_urls ?? [],
+      }
+      setPostForView(calendarPost)
+    } catch (error) {
+      if (latestRequestTokenRef.current !== token) return
+      toast({
+        title: 'Could not load post',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    } finally {
+      if (latestRequestTokenRef.current === token) setLoadingPostId(null)
+    }
+  }
+
+  function closeViewPost() {
+    setPostForView(null)
+    fetchRows()
+  }
 
   useEffect(() => {
     fetchAll()
@@ -244,6 +300,7 @@ export function ManagerApprovalDashboard() {
                   <TableHead>Submitted</TableHead>
                   <TableHead>Comments</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-[120px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -289,6 +346,23 @@ export function ManagerApprovalDashboard() {
                         {row.assignment_status ?? 'pending'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openViewPost(row.post_id)}
+                        disabled={loadingPostId === row.post_id}
+                      >
+                        {loadingPostId === row.post_id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <FileText className="h-4 w-4 mr-1.5" />
+                            View post
+                          </>
+                        )}
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -296,6 +370,13 @@ export function ManagerApprovalDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {postForView && (
+        <PostComposer
+          editingPost={postForView}
+          onClose={closeViewPost}
+        />
+      )}
     </div>
   )
 }

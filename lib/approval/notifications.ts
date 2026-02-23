@@ -1,6 +1,11 @@
-import { supabaseAdmin } from '@/lib/supabase'
+import {
+  queueNotifications,
+  getNotificationsForUser,
+  markRead as markNotificationsReadService,
+} from '@/lib/notifications/service'
+import type { NotificationChannel } from '@/lib/notifications/types'
 
-export type NotificationChannel = 'in_app' | 'email' | 'sms'
+export type { NotificationChannel }
 
 export interface ApprovalNotification {
   id: string
@@ -17,7 +22,7 @@ export interface ApprovalNotification {
   created_at: string
 }
 
-export interface QueueNotificationInput {
+export interface QueueApprovalNotificationInput {
   postId?: string
   recipientIds: string[]
   notificationType: string
@@ -27,7 +32,8 @@ export interface QueueNotificationInput {
 }
 
 /**
- * Queue notifications for approvers/reviewers. Uses fan-out per channel to simplify delivery.
+ * Queue notifications for approvers/reviewers via unified notification service.
+ * Writes to notifications table with event_type='approval'.
  */
 export async function queueApprovalNotifications({
   postId,
@@ -36,64 +42,53 @@ export async function queueApprovalNotifications({
   payload,
   channels = ['in_app'],
   scheduleFor
-}: QueueNotificationInput): Promise<void> {
-  if (!recipientIds.length) {
-    return
-  }
+}: QueueApprovalNotificationInput): Promise<void> {
+  if (!recipientIds.length) return
 
-  const scheduled_at = scheduleFor?.toISOString() ?? new Date().toISOString()
-  const rows = recipientIds.flatMap((recipient_id) =>
+  const inputs = recipientIds.flatMap((recipientId) =>
     channels.map((channel) => ({
-      post_id: postId ?? null,
-      recipient_id,
+      recipientId,
       channel,
-      notification_type: notificationType,
-      payload: payload ?? null,
-      scheduled_at,
-      status: 'pending'
+      eventType: 'approval' as const,
+      notificationType,
+      payload,
+      postId: postId ?? null,
+      priority: 'urgent' as const,
+      scheduleFor
     }))
   )
 
-  const { error } = await supabaseAdmin
-    .from('approval_notifications')
-    .insert(rows)
-
-  if (error) {
-    console.error('Failed to queue approval notifications', error)
-    throw new Error(error.message)
-  }
+  await queueNotifications(inputs)
 }
 
+/**
+ * Get approval notifications for a recipient (from unified notifications table).
+ * Limited to 50 most recent; pagination not surfaced (caller gets a single page).
+ */
 export async function getApprovalNotifications(recipientId: string): Promise<ApprovalNotification[]> {
-  const { data, error } = await supabaseAdmin
-    .from('approval_notifications')
-    .select('*')
-    .eq('recipient_id', recipientId)
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  if (error) {
-    console.error('Failed to fetch approval notifications', error)
-    throw new Error(error.message)
-  }
-
-  return (data as ApprovalNotification[]) || []
+  const { notifications } = await getNotificationsForUser(recipientId, {
+    eventType: 'approval',
+    limit: 50
+  })
+  return notifications.map((n) => ({
+    id: n.id,
+    post_id: n.post_id,
+    recipient_id: n.recipient_id,
+    channel: n.channel,
+    notification_type: n.notification_type,
+    payload: n.payload,
+    status: n.status,
+    scheduled_at: n.scheduled_at,
+    sent_at: n.sent_at,
+    read_at: n.read_at,
+    error: n.error,
+    created_at: n.created_at
+  }))
 }
 
-export async function markNotificationsRead(notificationIds: string[], recipientId: string) {
-  if (!notificationIds.length) return
-
-  const { error } = await supabaseAdmin
-    .from('approval_notifications')
-    .update({
-      read_at: new Date().toISOString()
-    })
-    .in('id', notificationIds)
-    .eq('recipient_id', recipientId)
-
-  if (error) {
-    console.error('Failed to mark notifications read', error)
-    throw new Error(error.message)
-  }
+/**
+ * Mark approval notifications as read.
+ */
+export async function markNotificationsRead(notificationIds: string[], recipientId: string): Promise<void> {
+  await markNotificationsReadService(notificationIds, recipientId)
 }
-

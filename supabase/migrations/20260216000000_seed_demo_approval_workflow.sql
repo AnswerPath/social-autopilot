@@ -1,0 +1,2 @@
+-- Demo approval workflow data moved to supabase/seed.sql (development only).
+-- This migration is intentionally empty to avoid seeding demo data in all environments.

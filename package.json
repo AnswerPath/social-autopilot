@@ -87,6 +87,7 @@
     "react-is": "^19.1.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^3.3.0",
+    "resend": "^6.9.2",
     "sentiment": "^5.0.2",
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",

@@ -277,16 +277,9 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
           result: JSON.stringify(result, null, 2)
         })
         
+        const errorMsg = result.error || result.details || response.statusText || `HTTP ${response.status}`
         if (!response.ok) {
-          // Log error with full details for debugging
-          const errorDetails = {
-            status: response.status,
-            statusText: response.statusText,
-            error: result.error,
-            details: result.details,
-            fullResult: result
-          }
-          console.error('Schedule post failed:', errorDetails)
+          console.error('Schedule post failed:', errorMsg, result)
         }
         
         if (response.ok && result.success) {
@@ -325,7 +318,7 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
             })
           } else {
             // Provide meaningful error message even if result is empty
-            const errorMessage = result.error || result.details || 
+            const errorMessage = errorMsg || result.error || result.details || 
               (response.status === 500 ? 'Server error occurred' :
                response.status === 400 ? 'Invalid request' :
                response.status === 404 ? 'Endpoint not found' :
