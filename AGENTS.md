@@ -415,3 +415,26 @@ These commands make AI calls and may take up to a minute:
 ---
 
 _This guide ensures Claude Code has immediate access to Task Master's essential functionality for agentic development workflows._
+
+## Cursor Cloud specific instructions
+
+### Project overview
+
+Social Autopilot is a Next.js 15 social media management platform. It uses npm as the package manager (`package-lock.json`), Supabase for auth/database, and runs on Node.js >= 20.
+
+### Running the application
+
+- **Dev server**: `npm run dev` (port 3000). Pages compile on demand.
+- **Lint**: `npm run lint` (uses ESLint 8 with `.eslintrc.json`; many pre-existing warnings in the codebase).
+- **Tests**: `npm test` (Jest 30 with jsdom). 30/34 suites pass; 3 suites fail due to `@sentry/nextjs` import errors in the test environment and 1 suite has pre-existing assertion mismatches in analytics transformers.
+- **Build**: `npm run build` fails at page-data collection due to a pre-existing Zod schema issue in `app/api/account-settings/route.ts`. Use the dev server for development.
+
+### Environment variables
+
+A `.env` file is required. Copy from `.env.example` and fill in real Supabase credentials (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) to enable authentication and database features. Without real credentials, the app still serves the UI but auth flows return errors.
+
+### Gotchas
+
+- ESLint must be installed separately (`eslint@^8` + `eslint-config-next@^14`); it is not listed in the repo's `package.json` devDependencies.
+- The `next.config.mjs` wraps config with `@sentry/nextjs` `withSentryConfig`. Sentry warnings during dev/build are expected and harmless when `SENTRY_DSN` is not configured.
+- The `@types/react` package gets auto-installed by Next.js on first lint run if missing.
