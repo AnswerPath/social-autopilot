@@ -316,6 +316,8 @@ npm run db:migration:down
 
 ## 🚢 Deployment
 
+- **Deploying a fork to Vercel?** See **[docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md)** for required env vars (including `SUPABASE_SERVICE_ROLE_KEY` for sign-up), Supabase URL configuration, and troubleshooting account creation errors.
+
 ### Prerequisites
 
 - Production Supabase project

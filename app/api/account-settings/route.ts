@@ -22,7 +22,7 @@ const DEFAULT_NOTIFICATION_PREFERENCES = {
   digest_frequency: 'immediate' as const,
 } as const;
 
-const NotificationPreferencesSchema = z.object({
+const NotificationPreferencesBaseSchema = z.object({
   email_notifications: z.boolean(),
   push_notifications: z.boolean(),
   sms_notifications: z.boolean().optional(),
@@ -35,12 +35,14 @@ const NotificationPreferencesSchema = z.object({
   weekly_digest: z.boolean(),
   daily_summary: z.boolean(),
   digest_frequency: z.enum(['immediate', 'daily', 'weekly']).optional(),
-}).refine(
+});
+
+const NotificationPreferencesSchema = NotificationPreferencesBaseSchema.refine(
   (data) => !data.sms_notifications || (data.phone_number && data.phone_number.trim().length > 0),
   { message: 'Phone number is required when SMS notifications are enabled', path: ['phone_number'] }
 );
 
-const NotificationPreferencesPatchSchema = NotificationPreferencesSchema.partial();
+const NotificationPreferencesPatchSchema = NotificationPreferencesBaseSchema.partial();
 
 const SecuritySettingsSchema = z.object({
   two_factor_enabled: z.boolean(),
