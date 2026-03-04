@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
 import { AuthState, AuthUser, LoginRequest, RegisterRequest } from '@/lib/auth-types'
 
 interface AuthContextType extends AuthState {
@@ -16,6 +16,15 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
+function setUnauthenticatedState(): AuthState {
+  return {
+    user: null,
+    session: null,
+    loading: false,
+    error: null
+  }
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -24,15 +33,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     error: null
   })
 
-  // Check for existing session on mount
+  const sessionCheckInFlightRef = useRef(false)
+
+  // Check for existing session on mount (single run)
   useEffect(() => {
     refreshSession()
   }, [])
 
   const refreshSession = async () => {
+    if (sessionCheckInFlightRef.current) return
+    sessionCheckInFlightRef.current = true
+
     try {
       setState(prev => ({ ...prev, loading: true, error: null }))
-      
+
       const response = await fetch('/api/auth/session', {
         method: 'GET',
         credentials: 'include'
@@ -46,15 +60,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
           loading: false,
           error: null
         })
-      } else if (response.status === 401) {
-        // Try to refresh the token
+        return
+      }
+
+      if (response.status === 401) {
+        // Try refresh once; do not retry on 401/429
         const refreshResponse = await fetch('/api/auth/refresh', {
           method: 'POST',
           credentials: 'include'
         })
 
         if (refreshResponse.ok) {
-          // Token refreshed, try to get session again
           const sessionResponse = await fetch('/api/auth/session', {
             method: 'GET',
             credentials: 'include'
@@ -69,29 +85,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
               error: null
             })
           } else {
-            setState({
-              user: null,
-              session: null,
-              loading: false,
-              error: null
-            })
+            setState(setUnauthenticatedState())
           }
-        } else {
+        } else if (refreshResponse.status === 429) {
           setState({
-            user: null,
-            session: null,
-            loading: false,
-            error: null
+            ...setUnauthenticatedState(),
+            error: 'Too many attempts. Please try again later.'
           })
+        } else {
+          setState(setUnauthenticatedState())
         }
-      } else {
-        setState({
-          user: null,
-          session: null,
-          loading: false,
-          error: null
-        })
+        return
       }
+
+      if (response.status === 429) {
+        setState({
+          ...setUnauthenticatedState(),
+          error: 'Too many attempts. Please try again later.'
+        })
+        return
+      }
+
+      setState(setUnauthenticatedState())
     } catch (error) {
       console.error('Session refresh error:', error)
       setState({
@@ -100,6 +115,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         loading: false,
         error: 'Failed to refresh session'
       })
+    } finally {
+      sessionCheckInFlightRef.current = false
     }
   }
 
