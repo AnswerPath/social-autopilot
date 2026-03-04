@@ -14,7 +14,7 @@ export function GettingStartedCard() {
   } | null>(null)
 
   useEffect(() => {
-    fetch('/api/onboarding')
+    fetch('/api/onboarding', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : {}))
       .then(setData)
       .catch(() => setData(null))
@@ -27,6 +27,7 @@ export function GettingStartedCard() {
       const res = await fetch('/api/onboarding', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ resetTutorial: true }),
       })
       if (!res.ok) {

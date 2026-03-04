@@ -20,6 +20,7 @@ export function HelpMenu() {
       const response = await fetch('/api/onboarding', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ resetTutorial: true }),
       })
       if (!response.ok) {

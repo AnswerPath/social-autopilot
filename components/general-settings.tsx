@@ -14,7 +14,7 @@ export function GeneralSettings() {
   const [tooltipsLoading, setTooltipsLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/onboarding')
+    fetch('/api/onboarding', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : {}))
       .then((d) => {
         if (typeof d.showContextualTooltips === 'boolean') setShowTooltips(d.showContextualTooltips)
@@ -27,6 +27,7 @@ export function GeneralSettings() {
     fetch('/api/onboarding', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ showContextualTooltips: checked }),
     }).catch(() => {})
   }

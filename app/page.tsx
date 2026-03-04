@@ -16,7 +16,7 @@ export default function Home() {
       router.push('/auth')
       return
     }
-    fetch('/api/onboarding')
+    fetch('/api/onboarding', { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : { completed: true }))
       .then((data) => {
         setOnboardingChecked(true)

@@ -27,7 +27,7 @@ export function OnboardingFlow() {
 
   const fetchProgress = async () => {
     try {
-      const res = await fetch('/api/onboarding')
+      const res = await fetch('/api/onboarding', { credentials: 'include' })
       if (!res.ok) {
         setState((s) => ({ ...s, loading: false }))
         return
@@ -58,6 +58,7 @@ export function OnboardingFlow() {
       const res = await fetch('/api/onboarding', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(
           markComplete ? { complete: true } : { step: nextStep }
         ),
@@ -154,6 +155,7 @@ export function OnboardingFlow() {
                       const res = await fetch('/api/onboarding', {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
                         body: JSON.stringify({ complete: true }),
                       })
                       if (!res.ok) {

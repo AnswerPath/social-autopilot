@@ -30,6 +30,7 @@ export function FeatureTour() {
             const res = await fetch('/api/onboarding', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({ tutorialCompleted: true }),
             })
             if (!res.ok) {

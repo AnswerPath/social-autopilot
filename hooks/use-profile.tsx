@@ -30,7 +30,7 @@ interface AvatarUploadData {
 }
 
 export function useProfile() {
-  const { user } = useAuth();
+  const { user, refreshSession } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +45,14 @@ export function useProfile() {
     setError(null);
 
     try {
-      const response = await fetch('/api/profile');
-      
+      const response = await fetch('/api/profile', { credentials: 'include' });
+
+      if (response.status === 401) {
+        setError('Session expired');
+        await refreshSession();
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Failed to fetch profile');
       }
@@ -61,7 +67,7 @@ export function useProfile() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, refreshSession]);
 
   /**
    * Update user profile
@@ -78,6 +84,7 @@ export function useProfile() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(updateData),
       });
 
@@ -120,6 +127,7 @@ export function useProfile() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(uploadData),
       });
 
@@ -171,6 +179,7 @@ export function useProfile() {
     try {
       const response = await fetch('/api/profile/avatar', {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       if (!response.ok) {

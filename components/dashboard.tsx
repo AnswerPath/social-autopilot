@@ -49,7 +49,7 @@ export function Dashboard() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/onboarding')
+    fetch('/api/onboarding', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : {}))
       .then((d) => {
         if (typeof d.showContextualTooltips === 'boolean') setShowTooltips(d.showContextualTooltips)
@@ -70,7 +70,7 @@ export function Dashboard() {
       // Fetch user profile
       try {
         console.log('📡 Dashboard: Fetching profile...')
-        const profileResponse = await fetch('/api/twitter/profile')
+        const profileResponse = await fetch('/api/twitter/profile', { credentials: 'include' })
         const profileData = await profileResponse.json()
         
         if (profileData.success && profileData.profile) {
@@ -100,7 +100,7 @@ export function Dashboard() {
       // Fetch recent tweets
       try {
         console.log('📡 Dashboard: Fetching tweets...')
-        const tweetsResponse = await fetch('/api/twitter/tweets?maxResults=5')
+        const tweetsResponse = await fetch('/api/twitter/tweets?maxResults=5', { credentials: 'include' })
         const tweetsData = await tweetsResponse.json()
         
         if (tweetsData.success) {
@@ -126,7 +126,7 @@ export function Dashboard() {
       // Fetch mentions
       try {
         console.log('📡 Dashboard: Fetching mentions...')
-        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=10')
+        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=10', { credentials: 'include' })
         const mentionsData = await mentionsResponse.json()
         
         if (mentionsData.success) {
