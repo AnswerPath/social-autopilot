@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { UserProfile } from '@/lib/auth-types';
 
@@ -34,6 +34,16 @@ export function useProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+
+  // Clear error when user/session changes (e.g. after re-login) so profile can be refetched
+  useEffect(() => {
+    const userId = user?.id ?? null;
+    if (userId !== lastUserIdRef.current) {
+      lastUserIdRef.current = userId;
+      setError((prev) => (userId && prev ? null : prev));
+    }
+  }, [user?.id]);
 
   /**
    * Fetch user profile

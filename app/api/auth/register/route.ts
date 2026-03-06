@@ -13,6 +13,7 @@ import {
   createAuthError,
   createUserSession
 } from '@/lib/auth-utils'
+import { sendVerificationEmailForUser } from '@/lib/email-verification'
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user already exists
     const { data: existingUsers } = await getSupabaseAdmin().auth.admin.listUsers()
-    const existingUser = existingUsers.users.find(user => user.email === email)
+    const existingUser = existingUsers.users.find((u: { email?: string | null }) => u.email === email)
     if (existingUser) {
       return NextResponse.json(
         { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'User with this email already exists') },
@@ -110,6 +111,9 @@ export async function POST(request: NextRequest) {
 
     // Role is automatically assigned by trigger when profile is created
     console.log('✅ Role automatically assigned by trigger')
+
+    // Send verification email (soft verification; does not block registration)
+    await sendVerificationEmailForUser(data.user.id, email)
 
     // Sign in the user to get a session
     const { data: signInData, error: signInError } = await getSupabaseAdmin().auth.signInWithPassword({

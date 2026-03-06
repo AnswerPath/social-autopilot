@@ -19,14 +19,14 @@ import { useRouter } from 'next/navigation';
 
 export function UserMenu() {
   const { user, logout } = useAuth();
-  const { profile, getAvatarUrl, fetchProfile } = useProfile();
+  const { profile, error, getAvatarUrl, fetchProfile } = useProfile();
   const router = useRouter();
 
   useEffect(() => {
-    if (user && !profile) {
+    if (user && !profile && !error) {
       fetchProfile();
     }
-  }, [user, profile, fetchProfile]);
+  }, [user, profile, error, fetchProfile]);
 
   if (!user) return null;
 

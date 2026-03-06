@@ -325,6 +325,8 @@ export interface UserProfile {
   bio?: string
   timezone?: string
   email_notifications: boolean
+  /** Set when user clicks the email verification link (soft verification). */
+  email_verified_at?: string | null
   created_at: string
   updated_at: string
 }

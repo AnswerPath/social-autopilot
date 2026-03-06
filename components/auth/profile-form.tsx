@@ -51,10 +51,10 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset, setValue } = form;
 
-  // Load profile data when component mounts
+  // Load profile data when component mounts (skip if auth error to avoid retry loop)
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    if (!error) fetchProfile();
+  }, [fetchProfile, error]);
 
   // Update form when profile data is loaded
   useEffect(() => {

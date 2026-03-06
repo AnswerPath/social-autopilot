@@ -92,3 +92,20 @@ If the build fails with a message like *"It looks like you're trying to use Type
 - [ ] Redeployed on Vercel after changing env vars.
 
 After fixing, try creating an account again and, if it still fails, use the logs and network response to pinpoint the step that errors.
+
+## 8. 401 on /api/profile after login (continuous "Failed to fetch profile")
+
+If you see repeated **401 (Unauthorized)** on `GET /api/profile` and "User info" loading over and over after logging in:
+
+1. **Retry loop (fixed in app)**  
+   The app now stops retrying profile fetch after an auth error, so you should see at most one failure and a "Session expired" or error state instead of an infinite loop.
+
+2. **Why the profile API returns 401**  
+   `/api/profile` uses the same auth as `/api/auth/session`: it reads `sb-auth-token` and `sb-session-id` from the request cookies and checks the session in the database. If you get 401 on profile but "logged in" in the UI, usually:
+   - **Cookies not sent**: Ensure you're on the same origin (no cross-origin calls to a different domain). Cookies are `httpOnly`, `secure` in production, `sameSite: 'lax'`, `path: '/'`.
+   - **Supabase URL / redirects**: In Supabase **Authentication → URL Configuration**, set **Site URL** and **Redirect URLs** to your exact Vercel URL (e.g. `https://your-app.vercel.app`). Mismatch can break auth and session creation.
+   - **Session not in DB**: On login, the app creates a row in `user_sessions`. If migrations weren’t applied or the table is missing, `getCurrentUser` will return null and profile will 401. Run migrations (see section 3 above).
+   - **Preview URLs**: On Vercel preview deployments (e.g. `*-git-*-vercel.app`), ensure Supabase **Redirect URLs** include that pattern or the exact preview URL so cookies and redirects work.
+
+3. **Check in browser**  
+   In DevTools → Application → Cookies, confirm `sb-auth-token` and `sb-session-id` are present for your Vercel domain after login. If they’re missing, login or cookie settings (e.g. domain/path) are wrong.

@@ -14,12 +14,12 @@ export function UserInfoCard() {
   const { user } = useAuth();
   const { profile, loading, error, getAvatarUrl, fetchProfile } = useProfile();
 
-  // Fetch profile when component mounts and user is available
+  // Fetch profile when component mounts and user is available (skip if auth error to avoid retry loop)
   useEffect(() => {
-    if (user && !profile && !loading) {
+    if (user && !profile && !loading && !error) {
       fetchProfile();
     }
-  }, [user, profile, loading, fetchProfile]);
+  }, [user, profile, loading, error, fetchProfile]);
 
   if (loading) {
     return (
