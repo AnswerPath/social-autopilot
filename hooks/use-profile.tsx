@@ -31,8 +31,27 @@ interface AvatarUploadData {
 
 /** Module-scoped dedup: one in-flight profile fetch per user across all useProfile() instances */
 const profileFetchInflight = new Map<string, Promise<ProfileData | undefined>>();
-/** Module-scoped 401 blocker: prevent retry loops per user across all useProfile() instances */
-const profile401BlockByUserId = new Map<string, boolean>();
+/**
+ * Module-scoped 401 blocker: prevent retry loops per user across all useProfile() instances.
+ * Values are timestamps (in ms since epoch) indicating when the block expires.
+ */
+const profile401BlockByUserId = new Map<string, number>();
+
+const PROFILE_401_BASE_BACKOFF_MS = 30_000;
+const PROFILE_401_MAX_BACKOFF_MS = 5 * 60_000;
+
+function scheduleProfile401Backoff(userId: string) {
+  const now = Date.now();
+  const currentExpiry = profile401BlockByUserId.get(userId);
+
+  let nextBackoffMs = PROFILE_401_BASE_BACKOFF_MS;
+  if (currentExpiry && currentExpiry > now) {
+    const remainingMs = currentExpiry - now;
+    nextBackoffMs = Math.min(remainingMs * 2, PROFILE_401_MAX_BACKOFF_MS);
+  }
+
+  profile401BlockByUserId.set(userId, now + nextBackoffMs);
+}
 
 export function useProfile() {
   const { user, refreshSession } = useAuth();
@@ -52,6 +71,7 @@ export function useProfile() {
       }
       lastUserIdRef.current = newUserId;
       setProfile(null);
+      setLoading(false);
       setError(null);
     }
   }, [user?.id]);
@@ -61,7 +81,14 @@ export function useProfile() {
    */
   const fetchProfile = useCallback(async () => {
     if (!user) return;
-    if (profile401BlockByUserId.get(user.id)) return;
+    const blockUntil = profile401BlockByUserId.get(user.id);
+    const now = Date.now();
+    if (blockUntil && blockUntil > now) {
+      return;
+    }
+    if (blockUntil && blockUntil <= now) {
+      profile401BlockByUserId.delete(user.id);
+    }
 
     const existing = profileFetchInflight.get(user.id);
     if (existing) {
@@ -96,15 +123,16 @@ export function useProfile() {
         const response = await fetch('/api/profile', { credentials: 'include' });
 
         if (response.status === 401) {
-          profile401BlockByUserId.set(user.id, true);
+          // Set or extend a cooldown to avoid tight 401 retry loops.
+          scheduleProfile401Backoff(user.id);
           setError('Session expired');
           const restored = await refreshSession();
           if (restored) {
-            profile401BlockByUserId.set(user.id, false);
+            profile401BlockByUserId.delete(user.id);
             setError(null);
             const retryResponse = await fetch('/api/profile', { credentials: 'include' });
             if (retryResponse.status === 401) {
-              profile401BlockByUserId.set(user.id, true);
+              scheduleProfile401Backoff(user.id);
               setError('Session expired');
               return undefined;
             }

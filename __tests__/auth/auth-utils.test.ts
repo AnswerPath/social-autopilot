@@ -8,10 +8,10 @@ describe('Authentication Utilities', () => {
     expect(true).toBe(true)
   })
 
-  it('documents that auth utils rely on server-side environment', () => {
-    // These utilities integrate with Next.js request/response objects and Supabase.
-    // Detailed behavior (session creation, refresh & deactivation) is covered by
-    // higher-level integration/E2E tests rather than unit tests in this file.
-    expect(typeof process.env.NODE_ENV).toBe('string')
-  })
+  // These utilities integrate with Next.js request/response objects and Supabase.
+  // Detailed behavior (session creation, refresh & deactivation) should be covered
+  // by higher-level integration/E2E tests rather than unit tests in this file.
+  it.todo(
+    'documents that auth utils rely on server-side environment and are verified by integration/E2E tests'
+  )
 })

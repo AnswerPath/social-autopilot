@@ -175,17 +175,12 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
     })
 
     if (error || !data.session) {
-      // Refresh failed; deactivate the session and clear cookies so we don't
-      // keep attempting upstream refreshes with a bad session.
+      // Refresh failed; deactivate the session so we don't keep attempting
+      // upstream refreshes with a bad session.
       try {
         await deactivateSession(sessionId)
       } catch (deactivateError) {
         console.error('Error deactivating session after refresh failure:', deactivateError)
-      }
-      try {
-        await clearAuthCookies()
-      } catch (cookieError) {
-        console.error('Error clearing auth cookies after refresh failure:', cookieError)
       }
       return { success: false }
     }
@@ -207,11 +202,6 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
         console.error('Error deactivating session after refresh exception:', deactivateError)
       }
     }
-    try {
-      await clearAuthCookies()
-    } catch (cookieError) {
-      console.error('Error clearing auth cookies after refresh exception:', cookieError)
-    }
     return { success: false }
   }
 }
@@ -230,12 +220,11 @@ export async function createUserSession(
   session: any,
   request: NextRequest
 ): Promise<string> {
-  // Import the enhanced session management. This implementation is responsible
-  // for creating the DB session row and returning a session ID, or throwing on
-  // failure.
-  const { createEnhancedSession } = await import('@/lib/session-management')
-
   try {
+    // Import the enhanced session management. This implementation is responsible
+    // for creating the DB session row and returning a session ID, or throwing on
+    // failure.
+    const { createEnhancedSession } = await import('@/lib/session-management')
     return await createEnhancedSession(userId, request)
   } catch (error) {
     console.error('Error creating enhanced session, falling back to basic session:', error)
