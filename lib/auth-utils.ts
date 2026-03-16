@@ -90,8 +90,6 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
     const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token)
     
     if (error || !user) {
-      // Token is invalid, clear cookies
-      clearAuthCookies()
       return null
     }
 
@@ -105,16 +103,12 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       .single()
 
     if (!sessionInfo) {
-      // Session not found or inactive, clear cookies
-      clearAuthCookies()
       return null
     }
 
     // Check if session has expired
     if (new Date(sessionInfo.expires_at) < new Date()) {
-      // Session expired, deactivate it and clear cookies
       await deactivateSession(sessionId)
-      clearAuthCookies()
       return null
     }
 

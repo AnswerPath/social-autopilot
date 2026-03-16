@@ -60,8 +60,16 @@ export async function validateAccessToken(token: string): Promise<TokenValidatio
       };
     }
 
-    // Check if token is close to expiry (within 5 minutes)
-    const tokenExpiry = user.exp || 0;
+    // Check if token is close to expiry (within 5 minutes) via JWT payload
+    let tokenExpiry = 0;
+    try {
+      const payload = JSON.parse(
+        Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
+      );
+      tokenExpiry = payload.exp || 0;
+    } catch {
+      tokenExpiry = 0;
+    }
     const now = Math.floor(Date.now() / 1000);
     const timeUntilExpiry = tokenExpiry - now;
     const needsRefresh = timeUntilExpiry < 300; // 5 minutes
