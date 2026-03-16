@@ -111,29 +111,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session record - required so getCurrentUser() can resolve the user
-    const sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-
-    const { error: sessionError } = await getSupabaseAdmin()
-      .from('user_sessions')
-      .insert({
-        session_id: sessionId,
-        user_id: data.user.id,
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-        expires_at: new Date(data.session.expires_at * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
-        is_active: true,
-        ip_address:
-          (req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-           req.headers.get('x-real-ip') ||
-           'unknown'),
-        user_agent: req.headers.get('user-agent') || 'unknown',
-        device_info: {}
-      })
-
-    if (sessionError) {
+    let sessionId: string
+    try {
+      sessionId = await createUserSession(data.user.id, data.session, req)
+    } catch (sessionError) {
       console.error('Failed to create session:', sessionError)
       return NextResponse.json(
         {

@@ -31,6 +31,8 @@ interface AvatarUploadData {
 
 /** Module-scoped dedup: one in-flight profile fetch per user across all useProfile() instances */
 const profileFetchInflight = new Map<string, Promise<ProfileData | undefined>>();
+/** Module-scoped 401 blocker: prevent retry loops per user across all useProfile() instances */
+const profile401BlockByUserId = new Map<string, boolean>();
 
 export function useProfile() {
   const { user, refreshSession } = useAuth();
@@ -38,15 +40,17 @@ export function useProfile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
-  /** Block profile fetch after 401 until user identity changes (stops retry loop) */
-  const profile401BlockRef = useRef(false);
 
   // Reset stored profile and 401 block when auth user changes so stale async results cannot overwrite state
   useEffect(() => {
-    const userId = user?.id ?? null;
-    if (userId !== lastUserIdRef.current) {
-      lastUserIdRef.current = userId;
-      profile401BlockRef.current = false;
+    const newUserId = user?.id ?? null;
+    const previousUserId = lastUserIdRef.current;
+    if (newUserId !== previousUserId) {
+      // Clear any 401 block for the previous user id so new sessions aren't blocked
+      if (previousUserId) {
+        profile401BlockByUserId.delete(previousUserId);
+      }
+      lastUserIdRef.current = newUserId;
       setProfile(null);
       setError(null);
     }
@@ -57,39 +61,50 @@ export function useProfile() {
    */
   const fetchProfile = useCallback(async () => {
     if (!user) return;
-    if (profile401BlockRef.current) return;
+    if (profile401BlockByUserId.get(user.id)) return;
 
     const existing = profileFetchInflight.get(user.id);
     if (existing) {
       setLoading(true);
       try {
+        setError(null);
+        const startedFor = user.id;
         const data = await existing;
-        if (lastUserIdRef.current === (user?.id ?? null)) {
+        if (lastUserIdRef.current === (user?.id ?? null) && lastUserIdRef.current === startedFor) {
           setProfile(data?.profile ?? null);
         }
         return data;
+      } catch (err) {
+        if (lastUserIdRef.current === (user?.id ?? null)) {
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          setError(errorMessage);
+        }
+        throw err;
       } finally {
-        setLoading(false);
+        if (lastUserIdRef.current === (user?.id ?? null)) {
+          setLoading(false);
+        }
       }
     }
 
-    const promise = (async (): Promise<ProfileData | undefined> => {
-      setLoading(true);
-      setError(null);
+    const startedFor = user.id;
+    setLoading(true);
+    setError(null);
 
+    const promise = (async (): Promise<ProfileData | undefined> => {
       try {
         const response = await fetch('/api/profile', { credentials: 'include' });
 
         if (response.status === 401) {
-          profile401BlockRef.current = true;
+          profile401BlockByUserId.set(user.id, true);
           setError('Session expired');
           const restored = await refreshSession();
           if (restored) {
-            profile401BlockRef.current = false;
+            profile401BlockByUserId.set(user.id, false);
             setError(null);
             const retryResponse = await fetch('/api/profile', { credentials: 'include' });
             if (retryResponse.status === 401) {
-              profile401BlockRef.current = true;
+              profile401BlockByUserId.set(user.id, true);
               setError('Session expired');
               return undefined;
             }
@@ -120,13 +135,20 @@ export function useProfile() {
           setError(errorMessage);
         }
         throw err;
-      } finally {
-        setLoading(false);
-        profileFetchInflight.delete(user.id);
       }
     })();
 
-    profileFetchInflight.set(user.id, promise);
+    profileFetchInflight.set(startedFor, promise);
+    promise.finally(() => {
+      if (lastUserIdRef.current === (user?.id ?? null) && lastUserIdRef.current === startedFor) {
+        setLoading(false);
+      }
+      const current = profileFetchInflight.get(startedFor);
+      if (current === promise) {
+        profileFetchInflight.delete(startedFor);
+      }
+    });
+
     return promise;
   }, [user, refreshSession]);
 

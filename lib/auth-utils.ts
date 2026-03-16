@@ -175,7 +175,18 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
     })
 
     if (error || !data.session) {
-      // Refresh failed; do not clear cookies so client can retry or user can re-auth
+      // Refresh failed; deactivate the session and clear cookies so we don't
+      // keep attempting upstream refreshes with a bad session.
+      try {
+        await deactivateSession(sessionId)
+      } catch (deactivateError) {
+        console.error('Error deactivating session after refresh failure:', deactivateError)
+      }
+      try {
+        await clearAuthCookies()
+      } catch (cookieError) {
+        console.error('Error clearing auth cookies after refresh failure:', cookieError)
+      }
       return { success: false }
     }
 
@@ -188,43 +199,81 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
     return { success: true, newToken: data.session.access_token }
   } catch (error) {
     console.error('Token refresh error:', error)
+    const sessionId = request.cookies.get(SESSION_ID_COOKIE_NAME)?.value
+    if (sessionId) {
+      try {
+        await deactivateSession(sessionId)
+      } catch (deactivateError) {
+        console.error('Error deactivating session after refresh exception:', deactivateError)
+      }
+    }
+    try {
+      await clearAuthCookies()
+    } catch (cookieError) {
+      console.error('Error clearing auth cookies after refresh exception:', cookieError)
+    }
     return { success: false }
   }
 }
 
 /**
  * Create a new session for a user (enhanced with security checks)
+ *
+ * This helper is the single entry point for creating `user_sessions` records.
+ * It will either delegate to the enhanced session management or fall back to a
+ * basic insert that mirrors the data written by the login route previously.
+ *
+ * On failure it throws so callers can decide how to fail the request.
  */
 export async function createUserSession(
-  userId: string, 
-  session: any, 
+  userId: string,
+  session: any,
   request: NextRequest
 ): Promise<string> {
-  // Import the enhanced session management
+  // Import the enhanced session management. This implementation is responsible
+  // for creating the DB session row and returning a session ID, or throwing on
+  // failure.
   const { createEnhancedSession } = await import('@/lib/session-management')
-  
+
   try {
     return await createEnhancedSession(userId, request)
   } catch (error) {
     console.error('Error creating enhanced session, falling back to basic session:', error)
-    
-    // Fallback to basic session creation
-    const sessionId = generateSessionId()
-    const expiresAt = new Date(Date.now() + SESSION_CONFIG.sessionIdExpiry * 1000)
 
-    const sessionInfo: Omit<SessionInfo, 'created_at'> = {
+    // Fallback to basic session creation that matches the historic login route
+    // behavior, including storing access/refresh tokens.
+    const sessionId = generateSessionId()
+    const now = new Date()
+    const expiresAt = session?.expires_at
+      ? new Date(session.expires_at * 1000)
+      : new Date(now.getTime() + SESSION_CONFIG.sessionIdExpiry * 1000)
+
+    const sessionInfo = {
       session_id: sessionId,
       user_id: userId,
-      last_activity: new Date().toISOString(),
-      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-      user_agent: request.headers.get('user-agent') || 'unknown',
+      access_token: session?.access_token,
+      refresh_token: session?.refresh_token,
+      expires_at: expiresAt.toISOString(),
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      last_activity: now.toISOString(),
       is_active: true,
-      expires_at: expiresAt.toISOString()
+      ip_address:
+        request.headers.get('x-forwarded-for') ||
+        request.headers.get('x-real-ip') ||
+        'unknown',
+      user_agent: request.headers.get('user-agent') || 'unknown',
+      device_info: {}
     }
 
-    await getSupabaseAdmin()
+    const { error: insertError } = await getSupabaseAdmin()
       .from('user_sessions')
       .insert(sessionInfo)
+
+    if (insertError) {
+      console.error('Failed to create basic session record:', insertError)
+      throw new Error(`Failed to create user session: ${insertError.message}`)
+    }
 
     return sessionId
   }
