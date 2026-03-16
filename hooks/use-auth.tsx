@@ -33,7 +33,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     error: null
   })
 
-  const sessionCheckInFlightRef = useRef(false)
+  const sessionCheckInFlightRef = useRef<Promise<boolean> | null>(null)
 
   // Check for existing session on mount (single run)
   useEffect(() => {
@@ -41,88 +41,92 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const refreshSession = async (): Promise<boolean> => {
-    if (sessionCheckInFlightRef.current) return false
-    sessionCheckInFlightRef.current = true
+    if (sessionCheckInFlightRef.current) return sessionCheckInFlightRef.current
 
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }))
+    const promise = (async (): Promise<boolean> => {
+      try {
+        setState(prev => ({ ...prev, loading: true, error: null }))
 
-      const response = await fetch('/api/auth/session', {
-        method: 'GET',
-        credentials: 'include'
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setState({
-          user: data.user,
-          session: data.session,
-          loading: false,
-          error: null
-        })
-        return true
-      }
-
-      if (response.status === 401) {
-        // Try refresh once; do not retry on 401/429
-        const refreshResponse = await fetch('/api/auth/refresh', {
-          method: 'POST',
+        const response = await fetch('/api/auth/session', {
+          method: 'GET',
           credentials: 'include'
         })
 
-        if (refreshResponse.ok) {
-          const sessionResponse = await fetch('/api/auth/session', {
-            method: 'GET',
+        if (response.ok) {
+          const data = await response.json()
+          setState({
+            user: data.user,
+            session: data.session,
+            loading: false,
+            error: null
+          })
+          return true
+        }
+
+        if (response.status === 401) {
+          // Try refresh once; do not retry on 401/429
+          const refreshResponse = await fetch('/api/auth/refresh', {
+            method: 'POST',
             credentials: 'include'
           })
 
-          if (sessionResponse.ok) {
-            const data = await sessionResponse.json()
-            setState({
-              user: data.user,
-              session: data.session,
-              loading: false,
-              error: null
+          if (refreshResponse.ok) {
+            const sessionResponse = await fetch('/api/auth/session', {
+              method: 'GET',
+              credentials: 'include'
             })
-            return true
+
+            if (sessionResponse.ok) {
+              const data = await sessionResponse.json()
+              setState({
+                user: data.user,
+                session: data.session,
+                loading: false,
+                error: null
+              })
+              return true
+            } else {
+              setState(setUnauthenticatedState())
+              return false
+            }
+          } else if (refreshResponse.status === 429) {
+            setState({
+              ...setUnauthenticatedState(),
+              error: 'Too many attempts. Please try again later.'
+            })
+            return false
           } else {
             setState(setUnauthenticatedState())
             return false
           }
-        } else if (refreshResponse.status === 429) {
+        }
+
+        if (response.status === 429) {
           setState({
             ...setUnauthenticatedState(),
             error: 'Too many attempts. Please try again later.'
           })
           return false
-        } else {
-          setState(setUnauthenticatedState())
-          return false
         }
-      }
 
-      if (response.status === 429) {
+        setState(setUnauthenticatedState())
+        return false
+      } catch (error) {
+        console.error('Session refresh error:', error)
         setState({
-          ...setUnauthenticatedState(),
-          error: 'Too many attempts. Please try again later.'
+          user: null,
+          session: null,
+          loading: false,
+          error: 'Failed to refresh session'
         })
         return false
+      } finally {
+        sessionCheckInFlightRef.current = null
       }
+    })()
 
-      setState(setUnauthenticatedState())
-      return false
-    } catch (error) {
-      console.error('Session refresh error:', error)
-      setState({
-        user: null,
-        session: null,
-        loading: false,
-        error: 'Failed to refresh session'
-      })
-      return false
-    } finally {
-      sessionCheckInFlightRef.current = false
-    }
+    sessionCheckInFlightRef.current = promise
+    return promise
   }
 
   const login = async (credentials: LoginRequest) => {

@@ -29,6 +29,9 @@ interface AvatarUploadData {
   fileSize: number;
 }
 
+/** Module-scoped dedup: one in-flight profile fetch per user across all useProfile() instances */
+const profileFetchInflight = new Map<string, Promise<ProfileData | undefined>>();
+
 export function useProfile() {
   const { user, refreshSession } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -37,8 +40,6 @@ export function useProfile() {
   const lastUserIdRef = useRef<string | null>(null);
   /** Block profile fetch after 401 until user identity changes (stops retry loop) */
   const profile401BlockRef = useRef(false);
-  /** Dedupe: only one profile fetch at a time across all consumers */
-  const fetchInFlightRef = useRef(false);
 
   // Clear error and 401 block when user/session changes (e.g. after re-login) so profile can be refetched
   useEffect(() => {
@@ -56,41 +57,56 @@ export function useProfile() {
   const fetchProfile = useCallback(async () => {
     if (!user) return;
     if (profile401BlockRef.current) return;
-    if (fetchInFlightRef.current) return;
 
-    fetchInFlightRef.current = true;
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/profile', { credentials: 'include' });
-
-      if (response.status === 401) {
-        profile401BlockRef.current = true;
-        setError('Session expired');
-        const restored = await refreshSession();
-        if (restored) {
-          profile401BlockRef.current = false;
-          setError(null);
-        }
-        return;
+    const existing = profileFetchInflight.get(user.id);
+    if (existing) {
+      setLoading(true);
+      try {
+        const data = await existing;
+        setProfile(data?.profile ?? null);
+        return data;
+      } finally {
+        setLoading(false);
       }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
-      }
-
-      const data: ProfileData = await response.json();
-      setProfile(data.profile);
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
-      fetchInFlightRef.current = false;
     }
+
+    const promise = (async (): Promise<ProfileData | undefined> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/profile', { credentials: 'include' });
+
+        if (response.status === 401) {
+          profile401BlockRef.current = true;
+          setError('Session expired');
+          const restored = await refreshSession();
+          if (restored) {
+            profile401BlockRef.current = false;
+            setError(null);
+          }
+          return undefined;
+        }
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch profile');
+        }
+
+        const data: ProfileData = await response.json();
+        setProfile(data.profile);
+        return data;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setLoading(false);
+        profileFetchInflight.delete(user.id);
+      }
+    })();
+
+    profileFetchInflight.set(user.id, promise);
+    return promise;
   }, [user, refreshSession]);
 
   /**
