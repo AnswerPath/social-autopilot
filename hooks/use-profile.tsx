@@ -68,7 +68,11 @@ export function useProfile() {
       if (response.status === 401) {
         profile401BlockRef.current = true;
         setError('Session expired');
-        await refreshSession();
+        const restored = await refreshSession();
+        if (restored) {
+          profile401BlockRef.current = false;
+          setError(null);
+        }
         return;
       }
 

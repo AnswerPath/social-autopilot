@@ -207,10 +207,8 @@ psql "postgresql://[user]:[password]@[host]:5432/postgres"
 #### Option C: Single consolidated migration (fresh project only)
 To apply the full schema in one go on a **new** Supabase project (e.g. when migrating to another project), run the consolidated migration once. Do not use it if you have already applied individual migrations.
 
-```bash
-# In Supabase SQL Editor or psql, run:
-\i supabase/migrations/00000000000000_consolidated_schema.sql
-```
+- **Supabase SQL Editor:** Open the file `supabase/migrations/00000000000000_consolidated_schema.sql`, copy its contents, and paste into the SQL Editor; alternatively use `supabase db push` via the CLI.
+- **psql:** Use `\i supabase/migrations/00000000000000_consolidated_schema.sql`. Note: `\i` is a psql meta-command and does **not** work in the SQL Editor.
 
 Seed data for development is separate: use `supabase/seed.sql` only in dev (see file for environment check).
 

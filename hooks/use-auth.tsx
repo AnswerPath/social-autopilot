@@ -7,7 +7,7 @@ interface AuthContextType extends AuthState {
   login: (credentials: LoginRequest) => Promise<void>
   register: (userData: RegisterRequest) => Promise<void>
   logout: () => Promise<void>
-  refreshSession: () => Promise<void>
+  refreshSession: () => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -40,8 +40,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     refreshSession()
   }, [])
 
-  const refreshSession = async () => {
-    if (sessionCheckInFlightRef.current) return
+  const refreshSession = async (): Promise<boolean> => {
+    if (sessionCheckInFlightRef.current) return false
     sessionCheckInFlightRef.current = true
 
     try {
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           loading: false,
           error: null
         })
-        return
+        return true
       }
 
       if (response.status === 401) {
@@ -84,18 +84,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
               loading: false,
               error: null
             })
+            return true
           } else {
             setState(setUnauthenticatedState())
+            return false
           }
         } else if (refreshResponse.status === 429) {
           setState({
             ...setUnauthenticatedState(),
             error: 'Too many attempts. Please try again later.'
           })
+          return false
         } else {
           setState(setUnauthenticatedState())
+          return false
         }
-        return
       }
 
       if (response.status === 429) {
@@ -103,10 +106,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
           ...setUnauthenticatedState(),
           error: 'Too many attempts. Please try again later.'
         })
-        return
+        return false
       }
 
       setState(setUnauthenticatedState())
+      return false
     } catch (error) {
       console.error('Session refresh error:', error)
       setState({
@@ -115,6 +119,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         loading: false,
         error: 'Failed to refresh session'
       })
+      return false
     } finally {
       sessionCheckInFlightRef.current = false
     }

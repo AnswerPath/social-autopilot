@@ -71,9 +71,21 @@ CREATE TABLE IF NOT EXISTS permission_overrides (
     is_active BOOLEAN DEFAULT TRUE
 );
 
--- Partial unique constraint for active overrides only (cannot use WHERE in table constraint)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_overrides_unique_active
-ON permission_overrides (user_id, permission, resource_type, resource_id)
+-- Partial unique constraint for active overrides only (NULLs in resource_type/resource_id
+-- are normalized via COALESCE so uniqueness is enforced; raw columns would not treat NULL = NULL).
+-- If upgrading: to find existing duplicate active rows for manual cleanup, run:
+--   SELECT user_id, permission, COALESCE(resource_type, '__NULL__'), COALESCE(resource_id, '__NULL__'), COUNT(*)
+--   FROM permission_overrides WHERE is_active = TRUE
+--   GROUP BY user_id, permission, COALESCE(resource_type, '__NULL__'), COALESCE(resource_id, '__NULL__')
+--   HAVING COUNT(*) > 1;
+DROP INDEX IF EXISTS idx_permission_overrides_unique_active;
+CREATE UNIQUE INDEX idx_permission_overrides_unique_active
+ON permission_overrides (
+  user_id,
+  permission,
+  COALESCE(resource_type, '__NULL__'),
+  COALESCE(resource_id, '__NULL__')
+)
 WHERE is_active = TRUE;
 
 -- Permission Audit Log Table
