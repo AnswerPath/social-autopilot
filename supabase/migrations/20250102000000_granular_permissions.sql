@@ -68,12 +68,25 @@ CREATE TABLE IF NOT EXISTS permission_overrides (
     granted_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     granted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     expires_at TIMESTAMP WITH TIME ZONE,
-    is_active BOOLEAN DEFAULT TRUE,
-    
-    -- Ensure unique user-permission-resource combinations for active overrides
-    UNIQUE(user_id, permission, resource_type, resource_id) 
-    WHERE is_active = TRUE
+    is_active BOOLEAN DEFAULT TRUE
 );
+
+-- Partial unique constraint for active overrides only (NULLs in resource_type/resource_id
+-- are normalized via COALESCE so uniqueness is enforced; raw columns would not treat NULL = NULL).
+-- If upgrading: to find existing duplicate active rows for manual cleanup, run:
+--   SELECT user_id, permission, COALESCE(resource_type, '__NULL__'), COALESCE(resource_id, '__NULL__'), COUNT(*)
+--   FROM permission_overrides WHERE is_active = TRUE
+--   GROUP BY user_id, permission, COALESCE(resource_type, '__NULL__'), COALESCE(resource_id, '__NULL__')
+--   HAVING COUNT(*) > 1;
+DROP INDEX IF EXISTS idx_permission_overrides_unique_active;
+CREATE UNIQUE INDEX idx_permission_overrides_unique_active
+ON permission_overrides (
+  user_id,
+  permission,
+  COALESCE(resource_type, '__NULL__'),
+  COALESCE(resource_id, '__NULL__')
+)
+WHERE is_active = TRUE;
 
 -- Permission Audit Log Table
 -- Tracks all permission checks and changes for audit purposes
@@ -152,7 +165,7 @@ CREATE POLICY "Admins can view all custom permissions" ON custom_permissions
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -160,7 +173,7 @@ CREATE POLICY "Admins can create custom permissions" ON custom_permissions
     FOR INSERT WITH CHECK (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -171,7 +184,7 @@ CREATE POLICY "Admins can update all custom permissions" ON custom_permissions
     FOR UPDATE USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -183,7 +196,7 @@ CREATE POLICY "Admins can view all user custom permissions" ON user_custom_permi
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -191,7 +204,7 @@ CREATE POLICY "Admins can manage user custom permissions" ON user_custom_permiss
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -203,7 +216,7 @@ CREATE POLICY "Admins can view all resource permissions" ON resource_permissions
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -211,7 +224,7 @@ CREATE POLICY "Admins can manage resource permissions" ON resource_permissions
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -223,7 +236,7 @@ CREATE POLICY "Admins can view all permission overrides" ON permission_overrides
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -231,7 +244,7 @@ CREATE POLICY "Admins can manage permission overrides" ON permission_overrides
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -243,7 +256,7 @@ CREATE POLICY "Admins can view all permission audit logs" ON permission_audit_lo
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -329,7 +342,7 @@ BEGIN
         ur.created_at as granted_at,
         NULL::TIMESTAMP WITH TIME ZONE as expires_at
     FROM user_roles ur
-    WHERE ur.user_id = p_user_id
+    WHERE ur.user_id = p_user_id::text
     AND ur.role IN ('ADMIN', 'EDITOR', 'VIEWER');
     
     -- Custom permissions

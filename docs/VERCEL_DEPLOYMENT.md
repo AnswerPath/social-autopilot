@@ -98,14 +98,20 @@ After fixing, try creating an account again and, if it still fails, use the logs
 If you see repeated **401 (Unauthorized)** on `GET /api/profile` and "User info" loading over and over after logging in:
 
 1. **Retry loop (fixed in app)**  
-   The app now stops retrying profile fetch after an auth error, so you should see at most one failure and a "Session expired" or error state instead of an infinite loop.
+   The app stops retrying profile fetch after a 401 and dedupes in-flight requests, so you should see at most one failure and a "Session expired" or error state instead of an infinite loop.
 
 2. **Why the profile API returns 401**  
    `/api/profile` uses the same auth as `/api/auth/session`: it reads `sb-auth-token` and `sb-session-id` from the request cookies and checks the session in the database. If you get 401 on profile but "logged in" in the UI, usually:
    - **Cookies not sent**: Ensure you're on the same origin (no cross-origin calls to a different domain). Cookies are `httpOnly`, `secure` in production, `sameSite: 'lax'`, `path: '/'`.
    - **Supabase URL / redirects**: In Supabase **Authentication → URL Configuration**, set **Site URL** and **Redirect URLs** to your exact Vercel URL (e.g. `https://your-app.vercel.app`). Mismatch can break auth and session creation.
    - **Session not in DB**: On login, the app creates a row in `user_sessions`. If migrations weren’t applied or the table is missing, `getCurrentUser` will return null and profile will 401. Run migrations (see section 3 above).
-   - **Preview URLs**: On Vercel preview deployments (e.g. `*-git-*-vercel.app`), ensure Supabase **Redirect URLs** include that pattern or the exact preview URL so cookies and redirects work.
+   - **Preview URLs**: See subsection below.
 
-3. **Check in browser**  
-   In DevTools → Application → Cookies, confirm `sb-auth-token` and `sb-session-id` are present for your Vercel domain after login. If they’re missing, login or cookie settings (e.g. domain/path) are wrong.
+3. **Preview deployments and cookies (important)**  
+   Auth cookies are **host-scoped**: they are only sent to the exact host that set them (e.g. `your-app.vercel.app` or `your-app-git-branch-xxx.vercel.app`). So:
+   - If you log in on **production**, then open a **preview** URL (e.g. `https://v0-social-autopilot-git-vercel-react-server-c-71cc84-answerpath.vercel.app`), the browser does **not** send those cookies to the preview host, so `/api/auth/session` and `/api/profile` both return 401. You are "logged in" only on the host where you signed in.
+   - To use auth on a **preview** URL you must **log in on that preview URL**. In Supabase **Authentication → URL Configuration**, add that preview URL to **Redirect URLs** (your exact preview deployment URL). You can add multiple redirect URLs (one per preview if needed).
+   - **Quick check**: In DevTools → Application → Cookies, select the **current** host (the URL in the address bar). If `sb-auth-token` and `sb-session-id` are missing for that host, you are not logged in on this host or login redirected you to a different host.
+
+4. **Check in browser**  
+   In DevTools → Application → Cookies, select the **exact host** you're on. Confirm `sb-auth-token` and `sb-session-id` are present for that host after login. If they’re missing, log in again on this same URL and ensure Supabase Redirect URLs include it.

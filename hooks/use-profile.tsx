@@ -29,19 +29,26 @@ interface AvatarUploadData {
   fileSize: number;
 }
 
+/** Module-scoped dedup: one in-flight profile fetch per user across all useProfile() instances */
+const profileFetchInflight = new Map<string, Promise<ProfileData | undefined>>();
+
 export function useProfile() {
   const { user, refreshSession } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
+  /** Block profile fetch after 401 until user identity changes (stops retry loop) */
+  const profile401BlockRef = useRef(false);
 
-  // Clear error when user/session changes (e.g. after re-login) so profile can be refetched
+  // Reset stored profile and 401 block when auth user changes so stale async results cannot overwrite state
   useEffect(() => {
     const userId = user?.id ?? null;
     if (userId !== lastUserIdRef.current) {
       lastUserIdRef.current = userId;
-      setError((prev) => (userId && prev ? null : prev));
+      profile401BlockRef.current = false;
+      setProfile(null);
+      setError(null);
     }
   }, [user?.id]);
 
@@ -50,33 +57,77 @@ export function useProfile() {
    */
   const fetchProfile = useCallback(async () => {
     if (!user) return;
+    if (profile401BlockRef.current) return;
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/profile', { credentials: 'include' });
-
-      if (response.status === 401) {
-        setError('Session expired');
-        await refreshSession();
-        return;
+    const existing = profileFetchInflight.get(user.id);
+    if (existing) {
+      setLoading(true);
+      try {
+        const data = await existing;
+        if (lastUserIdRef.current === (user?.id ?? null)) {
+          setProfile(data?.profile ?? null);
+        }
+        return data;
+      } finally {
+        setLoading(false);
       }
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
-      }
-
-      const data: ProfileData = await response.json();
-      setProfile(data.profile);
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
     }
+
+    const promise = (async (): Promise<ProfileData | undefined> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/profile', { credentials: 'include' });
+
+        if (response.status === 401) {
+          profile401BlockRef.current = true;
+          setError('Session expired');
+          const restored = await refreshSession();
+          if (restored) {
+            profile401BlockRef.current = false;
+            setError(null);
+            const retryResponse = await fetch('/api/profile', { credentials: 'include' });
+            if (retryResponse.status === 401) {
+              profile401BlockRef.current = true;
+              setError('Session expired');
+              return undefined;
+            }
+            if (!retryResponse.ok) {
+              throw new Error('Failed to fetch profile');
+            }
+            const retryData: ProfileData = await retryResponse.json();
+            if (lastUserIdRef.current === user.id) {
+              setProfile(retryData.profile);
+            }
+            return retryData;
+          }
+          return undefined;
+        }
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch profile');
+        }
+
+        const data: ProfileData = await response.json();
+        if (lastUserIdRef.current === user.id) {
+          setProfile(data.profile);
+        }
+        return data;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        if (lastUserIdRef.current === (user?.id ?? null)) {
+          setError(errorMessage);
+        }
+        throw err;
+      } finally {
+        setLoading(false);
+        profileFetchInflight.delete(user.id);
+      }
+    })();
+
+    profileFetchInflight.set(user.id, promise);
+    return promise;
   }, [user, refreshSession]);
 
   /**
@@ -104,11 +155,15 @@ export function useProfile() {
       }
 
       const data = await response.json();
-      setProfile(data.profile);
+      if (lastUserIdRef.current === (user?.id ?? null)) {
+        setProfile(data.profile);
+      }
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
+      if (lastUserIdRef.current === (user?.id ?? null)) {
+        setError(errorMessage);
+      }
       throw err;
     } finally {
       setLoading(false);
@@ -170,7 +225,9 @@ export function useProfile() {
       return updateResponse;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
+      if (lastUserIdRef.current === (user?.id ?? null)) {
+        setError(errorMessage);
+      }
       throw err;
     } finally {
       setLoading(false);
@@ -198,14 +255,16 @@ export function useProfile() {
       }
 
       // Update local state
-      if (profile) {
+      if (profile && lastUserIdRef.current === (user?.id ?? null)) {
         setProfile({ ...profile, avatar_url: undefined });
       }
 
       return await response.json();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
+      if (lastUserIdRef.current === (user?.id ?? null)) {
+        setError(errorMessage);
+      }
       throw err;
     } finally {
       setLoading(false);
