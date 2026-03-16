@@ -1,6 +1,7 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/use-auth'
 import { usePermission, useRole } from '@/hooks/use-auth'
 import { Permission, UserRole } from '@/lib/auth-types'
@@ -21,9 +22,17 @@ export function ProtectedRoute({
   fallback,
   redirectTo = '/auth'
 }: ProtectedRouteProps) {
+  const router = useRouter()
   const { user, loading } = useAuth()
   const hasPermission = usePermission(requiredPermission || '')
   const hasRole = useRole(requiredRole || '')
+
+  // Redirect to auth when unauthenticated (client-side navigation to avoid full reload)
+  useEffect(() => {
+    if (!loading && !user && !fallback) {
+      router.replace(redirectTo)
+    }
+  }, [loading, user, fallback, redirectTo, router])
 
   // Show loading state while checking authentication
   if (loading) {
@@ -37,13 +46,11 @@ export function ProtectedRoute({
     )
   }
 
-  // Check if user is authenticated
+  // Check if user is authenticated (redirect triggered in useEffect)
   if (!user) {
     if (fallback) {
       return <>{fallback}</>
     }
-    // Redirect to auth page
-    window.location.href = redirectTo
     return null
   }
 
