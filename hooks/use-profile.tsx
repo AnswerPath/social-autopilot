@@ -35,12 +35,17 @@ export function useProfile() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastUserIdRef = useRef<string | null>(null);
+  /** Block profile fetch after 401 until user identity changes (stops retry loop) */
+  const profile401BlockRef = useRef(false);
+  /** Dedupe: only one profile fetch at a time across all consumers */
+  const fetchInFlightRef = useRef(false);
 
-  // Clear error when user/session changes (e.g. after re-login) so profile can be refetched
+  // Clear error and 401 block when user/session changes (e.g. after re-login) so profile can be refetched
   useEffect(() => {
     const userId = user?.id ?? null;
     if (userId !== lastUserIdRef.current) {
       lastUserIdRef.current = userId;
+      profile401BlockRef.current = false;
       setError((prev) => (userId && prev ? null : prev));
     }
   }, [user?.id]);
@@ -50,7 +55,10 @@ export function useProfile() {
    */
   const fetchProfile = useCallback(async () => {
     if (!user) return;
+    if (profile401BlockRef.current) return;
+    if (fetchInFlightRef.current) return;
 
+    fetchInFlightRef.current = true;
     setLoading(true);
     setError(null);
 
@@ -58,6 +66,7 @@ export function useProfile() {
       const response = await fetch('/api/profile', { credentials: 'include' });
 
       if (response.status === 401) {
+        profile401BlockRef.current = true;
         setError('Session expired');
         await refreshSession();
         return;
@@ -76,6 +85,7 @@ export function useProfile() {
       throw err;
     } finally {
       setLoading(false);
+      fetchInFlightRef.current = false;
     }
   }, [user, refreshSession]);
 

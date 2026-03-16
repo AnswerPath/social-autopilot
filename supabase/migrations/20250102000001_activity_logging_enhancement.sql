@@ -127,7 +127,7 @@ CREATE POLICY "Admins can view all activity logs" ON activity_logs
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -138,7 +138,7 @@ CREATE POLICY "Admins can manage activity logs" ON activity_logs
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -147,7 +147,7 @@ CREATE POLICY "Admins can view activity log stats" ON activity_log_stats
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -159,7 +159,7 @@ CREATE POLICY "Admins can view retention policies" ON activity_log_retention_pol
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -167,7 +167,7 @@ CREATE POLICY "Admins can manage retention policies" ON activity_log_retention_p
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
@@ -179,7 +179,7 @@ CREATE POLICY "Admins can view all exports" ON activity_log_exports
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid() AND role = 'ADMIN'
+            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
         )
     );
 
