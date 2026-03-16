@@ -175,8 +175,7 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
     })
 
     if (error || !data.session) {
-      // Refresh failed, clear cookies
-      clearAuthCookies()
+      // Refresh failed; do not clear cookies so client can retry or user can re-auth
       return { success: false }
     }
 

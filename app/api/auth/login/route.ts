@@ -110,37 +110,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create session record - use direct approach for reliability
+    // Create session record - required so getCurrentUser() can resolve the user
     const sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-    
-    try {
-      const { error: sessionError } = await getSupabaseAdmin()
-        .from('user_sessions')
-        .insert({
-          session_id: sessionId,
-          user_id: data.user.id,
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-          expires_at: new Date(data.session.expires_at * 1000).toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          last_activity: new Date().toISOString(),
-          is_active: true,
-          ip_address:
-            (req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-             req.headers.get('x-real-ip') ||
-             'unknown'),
-          user_agent: req.headers.get('user-agent') || 'unknown',
-          device_info: {}
-        })
-      
-      if (sessionError) {
-        console.error('Failed to create session:', sessionError)
-      } else {
-        console.log('✅ Session created successfully:', sessionId)
-      }
-    } catch (sessionError) {
+
+    const { error: sessionError } = await getSupabaseAdmin()
+      .from('user_sessions')
+      .insert({
+        session_id: sessionId,
+        user_id: data.user.id,
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        expires_at: new Date(data.session.expires_at * 1000).toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+        is_active: true,
+        ip_address:
+          (req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+           req.headers.get('x-real-ip') ||
+           'unknown'),
+        user_agent: req.headers.get('user-agent') || 'unknown',
+        device_info: {}
+      })
+
+    if (sessionError) {
       console.error('Failed to create session:', sessionError)
+      return NextResponse.json(
+        {
+          error: createAuthError(
+            AuthErrorType.NETWORK_ERROR,
+            'Session could not be created. Please try again or contact support.'
+          )
+        },
+        { status: 500 }
+      )
     }
 
     // Get user role from database (default to VIEWER if not set)
