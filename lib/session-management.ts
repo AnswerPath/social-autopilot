@@ -1,6 +1,18 @@
+import { isIP } from 'net';
 import { NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { AuthErrorType } from '@/lib/auth-types';
+
+/**
+ * `user_sessions.ip_address` is PostgreSQL INET — only valid IP literals or null.
+ * Raw values like "unknown" or empty must not be inserted.
+ */
+export function normalizeClientIpForInet(raw: string): string | null {
+  if (!raw || raw === 'unknown') return null;
+  const trimmed = raw.trim();
+  if (isIP(trimmed) !== 0) return trimmed;
+  return null;
+}
 
 // Enhanced session management utilities
 export interface SessionDetails {
@@ -102,9 +114,9 @@ export async function createEnhancedSession(
   try {
     const id = sessionId || generateSecureSessionId();
     const userAgent = request.headers.get('user-agent') || 'unknown';
-    const ipAddress = getClientIP(request);
-    const location = await getLocationFromIP(ipAddress);
-    
+    const ipRaw = getClientIP(request);
+    const ipAddress = normalizeClientIpForInet(ipRaw);
+
     const sessionData = {
       session_id: id,
       user_id: userId,
@@ -116,9 +128,13 @@ export async function createEnhancedSession(
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
     };
 
-    await getSupabaseAdmin()
+    const { error: insertError } = await getSupabaseAdmin()
       .from('user_sessions')
       .insert(sessionData);
+
+    if (insertError) {
+      throw new Error(`user_sessions insert failed: ${insertError.message}`);
+    }
 
     // Check for security events
     await checkSessionSecurity(userId, sessionData, request);
@@ -143,22 +159,27 @@ export async function updateSessionActivity(
       return { success: false };
     }
 
-    const newIP = getClientIP(request);
+    const newIPRaw = getClientIP(request);
+    const newIPInet = normalizeClientIpForInet(newIPRaw);
     const newUserAgent = request.headers.get('user-agent') || 'unknown';
 
     // Check for suspicious activity
     let securityAlert: SessionSecurityEvent | undefined;
 
-    if (session.ip_address !== newIP) {
+    const oldNorm =
+      session.ip_address != null
+        ? normalizeClientIpForInet(String(session.ip_address))
+        : null;
+    if (oldNorm !== newIPInet) {
       securityAlert = {
         event_type: 'unusual_location',
         session_id: sessionId,
         user_id: session.user_id,
         details: {
           old_ip: session.ip_address,
-          new_ip: newIP,
+          new_ip: newIPRaw,
           old_location: session.location,
-          new_location: await getLocationFromIP(newIP)
+          new_location: await getLocationFromIP(newIPRaw)
         },
         severity: 'medium',
         created_at: new Date().toISOString()
@@ -179,15 +200,20 @@ export async function updateSessionActivity(
       };
     }
 
-    // Update session
-    await getSupabaseAdmin()
+    // Update session (INET column must receive null or a valid IP literal)
+    const { error: updateError } = await getSupabaseAdmin()
       .from('user_sessions')
       .update({
         last_activity: new Date().toISOString(),
-        ip_address: newIP,
+        ip_address: newIPInet,
         user_agent: newUserAgent
       })
       .eq('session_id', sessionId);
+
+    if (updateError) {
+      console.error('user_sessions update failed:', updateError);
+      return { success: false };
+    }
 
     // Log security event if detected
     if (securityAlert) {

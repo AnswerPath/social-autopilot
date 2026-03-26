@@ -15,6 +15,7 @@ import {
   PermissionAuditEntry
 } from '@/lib/auth-types'
 import { getCurrentUserDev } from '@/lib/auth-dev'
+import { normalizeClientIpForInet } from '@/lib/session-management'
 
 // Cookie names for authentication
 const AUTH_COOKIE_NAME = 'sb-auth-token'
@@ -100,14 +101,37 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       .eq('session_id', sessionId)
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
 
-    if (!sessionInfo) {
-      return null
+    let resolvedSession = sessionInfo
+
+    if (!resolvedSession) {
+      console.warn('[auth] Valid JWT but no user_sessions row; attempting repair', {
+        userId: user.id,
+        sessionId
+      })
+      try {
+        const { createEnhancedSession } = await import('@/lib/session-management')
+        await createEnhancedSession(user.id, request, sessionId)
+      } catch (repairError) {
+        console.error('[auth] Session repair failed:', repairError)
+        return null
+      }
+      const { data: repaired } = await getSupabaseAdmin()
+        .from('user_sessions')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (!repaired) {
+        return null
+      }
+      resolvedSession = repaired
     }
 
     // Check if session has expired
-    if (new Date(sessionInfo.expires_at) < new Date()) {
+    if (new Date(resolvedSession.expires_at) < new Date()) {
       await deactivateSession(sessionId)
       return null
     }
@@ -246,6 +270,12 @@ export async function createUserSession(
       ? new Date(session.expires_at * 1000)
       : new Date(now.getTime() + SESSION_CONFIG.sessionIdExpiry * 1000)
 
+    const rawIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      request.headers.get('cf-connecting-ip') ||
+      'unknown'
+
     const fallbackSessionInfo = {
       session_id: sessionId,
       user_id: userId,
@@ -253,10 +283,7 @@ export async function createUserSession(
       created_at: now.toISOString(),
       last_activity: now.toISOString(),
       is_active: true,
-      ip_address:
-        request.headers.get('x-forwarded-for') ||
-        request.headers.get('x-real-ip') ||
-        'unknown',
+      ip_address: normalizeClientIpForInet(rawIp),
       user_agent: request.headers.get('user-agent') || 'unknown'
     }
 
