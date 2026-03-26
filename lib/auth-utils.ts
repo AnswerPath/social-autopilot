@@ -169,6 +169,16 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
       return { success: false }
     }
 
+    const { data: sessionRow } = await getSupabaseAdmin()
+      .from('user_sessions')
+      .select('is_active')
+      .eq('session_id', sessionId)
+      .single()
+
+    if (!sessionRow || sessionRow.is_active !== true) {
+      return { success: false }
+    }
+
     // Refresh the token with Supabase
     const { data, error } = await getSupabaseAdmin().auth.refreshSession({
       refresh_token: refreshToken
@@ -229,35 +239,30 @@ export async function createUserSession(
   } catch (error) {
     console.error('Error creating enhanced session, falling back to basic session:', error)
 
-    // Fallback to basic session creation that matches the historic login route
-    // behavior, including storing access/refresh tokens.
+    // Fallback: minimal row matching user_sessions schema (no token columns).
     const sessionId = generateSessionId()
     const now = new Date()
     const expiresAt = session?.expires_at
       ? new Date(session.expires_at * 1000)
       : new Date(now.getTime() + SESSION_CONFIG.sessionIdExpiry * 1000)
 
-    const sessionInfo = {
+    const fallbackSessionInfo = {
       session_id: sessionId,
       user_id: userId,
-      access_token: session?.access_token,
-      refresh_token: session?.refresh_token,
       expires_at: expiresAt.toISOString(),
       created_at: now.toISOString(),
-      updated_at: now.toISOString(),
       last_activity: now.toISOString(),
       is_active: true,
       ip_address:
         request.headers.get('x-forwarded-for') ||
         request.headers.get('x-real-ip') ||
         'unknown',
-      user_agent: request.headers.get('user-agent') || 'unknown',
-      device_info: {}
+      user_agent: request.headers.get('user-agent') || 'unknown'
     }
 
     const { error: insertError } = await getSupabaseAdmin()
       .from('user_sessions')
-      .insert(sessionInfo)
+      .insert(fallbackSessionInfo)
 
     if (insertError) {
       console.error('Failed to create basic session record:', insertError)

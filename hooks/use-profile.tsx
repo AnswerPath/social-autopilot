@@ -65,9 +65,11 @@ export function useProfile() {
     const newUserId = user?.id ?? null;
     const previousUserId = lastUserIdRef.current;
     if (newUserId !== previousUserId) {
-      // Clear any 401 block for the previous user id so new sessions aren't blocked
       if (previousUserId) {
         profile401BlockByUserId.delete(previousUserId);
+      }
+      if (newUserId) {
+        profile401BlockByUserId.delete(newUserId);
       }
       lastUserIdRef.current = newUserId;
       setProfile(null);
@@ -81,14 +83,6 @@ export function useProfile() {
    */
   const fetchProfile = useCallback(async () => {
     if (!user) return;
-    const blockUntil = profile401BlockByUserId.get(user.id);
-    const now = Date.now();
-    if (blockUntil && blockUntil > now) {
-      return;
-    }
-    if (blockUntil && blockUntil <= now) {
-      profile401BlockByUserId.delete(user.id);
-    }
 
     const existing = profileFetchInflight.get(user.id);
     if (existing) {
@@ -114,6 +108,15 @@ export function useProfile() {
       }
     }
 
+    const blockUntil = profile401BlockByUserId.get(user.id);
+    const now = Date.now();
+    if (blockUntil && blockUntil > now) {
+      return;
+    }
+    if (blockUntil && blockUntil <= now) {
+      profile401BlockByUserId.delete(user.id);
+    }
+
     const startedFor = user.id;
     setLoading(true);
     setError(null);
@@ -123,14 +126,22 @@ export function useProfile() {
         const response = await fetch('/api/profile', { credentials: 'include' });
 
         if (response.status === 401) {
-          // Set or extend a cooldown to avoid tight 401 retry loops.
+          if (lastUserIdRef.current !== startedFor) {
+            return undefined;
+          }
           scheduleProfile401Backoff(user.id);
           setError('Session expired');
           const restored = await refreshSession();
+          if (lastUserIdRef.current !== startedFor) {
+            return undefined;
+          }
           if (restored) {
             profile401BlockByUserId.delete(user.id);
             setError(null);
             const retryResponse = await fetch('/api/profile', { credentials: 'include' });
+            if (lastUserIdRef.current !== startedFor) {
+              return undefined;
+            }
             if (retryResponse.status === 401) {
               scheduleProfile401Backoff(user.id);
               setError('Session expired');
@@ -140,7 +151,7 @@ export function useProfile() {
               throw new Error('Failed to fetch profile');
             }
             const retryData: ProfileData = await retryResponse.json();
-            if (lastUserIdRef.current === user.id) {
+            if (lastUserIdRef.current === startedFor) {
               setProfile(retryData.profile);
             }
             return retryData;
@@ -153,13 +164,13 @@ export function useProfile() {
         }
 
         const data: ProfileData = await response.json();
-        if (lastUserIdRef.current === user.id) {
+        if (lastUserIdRef.current === startedFor) {
           setProfile(data.profile);
         }
         return data;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        if (lastUserIdRef.current === (user?.id ?? null)) {
+        if (lastUserIdRef.current === startedFor) {
           setError(errorMessage);
         }
         throw err;
