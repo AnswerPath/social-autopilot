@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin, getSupabaseServiceKeyMisconfigurationMessage } from '@/lib/supabase'
 import { 
   LoginRequest, 
   AuthError, 
@@ -111,17 +111,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session record - required so getCurrentUser() can resolve the user
+    const keyMisconfig = getSupabaseServiceKeyMisconfigurationMessage()
+    if (keyMisconfig) {
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, keyMisconfig) },
+        { status: 500 }
+      )
+    }
+
     let sessionId: string
     try {
       sessionId = await createUserSession(data.user.id, data.session, req)
     } catch (sessionError) {
       console.error('Failed to create session:', sessionError)
+      const msg =
+        sessionError instanceof Error ? sessionError.message : String(sessionError)
+      const rls =
+        msg.includes('row-level security') ||
+        msg.includes('violates row-level security') ||
+        msg.includes('42501')
+      const detail = rls
+        ? (getSupabaseServiceKeyMisconfigurationMessage() ??
+          'Session row could not be saved (RLS). Confirm SUPABASE_SERVICE_ROLE_KEY is the service_role secret, not the anon key.')
+        : 'Session could not be created. Please try again or contact support.'
       return NextResponse.json(
         {
-          error: createAuthError(
-            AuthErrorType.NETWORK_ERROR,
-            'Session could not be created. Please try again or contact support.'
-          )
+          error: createAuthError(AuthErrorType.NETWORK_ERROR, detail)
         },
         { status: 500 }
       )

@@ -3,10 +3,10 @@ import {
   createEnhancedSession,
   normalizeClientIpForInet
 } from '@/lib/session-management'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServiceRoleClient } from '@/lib/supabase'
 
 jest.mock('@/lib/supabase', () => ({
-  getSupabaseAdmin: jest.fn()
+  createSupabaseServiceRoleClient: jest.fn()
 }))
 
 function requestWithForwardedFor(ip: string) {
@@ -37,7 +37,7 @@ describe('createEnhancedSession', () => {
   })
 
   it('throws when user_sessions insert returns an error', async () => {
-    ;(getSupabaseAdmin as jest.Mock).mockReturnValue({
+    ;(createSupabaseServiceRoleClient as jest.Mock).mockReturnValue({
       from: jest.fn(() => ({
         insert: jest
           .fn()
@@ -58,7 +58,7 @@ describe('createEnhancedSession', () => {
   })
 
   it('returns session id when insert succeeds', async () => {
-    ;(getSupabaseAdmin as jest.Mock).mockReturnValue({
+    ;(createSupabaseServiceRoleClient as jest.Mock).mockReturnValue({
       from: jest.fn(() => ({
         insert: jest.fn().mockResolvedValue({ error: null }),
         select: jest.fn(() => ({

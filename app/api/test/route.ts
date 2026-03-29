@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServiceRoleClient, getSupabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     
     // Test 4: Check if user_sessions table exists
     console.log('🔍 Testing user_sessions table...')
-    const { data: sessions, error: sessionsError } = await supabase
+    const { data: sessions, error: sessionsError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('id')
       .limit(1)

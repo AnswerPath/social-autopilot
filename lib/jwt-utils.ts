@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient, getSupabaseAdmin } from '@/lib/supabase';
 import { AuthErrorType } from '@/lib/auth-types';
 
 // JWT token validation and management utilities
@@ -180,7 +180,7 @@ export async function revokeAllUserTokens(userId: string): Promise<TokenRevocati
     }
 
     // Deactivate all sessions in database
-    await getSupabaseAdmin()
+    await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ is_active: false })
       .eq('user_id', userId);

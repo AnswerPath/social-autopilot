@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServiceRoleClient, getSupabaseAdmin } from '@/lib/supabase'
 import { 
   AuthUser, 
   UserRole, 
@@ -95,7 +95,7 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
     }
 
     // Check if session is still valid in our database
-    const { data: sessionInfo } = await getSupabaseAdmin()
+    const { data: sessionInfo } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('session_id', sessionId)
@@ -117,7 +117,7 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
         console.error('[auth] Session repair failed:', repairError)
         return null
       }
-      const { data: repaired } = await getSupabaseAdmin()
+      const { data: repaired } = await createSupabaseServiceRoleClient()
         .from('user_sessions')
         .select('*')
         .eq('session_id', sessionId)
@@ -193,7 +193,7 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
       return { success: false }
     }
 
-    const { data: sessionRow } = await getSupabaseAdmin()
+    const { data: sessionRow } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('is_active')
       .eq('session_id', sessionId)
@@ -287,7 +287,7 @@ export async function createUserSession(
       user_agent: request.headers.get('user-agent') || 'unknown'
     }
 
-    const { error: insertError } = await getSupabaseAdmin()
+    const { error: insertError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .insert(fallbackSessionInfo)
 
@@ -304,7 +304,7 @@ export async function createUserSession(
  * Update session activity timestamp
  */
 async function updateSessionActivity(sessionId: string): Promise<void> {
-  await getSupabaseAdmin()
+  await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ 
       last_activity: new Date().toISOString() 
@@ -320,7 +320,7 @@ async function updateSessionTokens(
   accessToken: string, 
   refreshToken: string
 ): Promise<void> {
-  await getSupabaseAdmin()
+  await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ 
       last_activity: new Date().toISOString(),
@@ -335,7 +335,7 @@ async function updateSessionTokens(
  * Deactivate a session
  */
 async function deactivateSession(sessionId: string): Promise<void> {
-  await getSupabaseAdmin()
+  await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('session_id', sessionId)
@@ -345,7 +345,7 @@ async function deactivateSession(sessionId: string): Promise<void> {
  * Deactivate all sessions for a user (except current one)
  */
 export async function deactivateOtherSessions(userId: string, currentSessionId: string): Promise<void> {
-  await getSupabaseAdmin()
+  await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('user_id', userId)
@@ -356,7 +356,7 @@ export async function deactivateOtherSessions(userId: string, currentSessionId: 
  * Get all active sessions for a user
  */
 export async function getUserSessions(userId: string): Promise<SessionInfo[]> {
-  const { data } = await getSupabaseAdmin()
+  const { data } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .select('*')
     .eq('user_id', userId)

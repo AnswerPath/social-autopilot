@@ -1,6 +1,6 @@
 import { isIP } from 'net';
 import { NextRequest } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient } from '@/lib/supabase';
 import { AuthErrorType } from '@/lib/auth-types';
 
 /**
@@ -54,7 +54,7 @@ export interface SessionSecurityEvent {
  */
 export async function getSessionDetails(sessionId: string): Promise<SessionDetails | null> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('session_id', sessionId)
@@ -81,7 +81,7 @@ export async function getSessionDetails(sessionId: string): Promise<SessionDetai
  */
 export async function getUserSessionsDetailed(userId: string): Promise<SessionDetails[]> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('user_id', userId)
@@ -128,7 +128,7 @@ export async function createEnhancedSession(
       expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
     };
 
-    const { error: insertError } = await getSupabaseAdmin()
+    const { error: insertError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .insert(sessionData);
 
@@ -201,7 +201,7 @@ export async function updateSessionActivity(
     }
 
     // Update session (INET column must receive null or a valid IP literal)
-    const { error: updateError } = await getSupabaseAdmin()
+    const { error: updateError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({
         last_activity: new Date().toISOString(),
@@ -232,7 +232,7 @@ export async function updateSessionActivity(
  */
 export async function deactivateSession(sessionId: string, reason?: string): Promise<boolean> {
   try {
-    await getSupabaseAdmin()
+    await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ 
         is_active: false,
@@ -269,7 +269,7 @@ export async function deactivateOtherSessions(
   reason?: string
 ): Promise<number> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ 
         is_active: false,
@@ -309,7 +309,7 @@ export async function deactivateOtherSessions(
  */
 export async function getSessionAnalytics(userId: string): Promise<SessionAnalytics> {
   try {
-    const { data: sessions } = await getSupabaseAdmin()
+    const { data: sessions } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('user_id', userId);
@@ -374,7 +374,7 @@ export async function getSessionAnalytics(userId: string): Promise<SessionAnalyt
  */
 export async function cleanupExpiredSessions(): Promise<number> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ is_active: false })
       .lt('expires_at', new Date().toISOString())
@@ -448,7 +448,7 @@ async function checkSessionSecurity(
 ): Promise<void> {
   try {
     // Check for concurrent session limits
-    const { data: activeSessions } = await getSupabaseAdmin()
+    const { data: activeSessions } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('session_id')
       .eq('user_id', userId)
