@@ -17,7 +17,7 @@ const mockSingle = jest.fn()
 const mockUpsert = jest.fn()
 
 jest.mock('@/lib/supabase', () => ({
-  getSupabaseAdmin: jest.fn(() => ({
+  createSupabaseServiceRoleClient: jest.fn(() => ({
     from: mockFrom,
   })),
 }))

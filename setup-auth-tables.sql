@@ -87,6 +87,26 @@ CREATE TRIGGER update_user_roles_updated_at
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Admin check for RLS (SECURITY DEFINER avoids infinite recursion when used from user_roles policies)
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = (SELECT auth.uid()::text)
+      AND role = 'ADMIN'
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_current_user_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO service_role;
+
 -- Enable RLS
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
 
@@ -98,12 +118,7 @@ DROP POLICY IF EXISTS "Admins can view all roles" ON user_roles;
 CREATE POLICY "Users can view their own role" ON user_roles
     FOR SELECT USING (auth.uid()::text = user_id);
 CREATE POLICY "Admins can view all roles" ON user_roles
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
-        )
-    );
+    FOR SELECT USING (public.is_current_user_admin());
 
 -- Grant permissions
 GRANT ALL ON user_roles TO authenticated;
@@ -148,12 +163,7 @@ DROP POLICY IF EXISTS "Admins can view all permissions" ON user_permissions;
 CREATE POLICY "Users can view their own permissions" ON user_permissions
     FOR SELECT USING (auth.uid()::text = user_id);
 CREATE POLICY "Admins can view all permissions" ON user_permissions
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM user_roles 
-            WHERE user_id = auth.uid()::text AND role = 'ADMIN'
-        )
-    );
+    FOR SELECT USING (public.is_current_user_admin());
 
 -- Grant permissions
 GRANT ALL ON user_permissions TO authenticated;

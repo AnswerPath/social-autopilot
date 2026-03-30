@@ -34,6 +34,12 @@ jest.mock('@/lib/session-management', () => {
   }
 })
 
+function mockUserSessionsTable() {
+  return {
+    insert: (...args: unknown[]) => mockUserSessionsInsert(...args),
+  }
+}
+
 jest.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     auth: {
@@ -41,9 +47,7 @@ jest.mock('@/lib/supabase', () => ({
     },
     from: (table: string) => {
       if (table === 'user_sessions') {
-        return {
-          insert: (...args: unknown[]) => mockUserSessionsInsert(...args),
-        }
+        return mockUserSessionsTable()
       }
       return {
         select: jest.fn().mockReturnThis(),
@@ -52,6 +56,19 @@ jest.mock('@/lib/supabase', () => ({
       }
     },
   })),
+  createSupabaseServiceRoleClient: jest.fn(() => ({
+    from: (table: string) => {
+      if (table === 'user_sessions') {
+        return mockUserSessionsTable()
+      }
+      return {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: null, error: null }),
+      }
+    },
+  })),
+  getSupabaseServiceKeyMisconfigurationMessage: jest.fn(() => null),
 }))
 
 function refreshPostRequest() {

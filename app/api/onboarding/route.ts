@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServiceRoleClient } from '@/lib/supabase'
 import { getCurrentUser, createAuthError } from '@/lib/auth-utils'
 import { AuthErrorType } from '@/lib/auth-types'
 import { ONBOARDING_STEPS } from '@/lib/onboarding'
@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-    const { data: profile, error } = await supabaseAdmin
+    const db = createSupabaseServiceRoleClient()
+    const { data: profile, error } = await db
       .from('user_profiles')
       .select('onboarding_step, onboarding_completed_at, tutorial_completed_at, show_contextual_tooltips')
       .eq('user_id', user.id)
@@ -82,10 +82,10 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}))
-    const supabaseAdmin = getSupabaseAdmin()
+    const db = createSupabaseServiceRoleClient()
 
     if (UpdateSchema.resetTutorial(body.resetTutorial)) {
-      const { error } = await supabaseAdmin
+      const { error } = await db
         .from('user_profiles')
         .upsert(
           {
@@ -119,7 +119,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await db
       .from('user_profiles')
       .upsert({ user_id: user.id, ...updates }, { onConflict: 'user_id' })
 

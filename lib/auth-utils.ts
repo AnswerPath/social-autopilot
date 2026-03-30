@@ -15,7 +15,7 @@ import {
   PermissionAuditEntry
 } from '@/lib/auth-types'
 import { getCurrentUserDev } from '@/lib/auth-dev'
-import { normalizeClientIpForInet } from '@/lib/session-management'
+import { buildUserSessionInsertRow, normalizeClientIpForInet } from '@/lib/session-management'
 
 // Cookie names for authentication
 const AUTH_COOKIE_NAME = 'sb-auth-token'
@@ -152,15 +152,19 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       await updateSessionActivity(sessionId)
     }
 
+    // Use a fresh service-role client so DB reads are not affected by a poisoned
+    // getSupabaseAdmin() singleton (e.g. after signInWithPassword on that client).
+    const db = createSupabaseServiceRoleClient()
+
     // Get user profile and role from database
-    const { data: profile } = await getSupabaseAdmin()
+    const { data: profile } = await db
       .from('user_profiles')
       .select('*')
       .eq('user_id', user.id)
       .single()
 
     // Get user role from database (default to VIEWER if not set)
-    const { data: roleData } = await getSupabaseAdmin()
+    const { data: roleData } = await db
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -219,8 +223,8 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
       return { success: false }
     }
 
-    // Update session in database
-    await updateSessionTokens(sessionId, data.session.access_token, data.session.refresh_token)
+    // Bump session activity in DB (tokens stay in httpOnly cookies only; user_sessions has no token columns)
+    await updateSessionTokens(sessionId)
 
     // Set new cookies
     setAuthCookies(data.session)
@@ -276,16 +280,15 @@ export async function createUserSession(
       request.headers.get('cf-connecting-ip') ||
       'unknown'
 
-    const fallbackSessionInfo = {
+    const fallbackSessionInfo = buildUserSessionInsertRow({
       session_id: sessionId,
       user_id: userId,
       expires_at: expiresAt.toISOString(),
       created_at: now.toISOString(),
       last_activity: now.toISOString(),
-      is_active: true,
       ip_address: normalizeClientIpForInet(rawIp),
-      user_agent: request.headers.get('user-agent') || 'unknown'
-    }
+      user_agent: request.headers.get('user-agent') || 'unknown',
+    })
 
     const { error: insertError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
@@ -313,22 +316,18 @@ async function updateSessionActivity(sessionId: string): Promise<void> {
 }
 
 /**
- * Update session tokens
+ * Record that the session was refreshed. Access/refresh tokens are not stored on `user_sessions`
+ * (schema: session_id, user_id, ip_address, user_agent, timestamps, is_active only).
  */
-async function updateSessionTokens(
-  sessionId: string, 
-  accessToken: string, 
-  refreshToken: string
-): Promise<void> {
-  await createSupabaseServiceRoleClient()
+async function updateSessionTokens(sessionId: string): Promise<void> {
+  const { error } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
-    .update({ 
-      last_activity: new Date().toISOString(),
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      updated_at: new Date().toISOString()
-    })
+    .update({ last_activity: new Date().toISOString() })
     .eq('session_id', sessionId)
+
+  if (error) {
+    console.warn('[auth] user_sessions last_activity update after refresh failed:', error.message)
+  }
 }
 
 /**

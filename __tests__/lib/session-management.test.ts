@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import {
+  buildUserSessionInsertRow,
   createEnhancedSession,
   normalizeClientIpForInet
 } from '@/lib/session-management'
@@ -28,6 +29,33 @@ describe('normalizeClientIpForInet', () => {
   it('returns valid IPv4 and IPv6 literals', () => {
     expect(normalizeClientIpForInet('203.0.113.10')).toBe('203.0.113.10')
     expect(normalizeClientIpForInet('2001:db8::1')).toBe('2001:db8::1')
+  })
+})
+
+describe('buildUserSessionInsertRow', () => {
+  it('only includes columns that exist on user_sessions (no token fields)', () => {
+    const row = buildUserSessionInsertRow({
+      session_id: 'sess_1',
+      user_id: 'user-1',
+      ip_address: '203.0.113.1',
+      user_agent: 'jest',
+      expires_at: '2026-01-01T00:00:00.000Z',
+    })
+    expect(Object.keys(row).sort()).toEqual(
+      [
+        'created_at',
+        'expires_at',
+        'ip_address',
+        'is_active',
+        'last_activity',
+        'session_id',
+        'user_agent',
+        'user_id',
+      ].sort()
+    )
+    expect(row).not.toHaveProperty('access_token')
+    expect(row).not.toHaveProperty('refresh_token')
+    expect(row).not.toHaveProperty('updated_at')
   })
 })
 

@@ -14,6 +14,33 @@ export function normalizeClientIpForInet(raw: string): string | null {
   return null;
 }
 
+/**
+ * Insert row for public.user_sessions — must match migrations (no token columns).
+ * Always use this for inserts so PostgREST never receives stray keys (e.g. access_token).
+ */
+export function buildUserSessionInsertRow(params: {
+  session_id: string;
+  user_id: string;
+  ip_address: string | null;
+  user_agent: string;
+  expires_at: string;
+  created_at?: string;
+  last_activity?: string;
+  is_active?: boolean;
+}) {
+  const now = new Date().toISOString();
+  return {
+    session_id: params.session_id,
+    user_id: params.user_id,
+    ip_address: params.ip_address,
+    user_agent: params.user_agent,
+    is_active: params.is_active ?? true,
+    created_at: params.created_at ?? now,
+    last_activity: params.last_activity ?? now,
+    expires_at: params.expires_at,
+  };
+}
+
 // Enhanced session management utilities
 export interface SessionDetails {
   session_id: string;
@@ -117,16 +144,13 @@ export async function createEnhancedSession(
     const ipRaw = getClientIP(request);
     const ipAddress = normalizeClientIpForInet(ipRaw);
 
-    const sessionData = {
+    const sessionData = buildUserSessionInsertRow({
       session_id: id,
       user_id: userId,
       ip_address: ipAddress,
       user_agent: userAgent,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
-    };
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+    });
 
     const { error: insertError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
