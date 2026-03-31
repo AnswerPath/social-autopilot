@@ -71,7 +71,12 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      await registerUser(data)
+      const outcome = await registerUser(data)
+      if (outcome.requiresManualLogin) {
+        toast.info('Account created. Please sign in with your email and password.')
+        router.push('/login')
+        return
+      }
       toast.success('Registration successful! Welcome to the platform.')
       onSuccess?.()
       // Redirect to home so onboarding check runs; user is then sent to /onboarding or /dashboard

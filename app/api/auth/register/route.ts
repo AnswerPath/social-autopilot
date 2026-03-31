@@ -130,15 +130,19 @@ export async function POST(request: NextRequest) {
 
     if (signInError || !signInData.session) {
       // User created but couldn't sign in - they'll need to login manually
-      return NextResponse.json({
-        message: 'User created successfully. Please log in.',
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-          role: UserRole.VIEWER,
-          profile
-        }
-      })
+      return NextResponse.json(
+        {
+          message: 'User created successfully. Please log in.',
+          requiresManualLogin: true,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            role: UserRole.VIEWER,
+            profile
+          }
+        },
+        { status: 202 }
+      )
     }
 
     // Create session in database
@@ -147,15 +151,19 @@ export async function POST(request: NextRequest) {
       sessionId = await createUserSession(data.user.id, signInData.session, request)
     } catch (sessionError) {
       console.error('Failed to create session after registration (user/profile already created):', sessionError)
-      return NextResponse.json({
-        message: 'User created successfully. Please log in.',
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-          role: UserRole.VIEWER,
-          profile
-        }
-      })
+      return NextResponse.json(
+        {
+          message: 'User created successfully. Please log in.',
+          requiresManualLogin: true,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            role: UserRole.VIEWER,
+            profile
+          }
+        },
+        { status: 202 }
+      )
     }
 
     // Log successful registration

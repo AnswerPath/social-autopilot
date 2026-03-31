@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Include user_credentials so X API, Twitter, Apify, and other credentials are removed.
     const tablesToDelete = [
       'audit_logs',
-      'permission_audit_logs',
+      'permission_audit_log',
       'user_sessions',
       'account_settings',
       'user_profiles',

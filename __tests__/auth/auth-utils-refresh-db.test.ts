@@ -7,8 +7,8 @@ import { NextRequest } from 'next/server'
 
 const mockRefreshSession = jest.fn()
 
-let userSessionsFromCall = 0
 let lastUserSessionsUpdatePayload: Record<string, unknown> | undefined
+const mockFrom = jest.fn()
 
 jest.mock('next/headers', () => ({
   cookies: jest.fn(() =>
@@ -27,31 +27,13 @@ jest.mock('@/lib/supabase', () => ({
     },
   })),
   createSupabaseServiceRoleClient: jest.fn(() => ({
-    from: jest.fn(() => {
-      userSessionsFromCall += 1
-      if (userSessionsFromCall === 1) {
-        return {
-          select: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({ data: { is_active: true }, error: null }),
-        }
-      }
-      return {
-        update: jest.fn((payload: Record<string, unknown>) => {
-          lastUserSessionsUpdatePayload = payload
-          return {
-            eq: jest.fn().mockResolvedValue({ error: null }),
-          }
-        }),
-      }
-    }),
+    from: (...args: unknown[]) => mockFrom(...args),
   })),
 }))
 
 describe('auth-utils refreshAccessToken user_sessions update', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    userSessionsFromCall = 0
     lastUserSessionsUpdatePayload = undefined
     mockRefreshSession.mockResolvedValue({
       data: {
@@ -62,6 +44,25 @@ describe('auth-utils refreshAccessToken user_sessions update', () => {
         },
       },
       error: null,
+    })
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'user_sessions') {
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              single: jest.fn().mockResolvedValue({ data: { is_active: true }, error: null }),
+            }),
+          }),
+          update: jest.fn((payload: Record<string, unknown>) => {
+            lastUserSessionsUpdatePayload = payload
+            return {
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }
+          }),
+        }
+      }
+      return {}
     })
   })
 
@@ -76,6 +77,7 @@ describe('auth-utils refreshAccessToken user_sessions update', () => {
 
     expect(result.success).toBe(true)
     expect(result.newToken).toBe('new-access')
+    expect(mockFrom).toHaveBeenCalledWith('user_sessions')
     expect(lastUserSessionsUpdatePayload).toBeDefined()
     expect(Object.keys(lastUserSessionsUpdatePayload!)).toEqual(['last_activity'])
     expect(typeof lastUserSessionsUpdatePayload!.last_activity).toBe('string')

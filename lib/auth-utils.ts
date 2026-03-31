@@ -843,7 +843,7 @@ async function logPermissionCheck(
     }
 
     await getSupabaseAdmin()
-      .from('permission_audit_logs')
+      .from('permission_audit_log')
       .insert(auditEntry)
   } catch (error) {
     console.error('Error logging permission check:', error)

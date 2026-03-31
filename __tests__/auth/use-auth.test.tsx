@@ -183,11 +183,53 @@ describe('useAuth Hook', () => {
         if (url === '/api/auth/register') {
           return Promise.resolve({
             ok: true,
+            status: 200,
             json: jest.fn().mockResolvedValue({
               success: true,
               user: {
                 id: 'new-user-id',
                 email: 'newuser@example.com',
+              },
+              session: { expires_at: 1234567890 },
+            }),
+          })
+        }
+      })
+
+      await act(async () => {
+        const out = await result.current.register({
+          email: 'newuser@example.com',
+          password: 'password123',
+          first_name: 'Test',
+          last_name: 'User',
+        })
+        expect(out.requiresManualLogin).toBeUndefined()
+      })
+
+      expect(result.current.user).toBeDefined()
+      expect(result.current.user?.email).toBe('newuser@example.com')
+    })
+
+    it('should not set user when registration requires manual login', async () => {
+      const { result } = renderHook(() => useAuth(), { wrapper })
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false)
+      })
+
+      ;(global.fetch as jest.Mock).mockImplementationOnce((url) => {
+        if (url === '/api/auth/register') {
+          return Promise.resolve({
+            ok: true,
+            status: 202,
+            json: jest.fn().mockResolvedValue({
+              message: 'User created successfully. Please log in.',
+              requiresManualLogin: true,
+              user: {
+                id: 'new-user-id',
+                email: 'newuser@example.com',
+                role: UserRole.VIEWER,
+                profile: {},
               },
             }),
           })
@@ -195,16 +237,17 @@ describe('useAuth Hook', () => {
       })
 
       await act(async () => {
-        await result.current.register({
+        const out = await result.current.register({
           email: 'newuser@example.com',
           password: 'password123',
           first_name: 'Test',
           last_name: 'User',
         })
+        expect(out.requiresManualLogin).toBe(true)
       })
 
-      expect(result.current.user).toBeDefined()
-      expect(result.current.user?.email).toBe('newuser@example.com')
+      expect(result.current.user).toBeNull()
+      expect(result.current.session).toBeNull()
     })
 
     it('should handle registration errors', async () => {
