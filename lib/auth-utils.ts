@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServiceRoleClient, getSupabaseAdmin } from '@/lib/supabase'
 import { 
   AuthUser, 
   UserRole, 
@@ -15,6 +15,7 @@ import {
   PermissionAuditEntry
 } from '@/lib/auth-types'
 import { getCurrentUserDev } from '@/lib/auth-dev'
+import { buildUserSessionInsertRow, normalizeClientIpForInet } from '@/lib/session-management'
 
 // Cookie names for authentication
 const AUTH_COOKIE_NAME = 'sb-auth-token'
@@ -93,21 +94,47 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       return null
     }
 
-    // Check if session is still valid in our database
-    const { data: sessionInfo } = await getSupabaseAdmin()
+    // Check if session is still valid in our database (do not filter is_active on first read)
+    const { data: sessionRowAny } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('session_id', sessionId)
       .eq('user_id', user.id)
-      .eq('is_active', true)
-      .single()
+      .maybeSingle()
 
-    if (!sessionInfo) {
+    let resolvedSession: typeof sessionRowAny = null
+
+    if (!sessionRowAny) {
+      console.warn('[auth] Valid JWT but no user_sessions row; attempting repair', {
+        userId: user.id,
+        sessionId
+      })
+      try {
+        const { createEnhancedSession } = await import('@/lib/session-management')
+        await createEnhancedSession(user.id, request, sessionId)
+      } catch (repairError) {
+        console.error('[auth] Session repair failed:', repairError)
+        return null
+      }
+      const { data: repaired } = await createSupabaseServiceRoleClient()
+        .from('user_sessions')
+        .select('*')
+        .eq('session_id', sessionId)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (!repaired) {
+        return null
+      }
+      resolvedSession = repaired
+    } else if (sessionRowAny.is_active !== true) {
       return null
+    } else {
+      resolvedSession = sessionRowAny
     }
 
     // Check if session has expired
-    if (new Date(sessionInfo.expires_at) < new Date()) {
+    if (new Date(resolvedSession.expires_at) < new Date()) {
       await deactivateSession(sessionId)
       return null
     }
@@ -128,15 +155,19 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       await updateSessionActivity(sessionId)
     }
 
+    // Use a fresh service-role client so DB reads are not affected by a poisoned
+    // getSupabaseAdmin() singleton (e.g. after signInWithPassword on that client).
+    const db = createSupabaseServiceRoleClient()
+
     // Get user profile and role from database
-    const { data: profile } = await getSupabaseAdmin()
+    const { data: profile } = await db
       .from('user_profiles')
       .select('*')
       .eq('user_id', user.id)
       .single()
 
     // Get user role from database (default to VIEWER if not set)
-    const { data: roleData } = await getSupabaseAdmin()
+    const { data: roleData } = await db
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -169,19 +200,34 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
       return { success: false }
     }
 
+    const { data: sessionRow } = await createSupabaseServiceRoleClient()
+      .from('user_sessions')
+      .select('is_active')
+      .eq('session_id', sessionId)
+      .single()
+
+    if (!sessionRow || sessionRow.is_active !== true) {
+      return { success: false }
+    }
+
     // Refresh the token with Supabase
     const { data, error } = await getSupabaseAdmin().auth.refreshSession({
       refresh_token: refreshToken
     })
 
     if (error || !data.session) {
-      // Refresh failed, clear cookies
-      clearAuthCookies()
+      // Refresh failed; deactivate the session so we don't keep attempting
+      // upstream refreshes with a bad session.
+      try {
+        await deactivateSession(sessionId)
+      } catch (deactivateError) {
+        console.error('Error deactivating session after refresh failure:', deactivateError)
+      }
       return { success: false }
     }
 
-    // Update session in database
-    await updateSessionTokens(sessionId, data.session.access_token, data.session.refresh_token)
+    // Bump session activity in DB (tokens stay in httpOnly cookies only; user_sessions has no token columns)
+    await updateSessionTokens(sessionId)
 
     // Set new cookies
     setAuthCookies(data.session)
@@ -189,43 +235,72 @@ export async function refreshAccessToken(request: NextRequest): Promise<{ succes
     return { success: true, newToken: data.session.access_token }
   } catch (error) {
     console.error('Token refresh error:', error)
+    const sessionId = request.cookies.get(SESSION_ID_COOKIE_NAME)?.value
+    if (sessionId) {
+      try {
+        await deactivateSession(sessionId)
+      } catch (deactivateError) {
+        console.error('Error deactivating session after refresh exception:', deactivateError)
+      }
+    }
     return { success: false }
   }
 }
 
 /**
  * Create a new session for a user (enhanced with security checks)
+ *
+ * This helper is the single entry point for creating `user_sessions` records.
+ * It will either delegate to the enhanced session management or fall back to a
+ * basic insert that mirrors the data written by the login route previously.
+ *
+ * On failure it throws so callers can decide how to fail the request.
  */
 export async function createUserSession(
-  userId: string, 
-  session: any, 
+  userId: string,
+  session: any,
   request: NextRequest
 ): Promise<string> {
-  // Import the enhanced session management
-  const { createEnhancedSession } = await import('@/lib/session-management')
-  
   try {
+    // Import the enhanced session management. This implementation is responsible
+    // for creating the DB session row and returning a session ID, or throwing on
+    // failure.
+    const { createEnhancedSession } = await import('@/lib/session-management')
     return await createEnhancedSession(userId, request)
   } catch (error) {
     console.error('Error creating enhanced session, falling back to basic session:', error)
-    
-    // Fallback to basic session creation
-    const sessionId = generateSessionId()
-    const expiresAt = new Date(Date.now() + SESSION_CONFIG.sessionIdExpiry * 1000)
 
-    const sessionInfo: Omit<SessionInfo, 'created_at'> = {
+    // Fallback: minimal row matching user_sessions schema (no token columns).
+    const sessionId = generateSessionId()
+    const now = new Date()
+    const expiresAt = session?.expires_at
+      ? new Date(session.expires_at * 1000)
+      : new Date(now.getTime() + SESSION_CONFIG.sessionIdExpiry * 1000)
+
+    const rawIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      request.headers.get('cf-connecting-ip') ||
+      'unknown'
+
+    const fallbackSessionInfo = buildUserSessionInsertRow({
       session_id: sessionId,
       user_id: userId,
-      last_activity: new Date().toISOString(),
-      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+      expires_at: expiresAt.toISOString(),
+      created_at: now.toISOString(),
+      last_activity: now.toISOString(),
+      ip_address: normalizeClientIpForInet(rawIp),
       user_agent: request.headers.get('user-agent') || 'unknown',
-      is_active: true,
-      expires_at: expiresAt.toISOString()
-    }
+    })
 
-    await getSupabaseAdmin()
+    const { error: insertError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
-      .insert(sessionInfo)
+      .insert(fallbackSessionInfo)
+
+    if (insertError) {
+      console.error('Failed to create basic session record:', insertError)
+      throw new Error(`Failed to create user session: ${insertError.message}`)
+    }
 
     return sessionId
   }
@@ -235,7 +310,7 @@ export async function createUserSession(
  * Update session activity timestamp
  */
 async function updateSessionActivity(sessionId: string): Promise<void> {
-  await getSupabaseAdmin()
+  await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ 
       last_activity: new Date().toISOString() 
@@ -244,50 +319,56 @@ async function updateSessionActivity(sessionId: string): Promise<void> {
 }
 
 /**
- * Update session tokens
+ * Record that the session was refreshed. Access/refresh tokens are not stored on `user_sessions`
+ * (schema: session_id, user_id, ip_address, user_agent, timestamps, is_active only).
  */
-async function updateSessionTokens(
-  sessionId: string, 
-  accessToken: string, 
-  refreshToken: string
-): Promise<void> {
-  await getSupabaseAdmin()
+async function updateSessionTokens(sessionId: string): Promise<void> {
+  const { error } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
-    .update({ 
-      last_activity: new Date().toISOString(),
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      updated_at: new Date().toISOString()
-    })
+    .update({ last_activity: new Date().toISOString() })
     .eq('session_id', sessionId)
+
+  if (error) {
+    console.warn('[auth] user_sessions last_activity update after refresh failed:', error.message)
+  }
 }
 
 /**
  * Deactivate a session
  */
 async function deactivateSession(sessionId: string): Promise<void> {
-  await getSupabaseAdmin()
+  const { error } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('session_id', sessionId)
+
+  if (error) {
+    throw new Error(`deactivateSession failed for sessionId=${sessionId}: ${error.message}`)
+  }
 }
 
 /**
  * Deactivate all sessions for a user (except current one)
  */
 export async function deactivateOtherSessions(userId: string, currentSessionId: string): Promise<void> {
-  await getSupabaseAdmin()
+  const { error } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('user_id', userId)
     .neq('session_id', currentSessionId)
+
+  if (error) {
+    throw new Error(
+      `deactivateOtherSessions failed for userId=${userId} (excluding ${currentSessionId}): ${error.message}`
+    )
+  }
 }
 
 /**
  * Get all active sessions for a user
  */
 export async function getUserSessions(userId: string): Promise<SessionInfo[]> {
-  const { data } = await getSupabaseAdmin()
+  const { data } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .select('*')
     .eq('user_id', userId)
@@ -762,7 +843,7 @@ async function logPermissionCheck(
     }
 
     await getSupabaseAdmin()
-      .from('permission_audit_logs')
+      .from('permission_audit_log')
       .insert(auditEntry)
   } catch (error) {
     console.error('Error logging permission check:', error)

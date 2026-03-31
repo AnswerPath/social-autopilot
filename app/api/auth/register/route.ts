@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin, getSupabaseServiceKeyMisconfigurationMessage } from '@/lib/supabase'
 import { 
   RegisterRequest, 
   AuthError, 
@@ -7,7 +7,6 @@ import {
   UserRole 
 } from '@/lib/auth-types'
 import { 
-  setAuthCookiesResponse, 
   createUserProfile, 
   logAuditEvent,
   createAuthError,
@@ -33,6 +32,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Password must be at least 8 characters long') },
         { status: 400 }
+      )
+    }
+
+    const keyMisconfigEarly = getSupabaseServiceKeyMisconfigurationMessage()
+    if (keyMisconfigEarly) {
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, keyMisconfigEarly) },
+        { status: 503 }
       )
     }
 
@@ -123,19 +130,41 @@ export async function POST(request: NextRequest) {
 
     if (signInError || !signInData.session) {
       // User created but couldn't sign in - they'll need to login manually
-      return NextResponse.json({
-        message: 'User created successfully. Please log in.',
-        user: {
-          id: data.user.id,
-          email: data.user.email,
-          role: UserRole.VIEWER,
-          profile
-        }
-      })
+      return NextResponse.json(
+        {
+          message: 'User created successfully. Please log in.',
+          requiresManualLogin: true,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            role: UserRole.VIEWER,
+            profile
+          }
+        },
+        { status: 202 }
+      )
     }
 
     // Create session in database
-    const sessionId = await createUserSession(data.user.id, signInData.session, request)
+    let sessionId: string
+    try {
+      sessionId = await createUserSession(data.user.id, signInData.session, request)
+    } catch (sessionError) {
+      console.error('Failed to create session after registration (user/profile already created):', sessionError)
+      return NextResponse.json(
+        {
+          message: 'User created successfully. Please log in.',
+          requiresManualLogin: true,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            role: UserRole.VIEWER,
+            profile
+          }
+        },
+        { status: 202 }
+      )
+    }
 
     // Log successful registration
     await logAuditEvent(

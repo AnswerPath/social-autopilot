@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin, getSupabaseServiceKeyMisconfigurationMessage } from '@/lib/supabase'
 import { 
   LoginRequest, 
   AuthError, 
@@ -110,37 +110,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create session record - use direct approach for reliability
-    const sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-    
+    // Create session record - required so getCurrentUser() can resolve the user
+    const keyMisconfig = getSupabaseServiceKeyMisconfigurationMessage()
+    if (keyMisconfig) {
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, keyMisconfig) },
+        { status: 500 }
+      )
+    }
+
+    let sessionId: string
     try {
-      const { error: sessionError } = await getSupabaseAdmin()
-        .from('user_sessions')
-        .insert({
-          session_id: sessionId,
-          user_id: data.user.id,
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-          expires_at: new Date(data.session.expires_at * 1000).toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          last_activity: new Date().toISOString(),
-          is_active: true,
-          ip_address:
-            (req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-             req.headers.get('x-real-ip') ||
-             'unknown'),
-          user_agent: req.headers.get('user-agent') || 'unknown',
-          device_info: {}
-        })
-      
-      if (sessionError) {
-        console.error('Failed to create session:', sessionError)
-      } else {
-        console.log('✅ Session created successfully:', sessionId)
-      }
+      sessionId = await createUserSession(data.user.id, data.session, req)
     } catch (sessionError) {
       console.error('Failed to create session:', sessionError)
+      const msg =
+        sessionError instanceof Error ? sessionError.message : String(sessionError)
+      const rls =
+        msg.includes('row-level security') ||
+        msg.includes('violates row-level security') ||
+        msg.includes('42501')
+      const detail = rls
+        ? (getSupabaseServiceKeyMisconfigurationMessage() ??
+          'Session row could not be saved (RLS). Confirm SUPABASE_SERVICE_ROLE_KEY is the service_role secret, not the anon key.')
+        : 'Session could not be created. Please try again or contact support.'
+      return NextResponse.json(
+        {
+          error: createAuthError(AuthErrorType.NETWORK_ERROR, detail)
+        },
+        { status: 500 }
+      )
     }
 
     // Get user role from database (default to VIEWER if not set)

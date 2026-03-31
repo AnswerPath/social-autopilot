@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient, getSupabaseAdmin } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-utils';
 import { logAuditEvent } from '@/lib/auth-utils';
 import { AuthErrorType } from '@/lib/auth-types';
@@ -114,8 +114,8 @@ export async function GET(request: NextRequest) {
       updated_at: '',
     };
 
-    // Get active sessions
-    const { data: sessions, error: sessionsError } = await supabaseAdmin
+    // Get active sessions (service-role client: avoids user JWT on shared admin client overriding RLS)
+    const { data: sessions, error: sessionsError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('user_id', user.id)

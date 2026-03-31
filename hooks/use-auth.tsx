@@ -3,9 +3,11 @@
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
 import { AuthState, AuthUser, LoginRequest, RegisterRequest } from '@/lib/auth-types'
 
+export type RegisterResult = { requiresManualLogin?: boolean }
+
 interface AuthContextType extends AuthState {
   login: (credentials: LoginRequest) => Promise<void>
-  register: (userData: RegisterRequest) => Promise<void>
+  register: (userData: RegisterRequest) => Promise<RegisterResult>
   logout: () => Promise<void>
   refreshSession: () => Promise<boolean>
 }
@@ -165,7 +167,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  const register = async (userData: RegisterRequest) => {
+  const register = async (userData: RegisterRequest): Promise<RegisterResult> => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }))
       
@@ -211,12 +213,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error(errorMessage)
       }
 
+      if (data.requiresManualLogin) {
+        setState(setUnauthenticatedState())
+        return { requiresManualLogin: true }
+      }
+
       setState({
         user: data.user,
         session: data.session,
         loading: false,
         error: null
       })
+      return {}
     } catch (error) {
       console.error('Registration error:', error)
       setState(prev => ({

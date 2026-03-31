@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-utils';
 import { logAuditEvent } from '@/lib/auth-utils';
 import { AuthErrorType } from '@/lib/auth-types';
@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdmin();
+    const db = createSupabaseServiceRoleClient();
     // Get all active sessions for the user
-    const { data: sessions, error } = await supabaseAdmin
+    const { data: sessions, error } = await db
       .from('user_sessions')
       .select('*')
       .eq('user_id', user.id)
@@ -58,9 +58,9 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const validatedData = RevokeSessionSchema.parse(body);
 
-    const supabaseAdmin = getSupabaseAdmin();
+    const db = createSupabaseServiceRoleClient();
     // Verify the session belongs to the user
-    const { data: session, error: fetchError } = await supabaseAdmin
+    const { data: session, error: fetchError } = await db
       .from('user_sessions')
       .select('*')
       .eq('id', validatedData.session_id)
@@ -76,14 +76,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot revoke current session' }, { status: 400 });
     }
 
-    // Revoke the session
-    const { error: deleteError } = await supabaseAdmin
+    // Revoke the session (enforce ownership on delete for service-role client)
+    const { error: deleteError, count } = await db
       .from('user_sessions')
-      .delete()
-      .eq('id', validatedData.session_id);
+      .delete({ count: 'exact' })
+      .eq('id', validatedData.session_id)
+      .eq('user_id', user.id);
 
     if (deleteError) {
       return NextResponse.json({ error: 'Failed to revoke session' }, { status: 500 });
+    }
+    if (count === 0) {
+      return NextResponse.json({ error: 'Session not found or access denied' }, { status: 404 });
     }
 
     // Log audit event

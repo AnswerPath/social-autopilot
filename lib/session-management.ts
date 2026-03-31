@@ -1,6 +1,45 @@
+import { isIP } from 'net';
 import { NextRequest } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient } from '@/lib/supabase';
 import { AuthErrorType } from '@/lib/auth-types';
+
+/**
+ * `user_sessions.ip_address` is PostgreSQL INET — only valid IP literals or null.
+ * Raw values like "unknown" or empty must not be inserted.
+ */
+export function normalizeClientIpForInet(raw: string): string | null {
+  if (!raw || raw === 'unknown') return null;
+  const trimmed = raw.trim();
+  if (isIP(trimmed) !== 0) return trimmed;
+  return null;
+}
+
+/**
+ * Insert row for public.user_sessions — must match migrations (no token columns).
+ * Always use this for inserts so PostgREST never receives stray keys (e.g. access_token).
+ */
+export function buildUserSessionInsertRow(params: {
+  session_id: string;
+  user_id: string;
+  ip_address: string | null;
+  user_agent: string;
+  expires_at: string;
+  created_at?: string;
+  last_activity?: string;
+  is_active?: boolean;
+}) {
+  const now = new Date().toISOString();
+  return {
+    session_id: params.session_id,
+    user_id: params.user_id,
+    ip_address: params.ip_address,
+    user_agent: params.user_agent,
+    is_active: params.is_active ?? true,
+    created_at: params.created_at ?? now,
+    last_activity: params.last_activity ?? now,
+    expires_at: params.expires_at,
+  };
+}
 
 // Enhanced session management utilities
 export interface SessionDetails {
@@ -42,7 +81,7 @@ export interface SessionSecurityEvent {
  */
 export async function getSessionDetails(sessionId: string): Promise<SessionDetails | null> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('session_id', sessionId)
@@ -69,7 +108,7 @@ export async function getSessionDetails(sessionId: string): Promise<SessionDetai
  */
 export async function getUserSessionsDetailed(userId: string): Promise<SessionDetails[]> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('user_id', userId)
@@ -102,23 +141,24 @@ export async function createEnhancedSession(
   try {
     const id = sessionId || generateSecureSessionId();
     const userAgent = request.headers.get('user-agent') || 'unknown';
-    const ipAddress = getClientIP(request);
-    const location = await getLocationFromIP(ipAddress);
-    
-    const sessionData = {
+    const ipRaw = getClientIP(request);
+    const ipAddress = normalizeClientIpForInet(ipRaw);
+
+    const sessionData = buildUserSessionInsertRow({
       session_id: id,
       user_id: userId,
       ip_address: ipAddress,
       user_agent: userAgent,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      last_activity: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
-    };
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+    });
 
-    await getSupabaseAdmin()
+    const { error: insertError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .insert(sessionData);
+
+    if (insertError) {
+      throw new Error(`user_sessions insert failed: ${insertError.message}`);
+    }
 
     // Check for security events
     await checkSessionSecurity(userId, sessionData, request);
@@ -143,22 +183,31 @@ export async function updateSessionActivity(
       return { success: false };
     }
 
-    const newIP = getClientIP(request);
+    const newIPRaw = getClientIP(request);
+    const newIPInet = normalizeClientIpForInet(newIPRaw);
     const newUserAgent = request.headers.get('user-agent') || 'unknown';
 
     // Check for suspicious activity
     let securityAlert: SessionSecurityEvent | undefined;
 
-    if (session.ip_address !== newIP) {
+    const oldNorm =
+      session.ip_address != null
+        ? normalizeClientIpForInet(String(session.ip_address))
+        : null;
+    if (
+      oldNorm != null &&
+      newIPInet != null &&
+      oldNorm !== newIPInet
+    ) {
       securityAlert = {
         event_type: 'unusual_location',
         session_id: sessionId,
         user_id: session.user_id,
         details: {
           old_ip: session.ip_address,
-          new_ip: newIP,
+          new_ip: newIPRaw,
           old_location: session.location,
-          new_location: await getLocationFromIP(newIP)
+          new_location: await getLocationFromIP(newIPRaw)
         },
         severity: 'medium',
         created_at: new Date().toISOString()
@@ -179,15 +228,28 @@ export async function updateSessionActivity(
       };
     }
 
-    // Update session
-    await getSupabaseAdmin()
+    // Update session (omit ip_address when we could not normalize — preserves stored IP)
+    const updatePayload: {
+      last_activity: string
+      user_agent: string
+      ip_address?: string | null
+    } = {
+      last_activity: new Date().toISOString(),
+      user_agent: newUserAgent
+    }
+    if (newIPInet != null) {
+      updatePayload.ip_address = newIPInet
+    }
+
+    const { error: updateError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
-      .update({
-        last_activity: new Date().toISOString(),
-        ip_address: newIP,
-        user_agent: newUserAgent
-      })
+      .update(updatePayload)
       .eq('session_id', sessionId);
+
+    if (updateError) {
+      console.error('user_sessions update failed:', updateError);
+      return { success: false };
+    }
 
     // Log security event if detected
     if (securityAlert) {
@@ -206,13 +268,21 @@ export async function updateSessionActivity(
  */
 export async function deactivateSession(sessionId: string, reason?: string): Promise<boolean> {
   try {
-    await getSupabaseAdmin()
+    const { error: updateError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ 
         is_active: false,
         last_activity: new Date().toISOString()
       })
       .eq('session_id', sessionId);
+
+    if (updateError) {
+      console.error(
+        `session-management deactivateSession failed for sessionId=${sessionId}:`,
+        updateError.message
+      )
+      return false
+    }
 
     // Log session deactivation
     const session = await getSessionDetails(sessionId);
@@ -243,7 +313,7 @@ export async function deactivateOtherSessions(
   reason?: string
 ): Promise<number> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ 
         is_active: false,
@@ -283,7 +353,7 @@ export async function deactivateOtherSessions(
  */
 export async function getSessionAnalytics(userId: string): Promise<SessionAnalytics> {
   try {
-    const { data: sessions } = await getSupabaseAdmin()
+    const { data: sessions } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('user_id', userId);
@@ -348,7 +418,7 @@ export async function getSessionAnalytics(userId: string): Promise<SessionAnalyt
  */
 export async function cleanupExpiredSessions(): Promise<number> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ is_active: false })
       .lt('expires_at', new Date().toISOString())
@@ -422,7 +492,7 @@ async function checkSessionSecurity(
 ): Promise<void> {
   try {
     // Check for concurrent session limits
-    const { data: activeSessions } = await getSupabaseAdmin()
+    const { data: activeSessions } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('session_id')
       .eq('user_id', userId)
