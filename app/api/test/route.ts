@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServiceRoleClient, getSupabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServiceRoleClient } from '@/lib/supabase'
 import { isAdmin } from '@/lib/admin-auth'
 
 /**
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = createSupabaseServiceRoleClient()
 
     console.log('🔍 Testing Supabase connection...')
 
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('🔍 Testing user_sessions table...')
-    const { data: sessions, error: sessionsError } = await createSupabaseServiceRoleClient()
+    const { data: sessions, error: sessionsError } = await supabase
       .from('user_sessions')
       .select('id')
       .limit(1)
