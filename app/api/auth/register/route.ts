@@ -7,7 +7,6 @@ import {
   UserRole 
 } from '@/lib/auth-types'
 import { 
-  setAuthCookiesResponse, 
   createUserProfile, 
   logAuditEvent,
   createAuthError,
@@ -33,6 +32,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Password must be at least 8 characters long') },
         { status: 400 }
+      )
+    }
+
+    const keyMisconfigEarly = getSupabaseServiceKeyMisconfigurationMessage()
+    if (keyMisconfigEarly) {
+      return NextResponse.json(
+        { error: createAuthError(AuthErrorType.NETWORK_ERROR, keyMisconfigEarly) },
+        { status: 503 }
       )
     }
 
@@ -135,33 +142,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session in database
-    const keyMisconfig = getSupabaseServiceKeyMisconfigurationMessage()
-    if (keyMisconfig) {
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, keyMisconfig) },
-        { status: 500 }
-      )
-    }
-
     let sessionId: string
     try {
       sessionId = await createUserSession(data.user.id, signInData.session, request)
     } catch (sessionError) {
-      console.error('Failed to create session:', sessionError)
-      const msg =
-        sessionError instanceof Error ? sessionError.message : String(sessionError)
-      const rls =
-        msg.includes('row-level security') ||
-        msg.includes('violates row-level security') ||
-        msg.includes('42501')
-      const detail = rls
-        ? (getSupabaseServiceKeyMisconfigurationMessage() ??
-          'Use the service_role secret for SUPABASE_SERVICE_ROLE_KEY (Supabase Dashboard → Project Settings → API), not the anon key.')
-        : 'Session could not be created. Please try again or contact support.'
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, detail) },
-        { status: 500 }
-      )
+      console.error('Failed to create session after registration (user/profile already created):', sessionError)
+      return NextResponse.json({
+        message: 'User created successfully. Please log in.',
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          role: UserRole.VIEWER,
+          profile
+        }
+      })
     }
 
     // Log successful registration

@@ -180,10 +180,17 @@ export async function revokeAllUserTokens(userId: string): Promise<TokenRevocati
     }
 
     // Deactivate all sessions in database
-    await createSupabaseServiceRoleClient()
+    const { error: deactivateError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ is_active: false })
       .eq('user_id', userId);
+
+    if (deactivateError) {
+      return {
+        success: false,
+        error: deactivateError.message || 'Failed to deactivate user sessions'
+      };
+    }
 
     // Note: Supabase doesn't have a direct API to revoke all tokens for a user
     // The session deactivation above will prevent access via our session management

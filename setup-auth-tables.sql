@@ -118,7 +118,7 @@ DROP POLICY IF EXISTS "Admins can view all roles" ON user_roles;
 CREATE POLICY "Users can view their own role" ON user_roles
     FOR SELECT USING (auth.uid()::text = user_id);
 CREATE POLICY "Admins can view all roles" ON user_roles
-    FOR SELECT USING (public.is_current_user_admin());
+    FOR SELECT TO authenticated USING (public.is_current_user_admin());
 
 -- Grant permissions
 GRANT ALL ON user_roles TO authenticated;
@@ -163,7 +163,7 @@ DROP POLICY IF EXISTS "Admins can view all permissions" ON user_permissions;
 CREATE POLICY "Users can view their own permissions" ON user_permissions
     FOR SELECT USING (auth.uid()::text = user_id);
 CREATE POLICY "Admins can view all permissions" ON user_permissions
-    FOR SELECT USING (public.is_current_user_admin());
+    FOR SELECT TO authenticated USING (public.is_current_user_admin());
 
 -- Grant permissions
 GRANT ALL ON user_permissions TO authenticated;

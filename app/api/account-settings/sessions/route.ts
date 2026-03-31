@@ -76,14 +76,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot revoke current session' }, { status: 400 });
     }
 
-    // Revoke the session
-    const { error: deleteError } = await db
+    // Revoke the session (enforce ownership on delete for service-role client)
+    const { error: deleteError, count } = await db
       .from('user_sessions')
-      .delete()
-      .eq('id', validatedData.session_id);
+      .delete({ count: 'exact' })
+      .eq('id', validatedData.session_id)
+      .eq('user_id', user.id);
 
     if (deleteError) {
       return NextResponse.json({ error: 'Failed to revoke session' }, { status: 500 });
+    }
+    if (count === 0) {
+      return NextResponse.json({ error: 'Session not found or access denied' }, { status: 404 });
     }
 
     // Log audit event

@@ -194,7 +194,11 @@ export async function updateSessionActivity(
       session.ip_address != null
         ? normalizeClientIpForInet(String(session.ip_address))
         : null;
-    if (oldNorm !== newIPInet) {
+    if (
+      oldNorm != null &&
+      newIPInet != null &&
+      oldNorm !== newIPInet
+    ) {
       securityAlert = {
         event_type: 'unusual_location',
         session_id: sessionId,
@@ -224,14 +228,22 @@ export async function updateSessionActivity(
       };
     }
 
-    // Update session (INET column must receive null or a valid IP literal)
+    // Update session (omit ip_address when we could not normalize — preserves stored IP)
+    const updatePayload: {
+      last_activity: string
+      user_agent: string
+      ip_address?: string | null
+    } = {
+      last_activity: new Date().toISOString(),
+      user_agent: newUserAgent
+    }
+    if (newIPInet != null) {
+      updatePayload.ip_address = newIPInet
+    }
+
     const { error: updateError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
-      .update({
-        last_activity: new Date().toISOString(),
-        ip_address: newIPInet,
-        user_agent: newUserAgent
-      })
+      .update(updatePayload)
       .eq('session_id', sessionId);
 
     if (updateError) {
@@ -256,13 +268,21 @@ export async function updateSessionActivity(
  */
 export async function deactivateSession(sessionId: string, reason?: string): Promise<boolean> {
   try {
-    await createSupabaseServiceRoleClient()
+    const { error: updateError } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .update({ 
         is_active: false,
         last_activity: new Date().toISOString()
       })
       .eq('session_id', sessionId);
+
+    if (updateError) {
+      console.error(
+        `session-management deactivateSession failed for sessionId=${sessionId}:`,
+        updateError.message
+      )
+      return false
+    }
 
     // Log session deactivation
     const session = await getSessionDetails(sessionId);

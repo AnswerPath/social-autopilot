@@ -94,18 +94,17 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
       return null
     }
 
-    // Check if session is still valid in our database
-    const { data: sessionInfo } = await createSupabaseServiceRoleClient()
+    // Check if session is still valid in our database (do not filter is_active on first read)
+    const { data: sessionRowAny } = await createSupabaseServiceRoleClient()
       .from('user_sessions')
       .select('*')
       .eq('session_id', sessionId)
       .eq('user_id', user.id)
-      .eq('is_active', true)
       .maybeSingle()
 
-    let resolvedSession = sessionInfo
+    let resolvedSession: typeof sessionRowAny = null
 
-    if (!resolvedSession) {
+    if (!sessionRowAny) {
       console.warn('[auth] Valid JWT but no user_sessions row; attempting repair', {
         userId: user.id,
         sessionId
@@ -128,6 +127,10 @@ export async function getCurrentUser(request: NextRequest): Promise<AuthUser | n
         return null
       }
       resolvedSession = repaired
+    } else if (sessionRowAny.is_active !== true) {
+      return null
+    } else {
+      resolvedSession = sessionRowAny
     }
 
     // Check if session has expired
@@ -334,21 +337,31 @@ async function updateSessionTokens(sessionId: string): Promise<void> {
  * Deactivate a session
  */
 async function deactivateSession(sessionId: string): Promise<void> {
-  await createSupabaseServiceRoleClient()
+  const { error } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('session_id', sessionId)
+
+  if (error) {
+    throw new Error(`deactivateSession failed for sessionId=${sessionId}: ${error.message}`)
+  }
 }
 
 /**
  * Deactivate all sessions for a user (except current one)
  */
 export async function deactivateOtherSessions(userId: string, currentSessionId: string): Promise<void> {
-  await createSupabaseServiceRoleClient()
+  const { error } = await createSupabaseServiceRoleClient()
     .from('user_sessions')
     .update({ is_active: false })
     .eq('user_id', userId)
     .neq('session_id', currentSessionId)
+
+  if (error) {
+    throw new Error(
+      `deactivateOtherSessions failed for userId=${userId} (excluding ${currentSessionId}): ${error.message}`
+    )
+  }
 }
 
 /**
