@@ -5,27 +5,33 @@ import { TwitterApi } from 'twitter-api-v2'
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const searchParams = new URL(request.url).searchParams
+  const maxResultsRaw = searchParams.get('maxResults')
+  const parsedMax = maxResultsRaw ? parseInt(maxResultsRaw, 10) : NaN
+  const maxResults = Number.isFinite(parsedMax)
+    ? Math.min(100, Math.max(1, parsedMax))
+    : 100
+
   try {
     console.log('🔍 Fetching recent tweets...')
-    
+
     const result = await getTwitterCredentials('demo-user')
-    
+
     if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
         mock: true,
-        tweets: generateMockTweets(false)
+        tweets: generateMockTweets(false).slice(0, maxResults),
       })
     }
 
     const credentials = result.credentials
-    const { searchParams } = new URL(request.url)
     const start = searchParams.get('start')
     const end = searchParams.get('end')
 
     const CACHE_TTL_MS = 15 * 60 * 1000
-    const cacheKey = `tweets:${start || 'none'}:${end || 'none'}`
+    const cacheKey = `tweets:${start || 'none'}:${end || 'none'}:${maxResults}`
     const cache = (globalThis as any).__tweets_cache as { [k: string]: { ts: number; data: any[] } } | undefined
 
     // Prefer Bearer token
@@ -45,12 +51,14 @@ export async function GET(request: NextRequest) {
           })
           if (tlResp.ok) {
             const tl = await tlResp.json()
-            const items = (tl.data || []).map((tweet: any) => ({
-              id: tweet.id,
-              text: tweet.text,
-              created_at: tweet.created_at,
-              public_metrics: tweet.public_metrics || { retweet_count: 0, like_count: 0, reply_count: 0, impression_count: 0 },
-            }))
+            const items = (tl.data || [])
+              .map((tweet: any) => ({
+                id: tweet.id,
+                text: tweet.text,
+                created_at: tweet.created_at,
+                public_metrics: tweet.public_metrics || { retweet_count: 0, like_count: 0, reply_count: 0, impression_count: 0 },
+              }))
+              .slice(0, maxResults)
             ;(globalThis as any).__tweets_cache = { ...(cache || {}), [cacheKey]: { ts: Date.now(), data: items } }
             console.log('✅ Real tweets fetched (Bearer)')
             return NextResponse.json({ success: true, mock: false, tweets: items })
@@ -83,9 +91,9 @@ export async function GET(request: NextRequest) {
       })
 
       const me = await client.v2.me()
-      const maxResults = 50
+      const oauthTimelineLimit = 50
       const tweets = await client.v2.userTimeline(me.data.id, {
-        max_results: maxResults,
+        max_results: oauthTimelineLimit,
         'tweet.fields': ['created_at', 'public_metrics', 'context_annotations'],
       })
 
@@ -103,13 +111,15 @@ export async function GET(request: NextRequest) {
       })) || []
 
       // Filter by client-provided window
-      const filtered = items.filter(t => {
-        if (!t.created_at) return false
-        const ts = Date.parse(t.created_at)
-        if (start && ts < Date.parse(start)) return false
-        if (end && ts > Date.parse(end)) return false
-        return true
-      })
+      const filtered = items
+        .filter(t => {
+          if (!t.created_at) return false
+          const ts = Date.parse(t.created_at)
+          if (start && ts < Date.parse(start)) return false
+          if (end && ts > Date.parse(end)) return false
+          return true
+        })
+        .slice(0, maxResults)
       ;(globalThis as any).__tweets_cache = { ...(cache || {}), [cacheKey]: { ts: Date.now(), data: filtered } }
       return NextResponse.json({ success: true, mock: false, tweets: filtered })
     } catch (apiError: any) {
@@ -122,7 +132,8 @@ export async function GET(request: NextRequest) {
     const fresh = cache && cache[cacheKey] && Date.now() - cache[cacheKey].ts < CACHE_TTL_MS
     if (fresh) {
       console.log('♻️ Serving cached tweets due to API failure/rate limit')
-      return NextResponse.json({ success: true, mock: false, cached: true, tweets: cache![cacheKey].data, note: 'Served cached tweets due to rate limit or error' })
+      const sliced = cache![cacheKey].data.slice(0, maxResults)
+      return NextResponse.json({ success: true, mock: false, cached: true, tweets: sliced, note: 'Served cached tweets due to rate limit or error' })
     }
 
     // Enhanced mock data
@@ -131,19 +142,22 @@ export async function GET(request: NextRequest) {
       success: true,
       mock: true,
       enhanced: true,
-      tweets: generateMockTweets(true),
+      tweets: generateMockTweets(true).slice(0, maxResults),
       note: 'Twitter API call failed; returning enhanced mock data',
       error: (globalThis as any).__last_tweets_error,
     })
 
   } catch (error) {
     console.error('❌ Tweets fetch error:', error)
-    return NextResponse.json({ 
-      success: false,
-      error: 'Failed to fetch tweets',
-      mock: true,
-      tweets: generateMockTweets(false)
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to fetch tweets',
+        mock: true,
+        tweets: generateMockTweets(false).slice(0, maxResults),
+      },
+      { status: 500 }
+    )
   }
 }
 

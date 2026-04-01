@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -43,6 +43,7 @@ export function Dashboard() {
   const [tweetsAreMock, setTweetsAreMock] = useState<boolean | null>(null)
   const [mentionsAreMock, setMentionsAreMock] = useState<boolean | null>(null)
   const [apiNotes, setApiNotes] = useState<string[]>([])
+  const [followerTrendBadge, setFollowerTrendBadge] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTwitterData()
@@ -60,6 +61,7 @@ export function Dashboard() {
   const fetchTwitterData = async () => {
     setIsLoading(true)
     setApiNotes([])
+    setFollowerTrendBadge(null)
     console.log('🔄 Dashboard: Starting data fetch...')
     
     try {
@@ -149,6 +151,29 @@ export function Dashboard() {
         errors.push('Mentions: Network error')
       }
 
+      try {
+        const fr = await fetch('/api/analytics/followers', { credentials: 'include' })
+        const fd = await fr.json()
+        let trend: string | null = null
+        if (fd.success && Array.isArray(fd.data) && fd.data.length >= 2) {
+          const last = fd.data[fd.data.length - 1] as {
+            growth?: number
+            growthPercent?: number
+          }
+          const g = last.growth ?? 0
+          const gp = last.growthPercent ?? 0
+          if (g !== 0 || (gp !== 0 && Number.isFinite(gp))) {
+            const parts: string[] = []
+            if (g !== 0) parts.push(`${g > 0 ? '+' : ''}${g} followers`)
+            if (gp !== 0 && Number.isFinite(gp)) parts.push(`${gp > 0 ? '+' : ''}${gp}% vs prior week`)
+            trend = parts.join(' · ')
+          }
+        }
+        setFollowerTrendBadge(trend)
+      } catch {
+        setFollowerTrendBadge(null)
+      }
+
       // Determine data source
       if (errors.length > 0) {
         setDataSource('error')
@@ -178,40 +203,58 @@ export function Dashboard() {
     }
   }
 
-  const stats = [
-    {
-      title: "Followers",
-      value: twitterProfile?.public_metrics?.followers_count?.toLocaleString() || "0",
-      description: "Total followers",
-      icon: Users,
-      trend: "+156"
-    },
-    {
-      title: "Recent Tweets",
-      value: recentTweets.length.toString(),
-      description: "Last 5 tweets",
-      icon: CalendarDays,
-      trend: `${recentTweets.length} posted`
-    },
-    {
-      title: "New Mentions",
-      value: mentions.length.toString(),
-      description: "Unread mentions",
-      icon: MessageSquare,
-      trend: `${mentions.filter(m => m.sentiment === 'negative').length} urgent`
-    },
-    {
-      title: "Avg Engagement",
-      value: recentTweets.length > 0 
-        ? Math.round(recentTweets.reduce((acc, tweet) => 
-            acc + (tweet.public_metrics?.like_count || 0) + (tweet.public_metrics?.retweet_count || 0), 0
-          ) / recentTweets.length).toString()
-        : "0",
-      description: "Per tweet",
-      icon: TrendingUp,
-      trend: "+12%"
-    }
-  ]
+  const stats = useMemo(() => {
+    const tweetsMock = tweetsAreMock === true
+    const avgPerTweet =
+      recentTweets.length > 0
+        ? Math.round(
+            recentTweets.reduce(
+              (acc, tweet) =>
+                acc + (tweet.public_metrics?.like_count || 0) + (tweet.public_metrics?.retweet_count || 0),
+              0
+            ) / recentTweets.length
+          )
+        : 0
+
+    return [
+      {
+        title: "Followers",
+        value: twitterProfile?.public_metrics?.followers_count?.toLocaleString() || "0",
+        description: "Total followers",
+        icon: Users,
+        trend: followerTrendBadge,
+      },
+      {
+        title: "Recent Tweets",
+        value: recentTweets.length.toString(),
+        description: "Last 5 tweets",
+        icon: CalendarDays,
+        trend: recentTweets.length > 0 ? `${recentTweets.length} loaded` : null,
+      },
+      {
+        title: "New Mentions",
+        value: mentions.length.toString(),
+        description: "Unread mentions",
+        icon: MessageSquare,
+        trend:
+          mentions.length > 0
+            ? `${mentions.filter((m) => m.sentiment === 'negative').length} urgent`
+            : null,
+      },
+      {
+        title: "Avg Engagement",
+        value:
+          tweetsMock || recentTweets.length === 0
+            ? tweetsMock
+              ? "—"
+              : "0"
+            : String(avgPerTweet),
+        description: tweetsMock ? "Sample data (posts API unavailable)" : "Likes + reposts per tweet",
+        icon: TrendingUp,
+        trend: tweetsMock ? "Demo data" : null,
+      },
+    ]
+  }, [twitterProfile, recentTweets, mentions, tweetsAreMock, followerTrendBadge])
 
   const recentPostsData = recentTweets.map(tweet => ({
     id: tweet.id,
@@ -372,9 +415,11 @@ export function Dashboard() {
                       <p className="text-xs text-muted-foreground">
                         {stat.description}
                       </p>
-                      <Badge variant="secondary" className="mt-2">
-                        {stat.trend}
-                      </Badge>
+                      {stat.trend ? (
+                        <Badge variant="secondary" className="mt-2">
+                          {stat.trend}
+                        </Badge>
+                      ) : null}
                     </CardContent>
                   </Card>
                 ))}
