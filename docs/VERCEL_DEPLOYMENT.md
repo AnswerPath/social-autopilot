@@ -16,6 +16,10 @@ This project uses **Vercel Cron Jobs** in `vercel.json`:
 1. **Upgrade to Pro** — minute-level cron is supported; the project will deploy as-is and the scheduler will run every minute, or  
 2. **Stay on Hobby** — change the scheduler cron in `vercel.json` to at most once per day (e.g. `0 9 * * *`). Scheduled posts would then be processed only once daily instead of every minute.
 
+**Preview deployments** do not receive Vercel Cron jobs; only **production** does. For scheduled posts on a preview URL, use a signed-in browser session (the calendar triggers dispatch) or run the [scheduler worker](../scripts/scheduler-worker.js) with `X-Scheduler-Worker: true`. See [CRON_SETUP.md](CRON_SETUP.md#preview-deployments) for details.
+
+If scheduled posts never publish on production, verify the Hobby vs Pro cron limits above—not only auth or 403 responses from `/api/scheduler/dispatch`.
+
 ## 1. Required environment variables in Vercel
 
 In your Vercel project: **Settings → Environment Variables**. Add these and assign them to **Production** (and Preview if you use preview deployments).

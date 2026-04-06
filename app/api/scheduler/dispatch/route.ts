@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { processQueue } from '@/lib/job-queue'
 import { createLogger } from '@/lib/logger'
+import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
 /**
- * Enhanced dispatch endpoint with job queue processing and retry logic
- * 
- * Security: This endpoint can be called by:
- * 1. Vercel Cron Jobs (verified via x-vercel-cron header)
- * 2. Manual API calls (for testing/debugging)
- * 
- * In production, consider adding additional authentication if needed.
- */
-/**
- * Process the scheduled posts queue
- * GET: Manual trigger (for testing/debugging)
- * POST: Called by Vercel Cron Jobs
+ * Process the scheduled posts queue.
+ *
+ * Security — who may invoke:
+ * 1. Vercel Cron (`x-vercel-cron: 1`)
+ * 2. Scheduler worker script (`x-scheduler-worker: true`)
+ * 3. Authenticated app users (same session cookies as the rest of the app; used by calendar polling)
+ * 4. Development (`NODE_ENV === 'development'`) for local manual testing
+ *
+ * GET/POST both run the same handler (GET for manual testing in dev).
  */
 export async function GET(request: NextRequest) {
   // Allow GET for manual testing
@@ -32,10 +30,19 @@ export async function POST(request: NextRequest) {
   const isSchedulerWorker = workerHeader === 'true'
   const isDevelopment = process.env.NODE_ENV === 'development'
 
-  if (!isDevelopment && !isVercelCron && !isSchedulerWorker) {
+  let authorized =
+    isDevelopment || isVercelCron || isSchedulerWorker
+
+  if (!authorized) {
+    const user = await getCurrentUser(request)
+    authorized = user != null
+  }
+
+  if (!authorized) {
     return NextResponse.json({
       success: false,
-      error: 'Unauthorized: This endpoint can only be called by Vercel Cron Jobs or the Scheduler Worker'
+      error:
+        'Unauthorized: This endpoint can only be called by Vercel Cron, the scheduler worker, or a signed-in user'
     }, { status: 403 })
   }
 
