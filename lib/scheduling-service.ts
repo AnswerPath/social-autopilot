@@ -86,6 +86,8 @@ export class SchedulingService {
     conflictWindowMinutes: number = this.conflictWindowMinutes
   ): Promise<ConflictCheck> {
     try {
+      const excludeNormalized = excludePostId?.trim().toLowerCase()
+
       // Calculate conflict window boundaries
       const windowStart = new Date(scheduledAt)
       windowStart.setMinutes(windowStart.getMinutes() - conflictWindowMinutes)
@@ -103,7 +105,7 @@ export class SchedulingService {
         .in('status', ['approved', 'pending_approval'])
 
       if (excludePostId) {
-        query = query.neq('id', excludePostId)
+        query = query.neq('id', excludePostId.trim())
       }
 
       const { data, error } = await query
@@ -112,7 +114,13 @@ export class SchedulingService {
         throw new Error(`Failed to check conflicts: ${error.message}`)
       }
 
-      const conflicts = (data || []).map(post => ({
+      const rows = (data || []).filter(
+        post =>
+          !excludeNormalized ||
+          String(post.id).trim().toLowerCase() !== excludeNormalized
+      )
+
+      const conflicts = rows.map(post => ({
         id: post.id,
         scheduledAt: post.scheduled_at,
         content: post.content.substring(0, 50) + (post.content.length > 50 ? '...' : '')

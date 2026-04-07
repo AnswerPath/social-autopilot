@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { SchedulingService } from '@/lib/scheduling-service'
 import { recordRevision } from '@/lib/approval/revisions'
 import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
+import { applyScheduledPostPatchBody } from '@/lib/apply-scheduled-post-patch-body'
 
 export const runtime = 'nodejs'
 
@@ -69,18 +70,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('Received schedule request:', JSON.stringify(body, null, 2))
     
-    const { 
-      content, 
-      mediaUrls, 
-      scheduledAt, 
-      scheduledDate, 
-      scheduledTime, 
+    const {
+      content,
+      mediaUrls,
+      scheduledAt,
+      scheduledDate,
+      scheduledTime,
       timezone,
-      status, 
-      submitForApproval 
+      status,
+      submitForApproval,
+      postId
     } = body
-    
+
     const userId = getUserId()
+
+    // Updating an existing post: same behavior as PATCH (excludes self from conflict check)
+    if (
+      postId &&
+      typeof postId === 'string' &&
+      scheduledDate &&
+      scheduledTime
+    ) {
+      return applyScheduledPostPatchBody(postId, userId, body)
+    }
+
     const schedulingService = new SchedulingService()
 
     // Support both legacy format (scheduledAt) and new format (scheduledDate + scheduledTime)

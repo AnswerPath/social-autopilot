@@ -235,26 +235,22 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
       // For scheduled posts, use the scheduled-posts endpoint with timezone support
       if (postType === "schedule" && scheduleDate && scheduleTime) {
         const timezone = getUserTimezone()
+        const isEditing = Boolean(editingPost?.id)
         const payload = {
           content: content.trim(),
           mediaUrls: uploadedMediaIds,
           scheduledDate: scheduleDate,
           scheduledTime: scheduleTime,
           timezone,
-          submitForApproval: options?.requiresApproval === true || requiresApproval
+          submitForApproval: options?.requiresApproval === true || requiresApproval,
+          ...(isEditing ? { postId: editingPost!.id } : {})
         }
 
         console.log('Scheduling post with payload:', JSON.stringify(payload, null, 2))
 
-        // If editing an existing scheduled post, use PATCH instead of POST
-        const isEditing = editingPost && editingPost.id
-        const endpoint = isEditing 
-          ? `/api/scheduled-posts/${editingPost.id}`
-          : '/api/scheduled-posts'
-        const method = isEditing ? 'PATCH' : 'POST'
-
-        const response = await fetch(endpoint, {
-          method,
+        // Always POST; body.postId triggers update path (same as PATCH, reliable conflict exclude)
+        const response = await fetch('/api/scheduled-posts', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
