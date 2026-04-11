@@ -328,6 +328,7 @@ export function useTeams() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(invitationData),
       });
 
