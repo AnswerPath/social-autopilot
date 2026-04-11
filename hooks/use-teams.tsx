@@ -20,6 +20,35 @@ import {
   ContentType
 } from '@/lib/team-types';
 
+/** Readable message for failed API responses (statusText is often empty over HTTP/2). */
+async function parseApiErrorResponse(response: Response, fallbackPrefix: string): Promise<string> {
+  const status = response.status
+  const statusText = response.statusText?.trim()
+  let detail = ''
+  try {
+    const text = await response.text()
+    if (text) {
+      try {
+        const data = JSON.parse(text) as {
+          error?: { message?: string } | string
+          message?: string
+        }
+        detail =
+          (typeof data.error === 'object' && data.error?.message) ||
+          (typeof data.error === 'string' ? data.error : '') ||
+          data.message ||
+          ''
+      } catch {
+        detail = text.length > 300 ? `${text.slice(0, 300)}…` : text
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  const core = detail || statusText || 'Request failed'
+  return `${fallbackPrefix}: ${core} (HTTP ${status})`
+}
+
 export interface TeamsState {
   teams: Team[];
   currentTeam: Team | null;
@@ -36,7 +65,7 @@ export interface TeamsState {
 }
 
 export function useTeams() {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user, isLoading: isAuthLoading, refreshSession } = useAuth();
   const [state, setState] = useState<TeamsState>({
     teams: [],
     currentTeam: null,
@@ -72,12 +101,21 @@ export function useTeams() {
     setError(null);
 
     try {
-      const response = await fetch('/api/teams', {
+      let response = await fetch('/api/teams', {
         credentials: 'include'
       });
-      
+
+      if (!response.ok && response.status === 401) {
+        const refreshed = await refreshSession();
+        if (refreshed) {
+          response = await fetch('/api/teams', {
+            credentials: 'include'
+          });
+        }
+      }
+
       if (!response.ok) {
-        throw new Error(`Failed to fetch teams: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to fetch teams'));
       }
 
       const data = await response.json();
@@ -89,7 +127,7 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, setLoading, setError]);
+  }, [user, setLoading, setError, refreshSession]);
 
   // Create a new team
   const createTeam = useCallback(async (teamData: CreateTeamRequest): Promise<boolean> => {
@@ -112,8 +150,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to create team: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to create team'));
       }
 
       const data = await response.json();
@@ -150,7 +187,7 @@ export function useTeams() {
       const response = await fetch(`/api/teams/${teamId}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch team: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to fetch team'));
       }
 
       const data = await response.json();
@@ -199,8 +236,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to update team: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to update team'));
       }
 
       const data = await response.json();
@@ -241,8 +277,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to delete team: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to delete team'));
       }
 
       // Remove team from the list
@@ -281,7 +316,7 @@ export function useTeams() {
       const response = await fetch(`/api/teams/${teamId}/members?${params.toString()}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch team members: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to fetch team members'));
       }
 
       const data = await response.json();
@@ -333,8 +368,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to invite member: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to invite member'));
       }
 
       // Refresh team members
@@ -373,8 +407,7 @@ export function useTeams() {
         );
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error?.message || `Failed to resend: ${response.statusText}`);
+          throw new Error(await parseApiErrorResponse(response, 'Failed to resend invitation'));
         }
 
         await fetchOutgoingInvitations(teamId);
@@ -410,8 +443,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to update member role: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to update member role'));
       }
 
       // Refresh team members
@@ -444,8 +476,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to remove member: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to remove member'));
       }
 
       // Refresh team members
@@ -475,7 +506,7 @@ export function useTeams() {
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch invitations: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to fetch invitations'));
       }
 
       const data = await response.json();
@@ -508,8 +539,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to accept invitation: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to accept invitation'));
       }
 
       const data = await response.json();
@@ -549,7 +579,7 @@ export function useTeams() {
       const response = await fetch(`/api/teams/${teamId}/content?${params.toString()}`);
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch team content: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to fetch team content'));
       }
 
       const data = await response.json();
@@ -581,8 +611,7 @@ export function useTeams() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to share content: ${response.statusText}`);
+        throw new Error(await parseApiErrorResponse(response, 'Failed to share content'));
       }
 
       // Refresh team content
