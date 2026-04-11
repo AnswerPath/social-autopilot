@@ -2581,7 +2581,9 @@ WHERE requires_approval IS NULL;
 -- ========================================
 
 -- View for posts pending approval
-CREATE OR REPLACE VIEW posts_pending_approval AS
+CREATE OR REPLACE VIEW posts_pending_approval
+WITH (security_invoker = true)
+AS
 SELECT 
     sp.*,
     ac.comment_count,
@@ -2599,7 +2601,9 @@ WHERE sp.status = 'pending_approval'
 ORDER BY sp.submitted_for_approval_at ASC;
 
 -- View for approval statistics
-CREATE OR REPLACE VIEW approval_statistics AS
+CREATE OR REPLACE VIEW approval_statistics
+WITH (security_invoker = true)
+AS
 SELECT 
     user_id,
     COUNT(*) as total_posts,
@@ -2790,7 +2794,9 @@ CREATE INDEX IF NOT EXISTS idx_approval_notifications_status ON approval_notific
 -- 7. Dashboard view for managers
 -- ========================================
 
-CREATE OR REPLACE VIEW approval_dashboard_summary AS
+CREATE OR REPLACE VIEW approval_dashboard_summary
+WITH (security_invoker = true)
+AS
 SELECT 
     sp.id AS post_id,
     sp.user_id,

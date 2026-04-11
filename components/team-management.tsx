@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Mail, MoreHorizontal, Shield, Edit, Trash2, UserPlus } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -197,7 +198,11 @@ export function TeamManagement() {
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Role
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        toast.info('Open Account → Team Dashboard to resend pending email invitations.')
+                      }
+                    >
                       <Mail className="h-4 w-4 mr-2" />
                       Resend Invite
                     </DropdownMenuItem>

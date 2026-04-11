@@ -48,6 +48,7 @@ import {
   FileCode
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export function TeamDashboard() {
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -56,6 +57,7 @@ export function TeamDashboard() {
     currentTeam,
     teamMembers,
     teamInvitations,
+    outgoingInvitations,
     teamContent,
     teamStats,
     loading,
@@ -66,6 +68,8 @@ export function TeamDashboard() {
     deleteTeam,
     fetchTeamMembers,
     inviteMember,
+    fetchOutgoingInvitations,
+    resendTeamInvitation,
     updateMemberRole,
     removeMember,
     acceptInvitation,
@@ -116,6 +120,12 @@ export function TeamDashboard() {
     }
   }, [currentTeam]);
 
+  React.useEffect(() => {
+    if (currentTeam?.id) {
+      fetchOutgoingInvitations(currentTeam.id);
+    }
+  }, [currentTeam?.id, fetchOutgoingInvitations]);
+
   // Handle create team
   const handleCreateTeam = async () => {
     if (!newTeam.name.trim()) {
@@ -152,6 +162,16 @@ export function TeamDashboard() {
       setShowInviteMember(false);
       setInviteData({ email: '', role: TeamRole.MEMBER, message: '' });
       await fetchTeamMembers(currentTeam.id);
+      await fetchOutgoingInvitations(currentTeam.id);
+      toast.success('Invitation sent. If email is configured, they will receive a link.');
+    }
+  };
+
+  const handleResendOutgoing = async (invitationId: string) => {
+    if (!currentTeam) return;
+    const ok = await resendTeamInvitation(currentTeam.id, invitationId);
+    if (ok) {
+      toast.success('Invitation email resent.');
     }
   };
 
@@ -616,6 +636,37 @@ export function TeamDashboard() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {outgoingInvitations.length > 0 && (
+                  <div className="mt-6 rounded-lg border bg-muted/30 p-4">
+                    <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      Pending invitations (email)
+                    </h3>
+                    <ul className="space-y-2">
+                      {outgoingInvitations.map((inv) => (
+                        <li
+                          key={inv.id}
+                          className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                        >
+                          <span>
+                            <span className="font-medium">{inv.email}</span>
+                            <span className="text-muted-foreground"> · {inv.role}</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={loading}
+                            onClick={() => handleResendOutgoing(inv.id)}
+                          >
+                            Resend email
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="members" className="mt-4">

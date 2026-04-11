@@ -40,8 +40,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate password reset token
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      'http://localhost:3000'
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/reset-password`,
+      redirectTo: `${baseUrl.replace(/\/$/, '')}/auth/reset-password`,
     });
 
     if (error) {

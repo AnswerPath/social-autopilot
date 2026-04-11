@@ -25,6 +25,8 @@ export interface TeamsState {
   currentTeam: Team | null;
   teamMembers: TeamMember[];
   teamInvitations: TeamInvitation[];
+  /** Pending invites sent for the active team (when fetched). */
+  outgoingInvitations: TeamInvitation[];
   teamContent: TeamContentSharing[];
   teamStats: TeamStats | null;
   userPermissions: TeamPermissions | null;
@@ -40,6 +42,7 @@ export function useTeams() {
     currentTeam: null,
     teamMembers: [],
     teamInvitations: [],
+    outgoingInvitations: [],
     teamContent: [],
     teamStats: null,
     userPermissions: null,
@@ -290,6 +293,25 @@ export function useTeams() {
     }
   }, [user, setError]);
 
+  const fetchOutgoingInvitations = useCallback(async (teamId: string): Promise<void> => {
+    if (!user) return;
+
+    try {
+      const response = await fetch(`/api/teams/${teamId}/invitations`, {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        setState((prev) => ({ ...prev, outgoingInvitations: [] }));
+        return;
+      }
+      const data = await response.json();
+      setState((prev) => ({ ...prev, outgoingInvitations: data.invitations || [] }));
+    } catch (err) {
+      console.error('Error fetching outgoing invitations:', err);
+      setState((prev) => ({ ...prev, outgoingInvitations: [] }));
+    }
+  }, [user]);
+
   // Invite member to team
   const inviteMember = useCallback(async (teamId: string, invitationData: InviteMemberRequest): Promise<boolean> => {
     if (!user) {
@@ -317,6 +339,8 @@ export function useTeams() {
       // Refresh team members
       await fetchTeamMembers(teamId);
 
+      await fetchOutgoingInvitations(teamId);
+
       return true;
 
     } catch (err: any) {
@@ -326,7 +350,44 @@ export function useTeams() {
     } finally {
       setLoading(false);
     }
-  }, [user, setLoading, setError, fetchTeamMembers]);
+  }, [user, setLoading, setError, fetchTeamMembers, fetchOutgoingInvitations]);
+
+  const resendTeamInvitation = useCallback(
+    async (teamId: string, invitationId: string): Promise<boolean> => {
+      if (!user) {
+        setError('User not authenticated.');
+        return false;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/teams/${teamId}/invitations/${invitationId}/resend`,
+          {
+            method: 'POST',
+            credentials: 'include'
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error?.message || `Failed to resend: ${response.statusText}`);
+        }
+
+        await fetchOutgoingInvitations(teamId);
+        return true;
+      } catch (err: any) {
+        setError(err.message || 'Failed to resend invitation.');
+        console.error('Error resending invitation:', err);
+        return false;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user, setLoading, setError, fetchOutgoingInvitations]
+  );
 
   // Update member role
   const updateMemberRole = useCallback(async (teamId: string, userId: string, roleData: UpdateMemberRoleRequest): Promise<boolean> => {
@@ -561,6 +622,8 @@ export function useTeams() {
     acceptInvitation,
     fetchTeamContent,
     shareContent,
+    fetchOutgoingInvitations,
+    resendTeamInvitation,
     user
   };
 }

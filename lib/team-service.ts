@@ -28,6 +28,7 @@ import {
 } from '@/lib/team-types';
 import { logActivity, ActivityCategory, ActivityLevel } from '@/lib/activity-logging';
 import { NextRequest } from 'next/server';
+import { buildTeamInviteUrl, sendTeamInvitationEmail } from '@/lib/team-invite-email';
 
 export class TeamService {
   private static instance: TeamService;
@@ -353,7 +354,20 @@ export class TeamService {
         `)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        const isUniqueViolation =
+          error.code === '23505' ||
+          (typeof error.message === 'string' && error.message.includes('duplicate key'));
+        if (isUniqueViolation) {
+          return this.rotatePendingInvitationAndNotify(
+            teamId,
+            inviterId,
+            invitationData,
+            request
+          );
+        }
+        throw error;
+      }
 
       // Log invitation
       await logActivity(
@@ -373,10 +387,194 @@ export class TeamService {
         }
       );
 
+      await this.sendTeamInvitationNotification(invitation as TeamInvitation & { team?: Team }, inviterId);
+
       return { success: true, invitation };
 
     } catch (error: any) {
       console.error('Error inviting member:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send invite email (does not throw; logs on failure).
+   */
+  private async sendTeamInvitationNotification(
+    invitation: TeamInvitation & { team?: Team },
+    inviterId: string
+  ): Promise<void> {
+    const teamName = invitation.team?.name ?? 'your team';
+    const { data: inviterProfile } = await this.supabaseAdmin
+      .from('user_profiles')
+      .select('first_name, last_name, display_name')
+      .eq('user_id', inviterId)
+      .maybeSingle();
+    const inviterLabel =
+      inviterProfile?.display_name ||
+      [inviterProfile?.first_name, inviterProfile?.last_name].filter(Boolean).join(' ').trim() ||
+      undefined;
+    const inviteUrl = buildTeamInviteUrl(invitation.invitation_token);
+    const result = await sendTeamInvitationEmail({
+      to: invitation.email,
+      teamName,
+      role: invitation.role,
+      inviterLabel,
+      message: invitation.message,
+      expiresAt: new Date(invitation.expires_at),
+      inviteUrl
+    });
+    if (!result.success) {
+      console.error('[team-invite] Email send failed', { error: result.error });
+    }
+  }
+
+  /**
+   * Same email invited again: rotate token for pending row and resend email.
+   */
+  private async rotatePendingInvitationAndNotify(
+    teamId: string,
+    inviterId: string,
+    invitationData: InviteMemberRequest,
+    request?: NextRequest
+  ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
+    const { data: existing, error: fetchError } = await this.supabaseAdmin
+      .from('team_invitations')
+      .select(`
+        *,
+        team:teams(name, slug)
+      `)
+      .eq('team_id', teamId)
+      .eq('email', invitationData.email)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      return { success: false, error: fetchError?.message || 'Invitation not found' };
+    }
+
+    if (existing.status !== InvitationStatus.PENDING) {
+      return {
+        success: false,
+        error: 'This email already has an invitation or is already on the team.'
+      };
+    }
+
+    const newToken = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const { data: invitation, error: updateError } = await this.supabaseAdmin
+      .from('team_invitations')
+      .update({
+        invitation_token: newToken,
+        expires_at: expiresAt.toISOString(),
+        role: invitationData.role,
+        permissions: invitationData.permissions || {},
+        invited_by: inviterId,
+        message: invitationData.message,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existing.id)
+      .select(`
+        *,
+        team:teams(name, slug)
+      `)
+      .single();
+
+    if (updateError || !invitation) {
+      return { success: false, error: updateError?.message || 'Failed to refresh invitation' };
+    }
+
+    await logActivity(
+      inviterId,
+      'member_invited',
+      ActivityCategory.USER_MANAGEMENT,
+      ActivityLevel.INFO,
+      {
+        resourceType: 'team',
+        resourceId: teamId,
+        details: {
+          email: invitationData.email,
+          role: invitationData.role,
+          invitationId: invitation.id,
+          resent: true
+        },
+        request
+      }
+    );
+
+    await this.sendTeamInvitationNotification(invitation as TeamInvitation & { team?: Team }, inviterId);
+
+    return { success: true, invitation };
+  }
+
+  /**
+   * Resend email for a pending invitation (rotates token and extends expiry).
+   */
+  async resendTeamInvitation(
+    teamId: string,
+    inviterId: string,
+    invitationId: string,
+    request?: NextRequest
+  ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
+    const hasPermission = await this.checkTeamPermission(teamId, inviterId, 'canInviteMembers');
+    if (!hasPermission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    const { data: existing, error: fetchError } = await this.supabaseAdmin
+      .from('team_invitations')
+      .select('id, team_id, email, role, permissions, message, status')
+      .eq('id', invitationId)
+      .eq('team_id', teamId)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      return { success: false, error: 'Invitation not found' };
+    }
+
+    if (existing.status !== InvitationStatus.PENDING) {
+      return { success: false, error: 'Only pending invitations can be resent.' };
+    }
+
+    const invitationData: InviteMemberRequest = {
+      email: existing.email,
+      role: existing.role as TeamRole,
+      permissions: existing.permissions || {},
+      message: existing.message
+    };
+
+    return this.rotatePendingInvitationAndNotify(teamId, inviterId, invitationData, request);
+  }
+
+  /**
+   * Pending invitations sent for a team (for admins to resend or review).
+   */
+  async getPendingInvitationsForTeam(
+    teamId: string,
+    requesterId: string
+  ): Promise<{ success: boolean; invitations?: TeamInvitation[]; error?: string }> {
+    try {
+      const hasPermission = await this.checkTeamPermission(teamId, requesterId, 'canInviteMembers');
+      if (!hasPermission) {
+        return { success: false, error: 'Insufficient permissions' };
+      }
+
+      const { data: invitations, error } = await this.supabaseAdmin
+        .from('team_invitations')
+        .select(`
+          *,
+          team:teams(name, slug)
+        `)
+        .eq('team_id', teamId)
+        .eq('status', InvitationStatus.PENDING)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return { success: true, invitations: invitations || [] };
+    } catch (error: any) {
+      console.error('Error listing team invitations:', error);
       return { success: false, error: error.message };
     }
   }

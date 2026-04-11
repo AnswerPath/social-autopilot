@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { Suspense, useState } from 'react'
 import { LoginForm } from './login-form'
 import { RegisterForm } from './register-form'
+import { TeamInviteDeepLink } from './team-invite-deeplink'
 import { useAuth } from '@/hooks/use-auth'
 import { Loader2 } from 'lucide-react'
 
@@ -25,6 +26,9 @@ export function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <Suspense fallback={null}>
+        <TeamInviteDeepLink />
+      </Suspense>
       <div className="w-full max-w-md">
         {mode === 'login' ? (
           <LoginForm

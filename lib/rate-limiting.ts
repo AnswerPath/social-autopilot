@@ -14,6 +14,12 @@ export const RATE_LIMIT_CONFIG = {
     windowMs: 60 * 60 * 1000, // 1 hour
     blockDurationMs: 60 * 60 * 1000, // 1 hour
   },
+  // Resend verification email (authenticated or email-only)
+  resendVerification: {
+    maxAttempts: 3,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    blockDurationMs: 60 * 60 * 1000, // 1 hour
+  },
   // Token refresh requests
   tokenRefresh: {
     maxAttempts: 20,
@@ -209,6 +215,7 @@ export function cleanupExpiredEntries(): void {
     const maxWindow = Math.max(
       RATE_LIMIT_CONFIG.loginAttempts.windowMs,
       RATE_LIMIT_CONFIG.passwordReset.windowMs,
+      RATE_LIMIT_CONFIG.resendVerification.windowMs,
       RATE_LIMIT_CONFIG.general.windowMs
     );
     
