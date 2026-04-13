@@ -84,61 +84,64 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
-    try {
-      const user = await getCurrentUser(req);
-      if (!user) {
+  return withRateLimit('general')(
+    request,
+    withActivityLogging(async (req: NextRequest) => {
+      try {
+        const user = await getCurrentUser(req);
+        if (!user) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
+            { status: 401 }
+          );
+        }
+
+        const { teamId } = await params;
+        const invitationData = await req.json();
+
+        // Validate required fields
+        if (!invitationData.email || !invitationData.role) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Email and role are required') },
+            { status: 400 }
+          );
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(invitationData.email)) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Invalid email format') },
+            { status: 400 }
+          );
+        }
+
+        // Validate role
+        if (!Object.values(TeamRole).includes(invitationData.role)) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Invalid role') },
+            { status: 400 }
+          );
+        }
+
+        const result = await teamService.inviteMember(teamId, user.id, invitationData, req);
+
+        if (!result.success) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to invite member') },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({ invitation: result.invitation }, { status: 201 });
+
+      } catch (error: any) {
+        console.error('Error inviting member:', error);
         return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
-          { status: 401 }
-        );
-      }
-
-      const { teamId } = await params;
-      const invitationData = await req.json();
-
-      // Validate required fields
-      if (!invitationData.email || !invitationData.role) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Email and role are required') },
-          { status: 400 }
-        );
-      }
-
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(invitationData.email)) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Invalid email format') },
-          { status: 400 }
-        );
-      }
-
-      // Validate role
-      if (!Object.values(TeamRole).includes(invitationData.role)) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Invalid role') },
-          { status: 400 }
-        );
-      }
-
-      const result = await teamService.inviteMember(teamId, user.id, invitationData, req);
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to invite member') },
+          { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to invite member') },
           { status: 500 }
         );
       }
-
-      return NextResponse.json({ invitation: result.invitation }, { status: 201 });
-
-    } catch (error: any) {
-      console.error('Error inviting member:', error);
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to invite member') },
-        { status: 500 }
-      );
-    }
-  }))(request);
+    })
+  );
 }

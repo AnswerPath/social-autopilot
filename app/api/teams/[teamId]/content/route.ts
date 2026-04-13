@@ -68,52 +68,55 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
-    try {
-      const user = await getCurrentUser(req);
-      if (!user) {
+  return withRateLimit('general')(
+    request,
+    withActivityLogging(async (req: NextRequest) => {
+      try {
+        const user = await getCurrentUser(req);
+        if (!user) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
+            { status: 401 }
+          );
+        }
+
+        const { teamId } = await params;
+        const contentData = await req.json();
+
+        // Validate required fields
+        if (!contentData.content_type || !contentData.content_id) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Content type and content ID are required') },
+            { status: 400 }
+          );
+        }
+
+        // Validate content type
+        if (!Object.values(ContentType).includes(contentData.content_type)) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Invalid content type') },
+            { status: 400 }
+          );
+        }
+
+        const result = await teamService.shareContent(teamId, user.id, contentData, req);
+
+        if (!result.success) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to share content') },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({ sharing: result.sharing }, { status: 201 });
+
+      } catch (error: any) {
+        console.error('Error sharing content:', error);
         return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
-          { status: 401 }
-        );
-      }
-
-      const { teamId } = await params;
-      const contentData = await req.json();
-
-      // Validate required fields
-      if (!contentData.content_type || !contentData.content_id) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Content type and content ID are required') },
-          { status: 400 }
-        );
-      }
-
-      // Validate content type
-      if (!Object.values(ContentType).includes(contentData.content_type)) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_REQUEST, 'Invalid content type') },
-          { status: 400 }
-        );
-      }
-
-      const result = await teamService.shareContent(teamId, user.id, contentData, req);
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to share content') },
+          { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to share content') },
           { status: 500 }
         );
       }
-
-      return NextResponse.json({ sharing: result.sharing }, { status: 201 });
-
-    } catch (error: any) {
-      console.error('Error sharing content:', error);
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to share content') },
-        { status: 500 }
-      );
-    }
-  }))(request);
+    })
+  );
 }

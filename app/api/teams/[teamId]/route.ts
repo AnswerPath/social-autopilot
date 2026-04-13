@@ -68,38 +68,41 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
-    try {
-      const user = await getCurrentUser(req);
-      if (!user) {
+  return withRateLimit('general')(
+    request,
+    withActivityLogging(async (req: NextRequest) => {
+      try {
+        const user = await getCurrentUser(req);
+        if (!user) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
+            { status: 401 }
+          );
+        }
+
+        const { teamId } = await params;
+        const updateData = await req.json();
+
+        const result = await teamService.updateTeam(teamId, user.id, updateData, req);
+
+        if (!result.success) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to update team') },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({ team: result.team });
+
+      } catch (error: any) {
+        console.error('Error updating team:', error);
         return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
-          { status: 401 }
-        );
-      }
-
-      const { teamId } = await params;
-      const updateData = await req.json();
-
-      const result = await teamService.updateTeam(teamId, user.id, updateData, req);
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to update team') },
+          { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to update team') },
           { status: 500 }
         );
       }
-
-      return NextResponse.json({ team: result.team });
-
-    } catch (error: any) {
-      console.error('Error updating team:', error);
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to update team') },
-        { status: 500 }
-      );
-    }
-  }))(request);
+    })
+  );
 }
 
 /**
@@ -110,34 +113,37 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  return withRateLimit('general')(withActivityLogging(async (req: NextRequest) => {
-    try {
-      const user = await getCurrentUser(req);
-      if (!user) {
-        return NextResponse.json(
-          { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
-          { status: 401 }
-        );
-      }
+  return withRateLimit('general')(
+    request,
+    withActivityLogging(async (req: NextRequest) => {
+      try {
+        const user = await getCurrentUser(req);
+        if (!user) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.INVALID_CREDENTIALS, 'Authentication required') },
+            { status: 401 }
+          );
+        }
 
-      const { teamId } = await params;
-      const result = await teamService.deleteTeam(teamId, user.id, req);
+        const { teamId } = await params;
+        const result = await teamService.deleteTeam(teamId, user.id, req);
 
-      if (!result.success) {
+        if (!result.success) {
+          return NextResponse.json(
+            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to delete team') },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({ success: true });
+
+      } catch (error: any) {
+        console.error('Error deleting team:', error);
         return NextResponse.json(
-          { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to delete team') },
+          { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to delete team') },
           { status: 500 }
         );
       }
-
-      return NextResponse.json({ success: true });
-
-    } catch (error: any) {
-      console.error('Error deleting team:', error);
-      return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, 'Failed to delete team') },
-        { status: 500 }
-      );
-    }
-  }))(request);
+    })
+  );
 }
