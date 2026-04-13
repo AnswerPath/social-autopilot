@@ -143,8 +143,8 @@ export function TeamDashboard() {
       return;
     }
 
-    const success = await createTeam(newTeam);
-    if (success) {
+    const created = await createTeam(newTeam);
+    if (created) {
       setShowCreateTeam(false);
       setNewTeam({ name: '', description: '', industry: '', size_category: undefined, website_url: '' });
     }

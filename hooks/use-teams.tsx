@@ -130,10 +130,10 @@ export function useTeams() {
   }, [user, setLoading, setError, refreshSession]);
 
   // Create a new team
-  const createTeam = useCallback(async (teamData: CreateTeamRequest): Promise<boolean> => {
+  const createTeam = useCallback(async (teamData: CreateTeamRequest): Promise<Team | null> => {
     if (!user) {
       setError('User not authenticated.');
-      return false;
+      return null;
     }
 
     setLoading(true);
@@ -154,20 +154,20 @@ export function useTeams() {
       }
 
       const data = await response.json();
-      
+
       // Add new team to the list
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         teams: [...prev.teams, data.team],
-        currentTeam: data.team 
+        currentTeam: data.team,
       }));
 
-      return true;
+      return data.team as Team;
 
     } catch (err: any) {
       setError(err.message || 'Failed to create team.');
       console.error('Error creating team:', err);
-      return false;
+      return null;
     } finally {
       setLoading(false);
     }

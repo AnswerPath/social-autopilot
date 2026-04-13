@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient } from '@/lib/supabase';
 import { isDevMode } from '@/lib/auth-utils';
 import { 
   Team, 
@@ -32,7 +32,10 @@ import { buildTeamInviteUrl, sendTeamInvitationEmail } from '@/lib/team-invite-e
 
 export class TeamService {
   private static instance: TeamService;
-  private supabaseAdmin = getSupabaseAdmin();
+  /** Fresh service-role client so reads/writes are not affected by a poisoned singleton (user JWT on admin client). */
+  private serviceDb() {
+    return createSupabaseServiceRoleClient();
+  }
   private mockTeams: Team[] = []; // Store mock teams in development mode
   private mockInvitations: TeamInvitation[] = []; // Store mock invitations in development mode
 
@@ -80,7 +83,7 @@ export class TeamService {
       }
 
       // Generate unique slug
-      const { data: slugData, error: slugError } = await this.supabaseAdmin
+      const { data: slugData, error: slugError } = await this.serviceDb()
         .rpc('generate_team_slug', { team_name: teamData.name });
 
       if (slugError) throw slugError;
@@ -88,7 +91,7 @@ export class TeamService {
       const slug = slugData || teamData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
 
       // Create team
-      const { data: team, error: teamError } = await this.supabaseAdmin
+      const { data: team, error: teamError } = await this.serviceDb()
         .from('teams')
         .insert({
           name: teamData.name,
@@ -106,7 +109,7 @@ export class TeamService {
       if (teamError) throw teamError;
 
       // Add creator as team owner
-      const { error: memberError } = await this.supabaseAdmin
+      const { error: memberError } = await this.serviceDb()
         .from('team_members')
         .insert({
           team_id: team.id,
@@ -147,8 +150,8 @@ export class TeamService {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
       
       const query = isUuid 
-        ? this.supabaseAdmin.from('teams').select('*').eq('id', identifier)
-        : this.supabaseAdmin.from('teams').select('*').eq('slug', identifier);
+        ? this.serviceDb().from('teams').select('*').eq('id', identifier)
+        : this.serviceDb().from('teams').select('*').eq('slug', identifier);
 
       const { data: team, error } = await query.single();
 
@@ -179,7 +182,7 @@ export class TeamService {
       }
 
       // Update team
-      const { data: team, error } = await this.supabaseAdmin
+      const { data: team, error } = await this.serviceDb()
         .from('teams')
         .update({
           ...updateData,
@@ -229,7 +232,7 @@ export class TeamService {
       }
 
       // Delete team (cascade will handle related records)
-      const { error } = await this.supabaseAdmin
+      const { error } = await this.serviceDb()
         .from('teams')
         .delete()
         .eq('id', teamId);
@@ -289,7 +292,7 @@ export class TeamService {
         return { success: true, members: [] };
       }
 
-      let query = this.supabaseAdmin
+      let query = this.serviceDb()
         .from('team_members')
         .select('*')
         .eq('team_id', teamId);
@@ -336,7 +339,7 @@ export class TeamService {
       expiresAt.setDate(expiresAt.getDate() + 7);
 
       // Create invitation
-      const { data: invitation, error } = await this.supabaseAdmin
+      const { data: invitation, error } = await this.serviceDb()
         .from('team_invitations')
         .insert({
           team_id: teamId,
@@ -405,7 +408,7 @@ export class TeamService {
     inviterId: string
   ): Promise<void> {
     const teamName = invitation.team?.name ?? 'your team';
-    const { data: inviterProfile } = await this.supabaseAdmin
+    const { data: inviterProfile } = await this.serviceDb()
       .from('user_profiles')
       .select('first_name, last_name, display_name')
       .eq('user_id', inviterId)
@@ -438,7 +441,7 @@ export class TeamService {
     invitationData: InviteMemberRequest,
     request?: NextRequest
   ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
-    const { data: existing, error: fetchError } = await this.supabaseAdmin
+    const { data: existing, error: fetchError } = await this.serviceDb()
       .from('team_invitations')
       .select(`
         *,
@@ -463,7 +466,7 @@ export class TeamService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    const { data: invitation, error: updateError } = await this.supabaseAdmin
+    const { data: invitation, error: updateError } = await this.serviceDb()
       .from('team_invitations')
       .update({
         invitation_token: newToken,
@@ -522,7 +525,7 @@ export class TeamService {
       return { success: false, error: 'Insufficient permissions' };
     }
 
-    const { data: existing, error: fetchError } = await this.supabaseAdmin
+    const { data: existing, error: fetchError } = await this.serviceDb()
       .from('team_invitations')
       .select('id, team_id, email, role, permissions, message, status')
       .eq('id', invitationId)
@@ -560,7 +563,7 @@ export class TeamService {
         return { success: false, error: 'Insufficient permissions' };
       }
 
-      const { data: invitations, error } = await this.supabaseAdmin
+      const { data: invitations, error } = await this.serviceDb()
         .from('team_invitations')
         .select(`
           *,
@@ -589,7 +592,7 @@ export class TeamService {
   ): Promise<{ success: boolean; team?: Team; error?: string }> {
     try {
       // Get invitation
-      const { data: invitation, error: inviteError } = await this.supabaseAdmin
+      const { data: invitation, error: inviteError } = await this.serviceDb()
         .from('team_invitations')
         .select(`
           *,
@@ -609,7 +612,7 @@ export class TeamService {
       }
 
       // Add user to team
-      const { error: memberError } = await this.supabaseAdmin
+      const { error: memberError } = await this.serviceDb()
         .from('team_members')
         .insert({
           team_id: invitation.team_id,
@@ -623,7 +626,7 @@ export class TeamService {
       if (memberError) throw memberError;
 
       // Update invitation status
-      const { error: updateError } = await this.supabaseAdmin
+      const { error: updateError } = await this.serviceDb()
         .from('team_invitations')
         .update({
           status: InvitationStatus.ACCEPTED,
@@ -673,7 +676,7 @@ export class TeamService {
       }
 
       // Update member role
-      const { data: member, error } = await this.supabaseAdmin
+      const { data: member, error } = await this.serviceDb()
         .from('team_members')
         .update({
           role: roleData.role,
@@ -729,7 +732,7 @@ export class TeamService {
       }
 
       // Remove member
-      const { error } = await this.supabaseAdmin
+      const { error } = await this.serviceDb()
         .from('team_members')
         .update({ status: TeamMemberStatus.LEFT })
         .eq('team_id', teamId)
@@ -780,7 +783,7 @@ export class TeamService {
       }
 
       // Create content sharing record
-      const { data: sharing, error } = await this.supabaseAdmin
+      const { data: sharing, error } = await this.serviceDb()
         .from('team_content_sharing')
         .insert({
           team_id: teamId,
@@ -830,7 +833,7 @@ export class TeamService {
     contentType?: ContentType
   ): Promise<{ success: boolean; content?: TeamContentSharing[]; error?: string }> {
     try {
-      let query = this.supabaseAdmin
+      let query = this.serviceDb()
         .from('team_content_sharing')
         .select('*')
         .eq('team_id', teamId);
@@ -861,27 +864,27 @@ export class TeamService {
   async getTeamStats(teamId: string): Promise<{ success: boolean; stats?: TeamStats; error?: string }> {
     try {
       // Get member count
-      const { count: memberCount } = await this.supabaseAdmin
+      const { count: memberCount } = await this.serviceDb()
         .from('team_members')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId)
         .eq('status', TeamMemberStatus.ACTIVE);
 
       // Get pending invitations count
-      const { count: pendingInvitations } = await this.supabaseAdmin
+      const { count: pendingInvitations } = await this.serviceDb()
         .from('team_invitations')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId)
         .eq('status', InvitationStatus.PENDING);
 
       // Get shared content count
-      const { count: contentShared } = await this.supabaseAdmin
+      const { count: contentShared } = await this.serviceDb()
         .from('team_content_sharing')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId);
 
       // Get workspaces count
-      const { count: workspacesCount } = await this.supabaseAdmin
+      const { count: workspacesCount } = await this.serviceDb()
         .from('team_workspaces')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId);
@@ -890,14 +893,14 @@ export class TeamService {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const { count: activityCount } = await this.supabaseAdmin
+      const { count: activityCount } = await this.serviceDb()
         .from('team_activity_logs')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId)
         .gte('created_at', thirtyDaysAgo.toISOString());
 
       // Get last activity
-      const { data: lastActivity } = await this.supabaseAdmin
+      const { data: lastActivity } = await this.serviceDb()
         .from('team_activity_logs')
         .select('created_at')
         .eq('team_id', teamId)
@@ -937,7 +940,7 @@ export class TeamService {
   ): Promise<boolean> {
     try {
       // Get user's role in team
-      const { data: member, error } = await this.supabaseAdmin
+      const { data: member, error } = await this.serviceDb()
         .from('team_members')
         .select('role')
         .eq('team_id', teamId)
@@ -965,7 +968,7 @@ export class TeamService {
     userId: string
   ): Promise<{ success: boolean; permissions?: TeamPermissions; role?: TeamRole; error?: string }> {
     try {
-      const { data: member, error } = await this.supabaseAdmin
+      const { data: member, error } = await this.serviceDb()
         .from('team_members')
         .select('role, permissions')
         .eq('team_id', teamId)
@@ -1007,7 +1010,7 @@ export class TeamService {
         return { success: true, teams: userTeams }
       }
 
-      const { data: teams, error } = await this.supabaseAdmin
+      const { data: teams, error } = await this.serviceDb()
         .from('team_members')
         .select(`
           team:teams(*)
@@ -1044,7 +1047,7 @@ export class TeamService {
         };
       }
 
-      const { data: invitations, error } = await this.supabaseAdmin
+      const { data: invitations, error } = await this.serviceDb()
         .from('team_invitations')
         .select(`
           *,

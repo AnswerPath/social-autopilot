@@ -9,11 +9,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Mail, MoreHorizontal, Shield, Edit, Trash2, UserPlus } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Loader2, Mail, MoreHorizontal, Plus, Shield, Edit, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from "@/hooks/use-auth"
 import { useTeams } from "@/hooks/use-teams"
-import { InviteMemberRequest, TeamRole } from "@/lib/team-types"
+import { CreateTeamRequest, InviteMemberRequest, TeamRole, TeamSizeCategory } from "@/lib/team-types"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,16 +42,25 @@ export function TeamManagement() {
     loading,
     error,
     switchTeam,
+    createTeam,
     inviteMember,
     fetchOutgoingInvitations,
     fetchTeamMembers,
   } = useTeams()
 
   const [showInviteForm, setShowInviteForm] = useState(false)
+  const [showCreateTeam, setShowCreateTeam] = useState(false)
   const [inviteData, setInviteData] = useState<InviteMemberRequest>({
     email: '',
     role: TeamRole.MEMBER,
     message: '',
+  })
+  const [newTeam, setNewTeam] = useState<CreateTeamRequest>({
+    name: '',
+    description: '',
+    industry: '',
+    size_category: undefined,
+    website_url: '',
   })
 
   useEffect(() => {
@@ -53,6 +69,32 @@ export function TeamManagement() {
       void switchTeam(teams[0].id)
     }
   }, [user, teams, currentTeam, switchTeam])
+
+  const handleCreateTeam = async () => {
+    if (!newTeam.name.trim()) {
+      toast.error('Team name is required')
+      return
+    }
+    if (isAuthLoading || loading) {
+      toast.error('Please wait a moment and try again.')
+      return
+    }
+
+    const created = await createTeam(newTeam)
+    if (created) {
+      setShowCreateTeam(false)
+      setNewTeam({
+        name: '',
+        description: '',
+        industry: '',
+        size_category: undefined,
+        website_url: '',
+      })
+      await fetchTeamMembers(created.id)
+      await fetchOutgoingInvitations(created.id)
+      toast.success('Team created.')
+    }
+  }
 
   const handleInviteMember = async () => {
     if (!currentTeam || !inviteData.email.trim()) {
@@ -160,10 +202,20 @@ export function TeamManagement() {
               </Select>
             </div>
           )}
+          {teams.length === 0 && (
+            <Button type="button" onClick={() => setShowCreateTeam(true)} disabled={loading}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create team
+            </Button>
+          )}
           <Button
             onClick={() => {
               if (!currentTeam) {
-                toast.error('Select or create a team first (Account → Team, or use the team picker above).')
+                if (teams.length === 0) {
+                  setShowCreateTeam(true)
+                  return
+                }
+                toast.error('Select a team using the dropdown above.')
                 return
               }
               setShowInviteForm(true)
@@ -184,10 +236,14 @@ export function TeamManagement() {
 
       {!loading && teams.length === 0 && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-4">
             <p className="text-muted-foreground">
-              You do not have a team yet. Open <strong>Account</strong> → Team Collaboration to create one, then return here.
+              You do not have a team yet. Create one to invite members and manage permissions.
             </p>
+            <Button type="button" onClick={() => setShowCreateTeam(true)} disabled={loading}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create team
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -315,7 +371,7 @@ export function TeamManagement() {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() =>
-                        toast.info('Open Account → Team Dashboard to resend pending email invitations.')
+                        toast.info('Resending invitations is not available from this screen yet.')
                       }
                     >
                       <Mail className="h-4 w-4 mr-2" />
@@ -361,6 +417,91 @@ export function TeamManagement() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={showCreateTeam} onOpenChange={setShowCreateTeam}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create team</DialogTitle>
+            <DialogDescription>
+              Create a team to collaborate with others. You can invite members after it is created.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tm-create-name">Team name</Label>
+              <Input
+                id="tm-create-name"
+                value={newTeam.name}
+                onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                placeholder="Enter team name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tm-create-description">Description (optional)</Label>
+              <Textarea
+                id="tm-create-description"
+                value={newTeam.description || ''}
+                onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
+                placeholder="Describe your team"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tm-create-industry">Industry (optional)</Label>
+              <Input
+                id="tm-create-industry"
+                value={newTeam.industry || ''}
+                onChange={(e) => setNewTeam({ ...newTeam, industry: e.target.value })}
+                placeholder="e.g. Technology, Marketing"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tm-create-size">Team size (optional)</Label>
+              <Select
+                value={newTeam.size_category}
+                onValueChange={(value) =>
+                  setNewTeam({
+                    ...newTeam,
+                    size_category: value as TeamSizeCategory,
+                  })
+                }
+              >
+                <SelectTrigger id="tm-create-size">
+                  <SelectValue placeholder="Select team size" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TeamSizeCategory.STARTUP}>Startup (1–10)</SelectItem>
+                  <SelectItem value={TeamSizeCategory.SMALL}>Small (11–50)</SelectItem>
+                  <SelectItem value={TeamSizeCategory.MEDIUM}>Medium (51–200)</SelectItem>
+                  <SelectItem value={TeamSizeCategory.ENTERPRISE}>Enterprise (200+)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tm-create-website">Website (optional)</Label>
+              <Input
+                id="tm-create-website"
+                value={newTeam.website_url || ''}
+                onChange={(e) => setNewTeam({ ...newTeam, website_url: e.target.value })}
+                placeholder="https://example.com"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCreateTeam(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button type="button" onClick={() => void handleCreateTeam()} disabled={loading || isAuthLoading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create team'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Invite Form Modal */}
       {showInviteForm && currentTeam && (
