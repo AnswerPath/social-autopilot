@@ -157,21 +157,35 @@ export function TeamDashboard() {
       return;
     }
 
-    const success = await inviteMember(currentTeam.id, inviteData);
-    if (success) {
+    const result = await inviteMember(currentTeam.id, inviteData);
+    if (result.ok) {
       setShowInviteMember(false);
       setInviteData({ email: '', role: TeamRole.MEMBER, message: '' });
       await fetchTeamMembers(currentTeam.id);
       await fetchOutgoingInvitations(currentTeam.id);
-      toast.success('Invitation sent. If email is configured, they will receive a link.');
+      if (result.emailSent) {
+        toast.success('Invitation email sent.');
+      } else {
+        toast.warning(
+          result.emailError ||
+            'Invitation saved, but the email could not be sent. Check Resend and server logs.'
+        );
+      }
     }
   };
 
   const handleResendOutgoing = async (invitationId: string) => {
     if (!currentTeam) return;
-    const ok = await resendTeamInvitation(currentTeam.id, invitationId);
-    if (ok) {
-      toast.success('Invitation email resent.');
+    const result = await resendTeamInvitation(currentTeam.id, invitationId);
+    if (result.ok) {
+      if (result.emailSent) {
+        toast.success('Invitation email resent.');
+      } else {
+        toast.warning(
+          result.emailError ||
+            'Invitation updated, but the email could not be sent. Check Resend and server logs.'
+        );
+      }
     }
   };
 

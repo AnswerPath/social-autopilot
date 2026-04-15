@@ -133,7 +133,14 @@ export async function POST(
           );
         }
 
-        return NextResponse.json({ invitation: result.invitation }, { status: 201 });
+        return NextResponse.json(
+          {
+            invitation: result.invitation,
+            emailSent: result.emailSent ?? false,
+            ...(result.emailError ? { emailError: result.emailError } : {})
+          },
+          { status: 201 }
+        );
 
       } catch (error: any) {
         console.error('Error inviting member:', error);

@@ -30,6 +30,10 @@ import { logActivity, ActivityCategory, ActivityLevel } from '@/lib/activity-log
 import { NextRequest } from 'next/server';
 import { buildTeamInviteUrl, sendTeamInvitationEmail } from '@/lib/team-invite-email';
 
+/** Shown in API responses when Resend skips or rejects a send (details stay in server logs). */
+export const TEAM_INVITE_EMAIL_CLIENT_ERROR =
+  'Email could not be sent. The invitation was saved; check Resend configuration and server logs.';
+
 export class TeamService {
   private static instance: TeamService;
   /** Fresh service-role client so reads/writes are not affected by a poisoned singleton (user JWT on admin client). */
@@ -323,7 +327,13 @@ export class TeamService {
     inviterId: string,
     invitationData: InviteMemberRequest,
     request?: NextRequest
-  ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    invitation?: TeamInvitation;
+    error?: string;
+    emailSent?: boolean;
+    emailError?: string;
+  }> {
     try {
       // Check if user has permission to invite members
       const hasPermission = await this.checkTeamPermission(teamId, inviterId, 'canInviteMembers');
@@ -390,9 +400,17 @@ export class TeamService {
         }
       );
 
-      await this.sendTeamInvitationNotification(invitation as TeamInvitation & { team?: Team }, inviterId);
+      const { sent: emailSent } = await this.sendTeamInvitationNotification(
+        invitation as TeamInvitation & { team?: Team },
+        inviterId
+      );
 
-      return { success: true, invitation };
+      return {
+        success: true,
+        invitation,
+        emailSent,
+        ...(emailSent ? {} : { emailError: TEAM_INVITE_EMAIL_CLIENT_ERROR })
+      };
 
     } catch (error: any) {
       console.error('Error inviting member:', error);
@@ -401,12 +419,12 @@ export class TeamService {
   }
 
   /**
-   * Send invite email (does not throw; logs on failure).
+   * Send invite email (does not throw; logs provider message on failure).
    */
   private async sendTeamInvitationNotification(
     invitation: TeamInvitation & { team?: Team },
     inviterId: string
-  ): Promise<void> {
+  ): Promise<{ sent: boolean }> {
     const teamName = invitation.team?.name ?? 'your team';
     const { data: inviterProfile } = await this.serviceDb()
       .from('user_profiles')
@@ -429,7 +447,9 @@ export class TeamService {
     });
     if (!result.success) {
       console.error('[team-invite] Email send failed', { error: result.error });
+      return { sent: false };
     }
+    return { sent: true };
   }
 
   /**
@@ -440,7 +460,13 @@ export class TeamService {
     inviterId: string,
     invitationData: InviteMemberRequest,
     request?: NextRequest
-  ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    invitation?: TeamInvitation;
+    error?: string;
+    emailSent?: boolean;
+    emailError?: string;
+  }> {
     const { data: existing, error: fetchError } = await this.serviceDb()
       .from('team_invitations')
       .select(`
@@ -506,9 +532,17 @@ export class TeamService {
       }
     );
 
-    await this.sendTeamInvitationNotification(invitation as TeamInvitation & { team?: Team }, inviterId);
+    const { sent: emailSent } = await this.sendTeamInvitationNotification(
+      invitation as TeamInvitation & { team?: Team },
+      inviterId
+    );
 
-    return { success: true, invitation };
+    return {
+      success: true,
+      invitation,
+      emailSent,
+      ...(emailSent ? {} : { emailError: TEAM_INVITE_EMAIL_CLIENT_ERROR })
+    };
   }
 
   /**
@@ -519,7 +553,13 @@ export class TeamService {
     inviterId: string,
     invitationId: string,
     request?: NextRequest
-  ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    invitation?: TeamInvitation;
+    error?: string;
+    emailSent?: boolean;
+    emailError?: string;
+  }> {
     const hasPermission = await this.checkTeamPermission(teamId, inviterId, 'canInviteMembers');
     if (!hasPermission) {
       return { success: false, error: 'Insufficient permissions' };

@@ -41,7 +41,11 @@ export async function POST(
           );
         }
 
-        return NextResponse.json({ invitation: result.invitation });
+        return NextResponse.json({
+          invitation: result.invitation,
+          emailSent: result.emailSent ?? false,
+          ...(result.emailError ? { emailError: result.emailError } : {})
+        });
       } catch (error) {
         console.error('POST resend invitation', error);
         return NextResponse.json(

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -39,11 +39,13 @@ export function TeamManagement() {
     teams,
     currentTeam,
     teamMembers,
+    outgoingInvitations,
     loading,
     error,
     switchTeam,
     createTeam,
     inviteMember,
+    resendTeamInvitation,
     fetchOutgoingInvitations,
     fetchTeamMembers,
   } = useTeams()
@@ -69,6 +71,11 @@ export function TeamManagement() {
       void switchTeam(teams[0].id)
     }
   }, [user, teams, currentTeam, switchTeam])
+
+  useEffect(() => {
+    if (!currentTeam?.id) return
+    void fetchOutgoingInvitations(currentTeam.id)
+  }, [currentTeam?.id, fetchOutgoingInvitations])
 
   const handleCreateTeam = async () => {
     if (!newTeam.name.trim()) {
@@ -102,15 +109,40 @@ export function TeamManagement() {
       return
     }
 
-    const success = await inviteMember(currentTeam.id, inviteData)
-    if (success) {
+    const result = await inviteMember(currentTeam.id, inviteData)
+    if (result.ok) {
       setShowInviteForm(false)
       setInviteData({ email: '', role: TeamRole.MEMBER, message: '' })
       await fetchTeamMembers(currentTeam.id)
       await fetchOutgoingInvitations(currentTeam.id)
-      toast.success('Invitation sent. If email is configured, they will receive a link.')
+      if (result.emailSent) {
+        toast.success('Invitation email sent.')
+      } else {
+        toast.warning(
+          result.emailError ||
+            'Invitation saved, but the email could not be sent. Check Resend and server logs.'
+        )
+      }
     }
   }
+
+  const handleResendOutgoing = useCallback(
+    async (invitationId: string) => {
+      if (!currentTeam) return
+      const result = await resendTeamInvitation(currentTeam.id, invitationId)
+      if (result.ok) {
+        if (result.emailSent) {
+          toast.success('Invitation email resent.')
+        } else {
+          toast.warning(
+            result.emailError ||
+              'Invitation updated, but the email could not be sent. Check Resend and server logs.'
+          )
+        }
+      }
+    },
+    [currentTeam, resendTeamInvitation]
+  )
 
   const pendingApprovals = [
     {
@@ -296,6 +328,42 @@ export function TeamManagement() {
         </Card>
       )}
 
+      {currentTeam && outgoingInvitations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Pending invitations (email)
+            </CardTitle>
+            <CardDescription>Invites waiting for the recipient to accept</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {outgoingInvitations.map((inv) => (
+                <li
+                  key={inv.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
+                >
+                  <span>
+                    <span className="font-medium">{inv.email}</span>
+                    <span className="text-muted-foreground"> · {inv.role}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={loading}
+                    onClick={() => void handleResendOutgoing(inv.id)}
+                  >
+                    Resend email
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Team Members */}
       <Card>
         <CardHeader>
@@ -368,14 +436,6 @@ export function TeamManagement() {
                     <DropdownMenuItem>
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Role
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        toast.info('Resending invitations is not available from this screen yet.')
-                      }
-                    >
-                      <Mail className="h-4 w-4 mr-2" />
-                      Resend Invite
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem className="text-red-600">

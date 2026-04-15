@@ -49,6 +49,11 @@ async function parseApiErrorResponse(response: Response, fallbackPrefix: string)
   return `${fallbackPrefix}: ${core} (HTTP ${status})`
 }
 
+/** Result of invite or resend after a successful API call (HTTP 2xx). */
+export type TeamInvitationEmailOutcome =
+  | { ok: true; emailSent: boolean; emailError?: string }
+  | { ok: false };
+
 export interface TeamsState {
   teams: Team[];
   currentTeam: Team | null;
@@ -348,50 +353,59 @@ export function useTeams() {
   }, [user]);
 
   // Invite member to team
-  const inviteMember = useCallback(async (teamId: string, invitationData: InviteMemberRequest): Promise<boolean> => {
-    if (!user) {
-      setError('User not authenticated.');
-      return false;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/teams/${teamId}/members`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(invitationData),
-      });
-
-      if (!response.ok) {
-        throw new Error(await parseApiErrorResponse(response, 'Failed to invite member'));
-      }
-
-      // Refresh team members
-      await fetchTeamMembers(teamId);
-
-      await fetchOutgoingInvitations(teamId);
-
-      return true;
-
-    } catch (err: any) {
-      setError(err.message || 'Failed to invite member.');
-      console.error('Error inviting member:', err);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [user, setLoading, setError, fetchTeamMembers, fetchOutgoingInvitations]);
-
-  const resendTeamInvitation = useCallback(
-    async (teamId: string, invitationId: string): Promise<boolean> => {
+  const inviteMember = useCallback(
+    async (teamId: string, invitationData: InviteMemberRequest): Promise<TeamInvitationEmailOutcome> => {
       if (!user) {
         setError('User not authenticated.');
-        return false;
+        return { ok: false };
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/teams/${teamId}/members`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(invitationData),
+        });
+
+        if (!response.ok) {
+          throw new Error(await parseApiErrorResponse(response, 'Failed to invite member'));
+        }
+
+        const data = (await response.json()) as {
+          emailSent?: boolean;
+          emailError?: string;
+        };
+
+        await fetchTeamMembers(teamId);
+        await fetchOutgoingInvitations(teamId);
+
+        return {
+          ok: true,
+          emailSent: Boolean(data.emailSent),
+          ...(data.emailError ? { emailError: data.emailError } : {}),
+        };
+      } catch (err: any) {
+        setError(err.message || 'Failed to invite member.');
+        console.error('Error inviting member:', err);
+        return { ok: false };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user, setLoading, setError, fetchTeamMembers, fetchOutgoingInvitations]
+  );
+
+  const resendTeamInvitation = useCallback(
+    async (teamId: string, invitationId: string): Promise<TeamInvitationEmailOutcome> => {
+      if (!user) {
+        setError('User not authenticated.');
+        return { ok: false };
       }
 
       setLoading(true);
@@ -402,7 +416,7 @@ export function useTeams() {
           `/api/teams/${teamId}/invitations/${invitationId}/resend`,
           {
             method: 'POST',
-            credentials: 'include'
+            credentials: 'include',
           }
         );
 
@@ -410,12 +424,21 @@ export function useTeams() {
           throw new Error(await parseApiErrorResponse(response, 'Failed to resend invitation'));
         }
 
+        const data = (await response.json()) as {
+          emailSent?: boolean;
+          emailError?: string;
+        };
+
         await fetchOutgoingInvitations(teamId);
-        return true;
+        return {
+          ok: true,
+          emailSent: Boolean(data.emailSent),
+          ...(data.emailError ? { emailError: data.emailError } : {}),
+        };
       } catch (err: any) {
         setError(err.message || 'Failed to resend invitation.');
         console.error('Error resending invitation:', err);
-        return false;
+        return { ok: false };
       } finally {
         setLoading(false);
       }
