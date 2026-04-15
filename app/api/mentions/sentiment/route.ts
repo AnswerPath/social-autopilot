@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSentimentService } from '@/lib/sentiment/sentiment-service';
 import { supabaseAdmin } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth-utils';
 
 export const runtime = 'nodejs';
 
 // POST - Analyze sentiment for text or mention
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
     const body = await request.json();
     const { text, mentionId, batch } = body;
 
@@ -37,6 +37,14 @@ export async function POST(request: NextRequest) {
 
     // Analyze mention by ID
     if (mentionId) {
+      const user = await getCurrentUser(request);
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: 'Authentication required' },
+          { status: 401 }
+        );
+      }
+      const userId = user.id;
       const { data: mention, error } = await supabaseAdmin
         .from('mentions')
         .select('*')
@@ -60,7 +68,8 @@ export async function POST(request: NextRequest) {
           sentiment: analysis.sentiment,
           sentiment_confidence: analysis.confidence,
         })
-        .eq('id', mentionId);
+        .eq('id', mentionId)
+        .eq('user_id', userId);
 
       if (updateError) {
         console.error('Error updating mention sentiment:', updateError);
@@ -93,7 +102,14 @@ export async function POST(request: NextRequest) {
 // PUT - Batch re-analyze all mentions without sentiment
 export async function PUT(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+    const userId = user.id;
     const body = await request.json();
     const { analyzeAll, limit } = body;
 
@@ -154,7 +170,8 @@ export async function PUT(request: NextRequest) {
             sentiment: analysis.sentiment,
             sentiment_confidence: analysis.confidence,
           })
-          .eq('id', mention.id);
+          .eq('id', mention.id)
+          .eq('user_id', userId);
 
         if (updateError) {
           console.error(`Error updating mention ${mention.id}:`, updateError);
@@ -190,7 +207,14 @@ export async function PUT(request: NextRequest) {
 // PATCH - Update sentiment for a mention (manual override)
 export async function PATCH(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+    const userId = user.id;
     const body = await request.json();
     const { mentionId, sentiment, confidence } = body;
 

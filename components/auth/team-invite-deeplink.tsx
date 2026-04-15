@@ -39,12 +39,16 @@ export function TeamInviteDeepLink() {
           body: JSON.stringify({ invitationToken: token })
         })
         const data = await res.json().catch(() => ({}))
-        sessionStorage.removeItem(STORAGE_KEY)
 
         if (res.ok) {
+          sessionStorage.removeItem(STORAGE_KEY)
           const name = data.team?.name
           toast.success(name ? `Joined ${name}` : 'Invitation accepted')
         } else {
+          const terminal = res.status === 400 || res.status === 401 || res.status === 404
+          if (terminal) {
+            sessionStorage.removeItem(STORAGE_KEY)
+          }
           const msg =
             typeof data.error === 'object' && data.error && 'message' in data.error
               ? String((data.error as { message?: string }).message)
@@ -52,7 +56,6 @@ export function TeamInviteDeepLink() {
           toast.error(msg)
         }
       } catch {
-        sessionStorage.removeItem(STORAGE_KEY)
         toast.error('Could not accept invitation')
       } finally {
         inFlight.current = false

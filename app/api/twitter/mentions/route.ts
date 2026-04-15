@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUnifiedCredentials } from '@/lib/unified-credentials'
 import { TwitterApi } from 'twitter-api-v2'
+import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
@@ -23,12 +24,18 @@ function isNonDemoXCredentials(credentials: {
   )
 }
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching mentions...')
 
-    // TODO: SECURITY - Derive userId from server-side auth context (session/JWT)
-    const userId = 'demo-user'
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required', mentions: [], mock: false },
+        { status: 401 }
+      )
+    }
+    const userId = user.id
 
     const result = await getUnifiedCredentials(userId)
 

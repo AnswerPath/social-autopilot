@@ -1,9 +1,22 @@
 import { emailAdapter } from '@/lib/notifications/adapters/email'
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+function resolvePublicAppOrigin(): string {
+  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
+  const raw = (process.env.NEXT_PUBLIC_APP_URL || '').trim().replace(/\/$/, '')
+  const looksLocal =
+    !raw ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(raw)
+  if (looksLocal && !isDev) {
+    throw new Error(
+      'NEXT_PUBLIC_APP_URL must be set to a public HTTPS URL in production (required for team invite links).'
+    )
+  }
+  return raw || 'http://localhost:3000'
+}
 
 export function buildTeamInviteUrl(token: string): string {
-  return `${BASE_URL.replace(/\/$/, '')}/auth?teamInvite=${encodeURIComponent(token)}`
+  const base = resolvePublicAppOrigin()
+  return `${base}/auth?teamInvite=${encodeURIComponent(token)}`
 }
 
 export async function sendTeamInvitationEmail(params: {

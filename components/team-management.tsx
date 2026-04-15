@@ -11,8 +11,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -47,6 +49,7 @@ export function TeamManagement() {
     inviteMember,
     resendTeamInvitation,
     fetchOutgoingInvitations,
+    resetOutgoingInvitations,
     fetchTeamMembers,
   } = useTeams()
 
@@ -74,8 +77,9 @@ export function TeamManagement() {
 
   useEffect(() => {
     if (!currentTeam?.id) return
+    resetOutgoingInvitations()
     void fetchOutgoingInvitations(currentTeam.id)
-  }, [currentTeam?.id, fetchOutgoingInvitations])
+  }, [currentTeam?.id, fetchOutgoingInvitations, resetOutgoingInvitations])
 
   const handleCreateTeam = async () => {
     if (!newTeam.name.trim()) {
@@ -382,7 +386,9 @@ export function TeamManagement() {
             {currentTeam && teamMembers.length === 0 && !loading && (
               <p className="text-sm text-muted-foreground">No members loaded yet.</p>
             )}
-            {teamMembers.map((member) => {
+            {currentTeam &&
+              !loading &&
+              teamMembers.map((member) => {
               const displayName =
                 member.user?.display_name?.trim() ||
                 member.user?.email ||
@@ -447,6 +453,9 @@ export function TeamManagement() {
               </div>
               )
             })}
+            {currentTeam && loading && (
+              <p className="text-sm text-muted-foreground">Loading members…</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -563,77 +572,73 @@ export function TeamManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Invite Form Modal */}
-      {showInviteForm && currentTeam && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Invite Team Member</CardTitle>
-              <CardDescription>
-                Send an invitation to join <strong>{currentTeam.name}</strong>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="tm-invite-email">Email Address</Label>
-                <Input
-                  id="tm-invite-email"
-                  type="email"
-                  placeholder="colleague@company.com"
-                  value={inviteData.email}
-                  onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tm-invite-role">Role</Label>
-                <Select
-                  value={inviteData.role}
-                  onValueChange={(value: TeamRole) =>
-                    setInviteData({ ...inviteData, role: value })
-                  }
-                >
-                  <SelectTrigger id="tm-invite-role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={TeamRole.VIEWER}>Viewer</SelectItem>
-                    <SelectItem value={TeamRole.MEMBER}>Member</SelectItem>
-                    <SelectItem value={TeamRole.EDITOR}>Editor</SelectItem>
-                    <SelectItem value={TeamRole.ADMIN}>Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tm-invite-message">Message (optional)</Label>
-                <Textarea
-                  id="tm-invite-message"
-                  placeholder="Personal note for the invitation"
-                  value={inviteData.message || ''}
-                  onChange={(e) => setInviteData({ ...inviteData, message: e.target.value })}
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowInviteForm(false)}
-                  disabled={loading}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={() => void handleInviteMember()} disabled={loading}>
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Mail className="h-4 w-4 mr-2" />
-                  )}
-                  Send Invite
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <Dialog open={showInviteForm && !!currentTeam} onOpenChange={setShowInviteForm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite Team Member</DialogTitle>
+            <DialogDescription>
+              Send an invitation to join{' '}
+              <strong>{currentTeam?.name ?? 'this team'}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tm-invite-email">Email Address</Label>
+              <Input
+                id="tm-invite-email"
+                type="email"
+                placeholder="colleague@company.com"
+                value={inviteData.email}
+                onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tm-invite-role">Role</Label>
+              <Select
+                value={inviteData.role}
+                onValueChange={(value: TeamRole) =>
+                  setInviteData({ ...inviteData, role: value })
+                }
+              >
+                <SelectTrigger id="tm-invite-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TeamRole.VIEWER}>Viewer</SelectItem>
+                  <SelectItem value={TeamRole.MEMBER}>Member</SelectItem>
+                  <SelectItem value={TeamRole.EDITOR}>Editor</SelectItem>
+                  <SelectItem value={TeamRole.ADMIN}>Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tm-invite-message">Message (optional)</Label>
+              <Textarea
+                id="tm-invite-message"
+                placeholder="Personal note for the invitation"
+                value={inviteData.message || ''}
+                onChange={(e) => setInviteData({ ...inviteData, message: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={loading}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="button" onClick={() => void handleInviteMember()} disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Mail className="h-4 w-4 mr-2" />
+              )}
+              Send Invite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

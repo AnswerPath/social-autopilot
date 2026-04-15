@@ -63,11 +63,15 @@ function getClientIdentifier(request: NextRequest): string {
 /**
  * Check if client is rate limited
  */
+function rateLimitKey(request: NextRequest, type: keyof typeof RATE_LIMIT_CONFIG): string {
+  return `${type}:${getClientIdentifier(request)}`;
+}
+
 export function isRateLimited(
   request: NextRequest, 
   type: keyof typeof RATE_LIMIT_CONFIG = 'general'
 ): { isLimited: boolean; remainingAttempts: number; resetTime?: number } {
-  const clientId = getClientIdentifier(request);
+  const clientId = rateLimitKey(request, type);
   const config = RATE_LIMIT_CONFIG[type];
   const now = Date.now();
   
@@ -120,7 +124,7 @@ export function recordAttempt(
   request: NextRequest, 
   type: keyof typeof RATE_LIMIT_CONFIG = 'general'
 ): void {
-  const clientId = getClientIdentifier(request);
+  const clientId = rateLimitKey(request, type);
   const config = RATE_LIMIT_CONFIG[type];
   const now = Date.now();
   
@@ -155,7 +159,7 @@ export function clearRateLimit(
   request: NextRequest, 
   type: keyof typeof RATE_LIMIT_CONFIG = 'general'
 ): void {
-  const clientId = getClientIdentifier(request);
+  const clientId = rateLimitKey(request, type);
   rateLimitStore.delete(clientId);
 }
 
@@ -171,7 +175,7 @@ export function getRateLimitStatus(
   resetTime?: number;
   isBlocked: boolean;
 } {
-  const clientId = getClientIdentifier(request);
+  const clientId = rateLimitKey(request, type);
   const config = RATE_LIMIT_CONFIG[type];
   const now = Date.now();
   

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, createAuthError } from '@/lib/auth-utils';
 import { AuthErrorType } from '@/lib/auth-types';
 import { teamService } from '@/lib/team-service';
+import type { TeamInvitation } from '@/lib/team-types';
+
+function sanitizeInvitation(inv: TeamInvitation) {
+  const { invitation_token: _token, ...rest } = inv;
+  return rest;
+}
 
 /**
  * GET /api/teams/[teamId]/invitations
@@ -25,13 +31,18 @@ export async function GET(
 
     if (!result.success) {
       const status = result.error === 'Insufficient permissions' ? 403 : 500;
+      const errType =
+        result.error === 'Insufficient permissions'
+          ? AuthErrorType.INSUFFICIENT_PERMISSIONS
+          : AuthErrorType.NETWORK_ERROR;
       return NextResponse.json(
-        { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to list invitations') },
+        { error: createAuthError(errType, result.error || 'Failed to list invitations') },
         { status }
       );
     }
 
-    return NextResponse.json({ invitations: result.invitations });
+    const invitations = (result.invitations || []).map(sanitizeInvitation);
+    return NextResponse.json({ invitations });
   } catch (error) {
     console.error('GET /api/teams/[teamId]/invitations', error);
     return NextResponse.json(

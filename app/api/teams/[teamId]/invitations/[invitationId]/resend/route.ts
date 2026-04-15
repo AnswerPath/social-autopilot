@@ -35,14 +35,19 @@ export async function POST(
               : result.error === 'Invitation not found'
                 ? 404
                 : 400;
+          const errType =
+            result.error === 'Insufficient permissions'
+              ? AuthErrorType.INSUFFICIENT_PERMISSIONS
+              : result.error === 'Invitation not found'
+                ? AuthErrorType.USER_NOT_FOUND
+                : AuthErrorType.INVALID_REQUEST;
           return NextResponse.json(
-            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to resend invitation') },
+            { error: createAuthError(errType, result.error || 'Failed to resend invitation') },
             { status }
           );
         }
 
         return NextResponse.json({
-          invitation: result.invitation,
           emailSent: result.emailSent ?? false,
           ...(result.emailError ? { emailError: result.emailError } : {})
         });

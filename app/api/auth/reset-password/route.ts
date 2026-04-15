@@ -6,6 +6,7 @@ import { AuthErrorType } from '@/lib/auth-types';
 import { createAuthError } from '@/lib/auth-utils';
 import { PasswordResetRequestSchema } from '@/lib/password-validation';
 import { withRateLimit } from '@/lib/rate-limiting';
+import { getAppBaseUrl } from '@/lib/app-base-url';
 
 /**
  * Initiate password reset process
@@ -40,12 +41,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate password reset token
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      'http://localhost:3000'
+    const baseUrl = getAppBaseUrl()
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${baseUrl.replace(/\/$/, '')}/auth/reset-password`,
+      redirectTo: `${baseUrl}/auth/reset-password`,
     });
 
     if (error) {

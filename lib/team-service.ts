@@ -459,7 +459,8 @@ export class TeamService {
     teamId: string,
     inviterId: string,
     invitationData: InviteMemberRequest,
-    request?: NextRequest
+    request?: NextRequest,
+    invitationId?: string
   ): Promise<{
     success: boolean;
     invitation?: TeamInvitation;
@@ -467,15 +468,21 @@ export class TeamService {
     emailSent?: boolean;
     emailError?: string;
   }> {
-    const { data: existing, error: fetchError } = await this.serviceDb()
+    let query = this.serviceDb()
       .from('team_invitations')
       .select(`
         *,
         team:teams(name, slug)
       `)
-      .eq('team_id', teamId)
-      .eq('email', invitationData.email)
-      .maybeSingle();
+      .eq('team_id', teamId);
+
+    if (invitationId) {
+      query = query.eq('id', invitationId);
+    } else {
+      query = query.eq('email', invitationData.email);
+    }
+
+    const { data: existing, error: fetchError } = await query.maybeSingle();
 
     if (fetchError || !existing) {
       return { success: false, error: fetchError?.message || 'Invitation not found' };
@@ -587,7 +594,13 @@ export class TeamService {
       message: existing.message
     };
 
-    return this.rotatePendingInvitationAndNotify(teamId, inviterId, invitationData, request);
+    return this.rotatePendingInvitationAndNotify(
+      teamId,
+      inviterId,
+      invitationData,
+      request,
+      existing.id
+    );
   }
 
   /**
@@ -649,6 +662,16 @@ export class TeamService {
 
       if (new Date(invitation.expires_at) < new Date()) {
         return { success: false, error: 'Invitation has expired' };
+      }
+
+      const { data: authUser, error: authLookupError } = await this.serviceDb().auth.admin.getUserById(userId);
+      if (authLookupError || !authUser?.user?.email) {
+        return { success: false, error: 'Could not verify authenticated user email' };
+      }
+      const userEmail = authUser.user.email.trim().toLowerCase();
+      const inviteEmail = String(invitation.email).trim().toLowerCase();
+      if (userEmail !== inviteEmail) {
+        return { success: false, error: 'Invitation email does not match authenticated user' };
       }
 
       // Add user to team

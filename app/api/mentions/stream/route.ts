@@ -3,6 +3,7 @@ import { getUnifiedCredentials } from '@/lib/unified-credentials';
 import { createMentionMonitoringService } from '@/lib/mention-monitoring';
 import { XApiCredentials } from '@/lib/x-api-service';
 import { isEnabled } from '@/lib/feature-flags';
+import { getCurrentUser } from '@/lib/auth-utils';
 
 /**
  * Store active monitoring services per user
@@ -30,8 +31,12 @@ export async function GET(request: NextRequest) {
         { status: 503 }
       );
     }
-    const userId = request.headers.get('x-user-id') || 'demo-user';
-    
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+    const userId = user.id;
+
     // FIRST: Check for real credentials BEFORE checking existing monitors
     // This ensures we don't start demo mode if credentials exist
     const credentialsResult = await getUnifiedCredentials(userId);
@@ -170,8 +175,12 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
-    
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+    const userId = user.id;
+
     const monitor = activeMonitors.get(userId);
     if (!monitor) {
       // Even if monitor not found, return success (might have been cleared already)
@@ -221,8 +230,12 @@ export async function DELETE(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
-    
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+    const userId = user.id;
+
     const monitor = activeMonitors.get(userId);
     if (!monitor) {
       return NextResponse.json(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTwitterCredentials } from '@/lib/database-storage'
 import { TwitterApi } from 'twitter-api-v2'
+import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
@@ -15,7 +16,15 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching recent tweets...')
 
-    const result = await getTwitterCredentials('demo-user')
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required', mock: false, tweets: [] },
+        { status: 401 }
+      )
+    }
+
+    const result = await getTwitterCredentials(user.id)
 
     if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
@@ -91,9 +100,8 @@ export async function GET(request: NextRequest) {
       })
 
       const me = await client.v2.me()
-      const oauthTimelineLimit = 50
       const tweets = await client.v2.userTimeline(me.data.id, {
-        max_results: oauthTimelineLimit,
+        max_results: maxResults,
         'tweet.fields': ['created_at', 'public_metrics', 'context_annotations'],
       })
 

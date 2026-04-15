@@ -1,13 +1,8 @@
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { emailAdapter } from '@/lib/notifications/adapters/email'
+import { getAppBaseUrl } from '@/lib/app-base-url'
 
 export const VERIFICATION_EXPIRY_HOURS = 24
-
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-
-function appBaseUrl(): string {
-  return BASE_URL.replace(/\/$/, '')
-}
 
 /**
  * Remove unused verification tokens for a user so only the latest link stays valid.
@@ -27,14 +22,12 @@ async function deleteUnusedTokensForUser(userId: string): Promise<void> {
 
 /**
  * Create a verification token and send the verification email (Option B: soft verification).
- * Clears any prior unused tokens for this user first.
+ * Retires older unused tokens only after the new token is stored and the email sends successfully.
  */
 export async function sendVerificationEmailForUser(
   userId: string,
   email: string
 ): Promise<{ success: boolean; error?: string }> {
-  await deleteUnusedTokensForUser(userId)
-
   const token = crypto.randomUUID()
   const expiresAt = new Date()
   expiresAt.setHours(expiresAt.getHours() + VERIFICATION_EXPIRY_HOURS)
@@ -51,7 +44,7 @@ export async function sendVerificationEmailForUser(
     return { success: false, error: 'Could not create verification' }
   }
 
-  const verifyUrl = `${appBaseUrl()}/auth/verify-email?token=${token}`
+  const verifyUrl = `${getAppBaseUrl()}/auth/verify-email?token=${token}`
   const subject = 'Verify your email - Social Autopilot'
   const body = `Please verify your email by clicking the link below:\n\n${verifyUrl}\n\nThis link expires in ${VERIFICATION_EXPIRY_HOURS} hours. If you didn't create an account, you can ignore this email.`
 
@@ -61,6 +54,7 @@ export async function sendVerificationEmailForUser(
     return { success: false, error: result.error ?? 'Email send failed' }
   }
 
+  await deleteUnusedTokensForUser(userId)
   return { success: true }
 }
 
@@ -83,31 +77,48 @@ export async function resendVerificationForAuthenticatedUser(
  */
 export async function tryResendVerificationByEmail(email: string): Promise<{ success: boolean }> {
   const supabase = getSupabaseAdmin()
-  const { data: listData, error: listError } = await supabase.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000
-  })
+  const normalized = email.trim().toLowerCase()
+  let page = 1
+  const perPage = 1000
+  let matchedUserId: string | null = null
 
-  if (listError || !listData?.users) {
-    console.error('[email-verification] listUsers failed for resend', listError)
-    return { success: true }
+  for (;;) {
+    const { data: listData, error: listError } = await supabase.auth.admin.listUsers({
+      page,
+      perPage
+    })
+
+    if (listError || !listData?.users) {
+      console.error('[email-verification] listUsers failed for resend', listError)
+      return { success: false }
+    }
+
+    const found = listData.users.find((u) => u.email?.toLowerCase() === normalized)
+    if (found?.id) {
+      matchedUserId = found.id
+      break
+    }
+
+    if (listData.users.length < perPage) {
+      return { success: false }
+    }
+    page += 1
   }
 
-  const authUser = listData.users.find((u) => u.email?.toLowerCase() === email.toLowerCase())
-  if (!authUser?.id) {
-    return { success: true }
+  if (!matchedUserId) {
+    return { success: false }
   }
 
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('email_verified_at')
-    .eq('user_id', authUser.id)
+    .eq('user_id', matchedUserId)
     .maybeSingle()
 
   if (profile?.email_verified_at) {
     return { success: true }
   }
 
-  await sendVerificationEmailForUser(authUser.id, email)
+  await sendVerificationEmailForUser(matchedUserId, email)
   return { success: true }
 }

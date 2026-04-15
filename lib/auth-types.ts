@@ -521,6 +521,7 @@ export interface AuditLogEntry {
 
 // Authentication error types
 export enum AuthErrorType {
+  INVALID_REQUEST = 'invalid_request',
   INVALID_CREDENTIALS = 'invalid_credentials',
   USER_NOT_FOUND = 'user_not_found',
   ACCOUNT_DISABLED = 'account_disabled',

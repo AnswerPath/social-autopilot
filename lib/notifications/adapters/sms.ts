@@ -17,28 +17,30 @@ function getTwilioClient(): ReturnType<typeof twilio> {
   return twilioClient
 }
 
+function recipientMeta(to: string | undefined): { hasRecipient: boolean; recipientLength: number } {
+  const trimmed = typeof to === 'string' ? to.trim() : ''
+  return { hasRecipient: trimmed.length > 0, recipientLength: trimmed.length }
+}
+
 /**
  * SMS adapter using Twilio. Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER.
  */
 async function sendSms(to: string, body: string): Promise<{ success: boolean; error?: string }> {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-    console.warn('[notifications] SMS not configured (TWILIO_* env). Skipping send.', {
-      to: to?.slice(0, 5) + '...'
-    })
+    console.warn('[notifications] SMS not configured (TWILIO_* env). Skipping send.', recipientMeta(to))
     return { success: false, error: 'SMS not configured' }
   }
 
   if (!TWILIO_FROM_NUMBER || TWILIO_FROM_NUMBER.trim().length === 0) {
-    console.warn('[notifications] SMS not configured (TWILIO_FROM_NUMBER missing). Skipping send.', {
-      to: to?.slice(0, 5) + '...'
-    })
+    console.warn('[notifications] SMS not configured (TWILIO_FROM_NUMBER missing). Skipping send.', recipientMeta(to))
     return { success: false, error: 'SMS not configured (from number missing)' }
   }
 
   const trimmedTo = typeof to === 'string' ? to.trim() : ''
   if (!trimmedTo || trimmedTo.length < 8) {
     console.warn('[notifications] Invalid recipient phone, skipping send.', {
-      to: trimmedTo ? trimmedTo.slice(0, 5) + '...' : ''
+      hasRecipient: trimmedTo.length > 0,
+      recipientLength: trimmedTo.length
     })
     return { success: false, error: 'Invalid recipient phone' }
   }
@@ -66,8 +68,10 @@ async function sendSms(to: string, body: string): Promise<{ success: boolean; er
     return { success: false, error: 'No SID returned from Twilio' }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const toSanitized = trimmedTo.length > 6 ? trimmedTo.slice(0, 5) + '...' : trimmedTo
-    console.error('[notifications] Twilio send failed', { to: toSanitized, message })
+    console.error('[notifications] Twilio send failed', {
+      ...recipientMeta(trimmedTo),
+      message
+    })
     return { success: false, error: message }
   }
 }

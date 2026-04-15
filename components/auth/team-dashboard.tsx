@@ -69,6 +69,7 @@ export function TeamDashboard() {
     fetchTeamMembers,
     inviteMember,
     fetchOutgoingInvitations,
+    resetOutgoingInvitations,
     resendTeamInvitation,
     updateMemberRole,
     removeMember,
@@ -122,9 +123,10 @@ export function TeamDashboard() {
 
   React.useEffect(() => {
     if (currentTeam?.id) {
-      fetchOutgoingInvitations(currentTeam.id);
+      resetOutgoingInvitations();
+      void fetchOutgoingInvitations(currentTeam.id);
     }
-  }, [currentTeam?.id, fetchOutgoingInvitations]);
+  }, [currentTeam?.id, fetchOutgoingInvitations, resetOutgoingInvitations]);
 
   // Handle create team
   const handleCreateTeam = async () => {

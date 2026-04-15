@@ -61,6 +61,8 @@ export interface TeamsState {
   teamInvitations: TeamInvitation[];
   /** Pending invites sent for the active team (when fetched). */
   outgoingInvitations: TeamInvitation[];
+  /** Set when listing outgoing invitations fails; list is left unchanged. */
+  outgoingInvitationsError: string | null;
   teamContent: TeamContentSharing[];
   teamStats: TeamStats | null;
   userPermissions: TeamPermissions | null;
@@ -77,6 +79,7 @@ export function useTeams() {
     teamMembers: [],
     teamInvitations: [],
     outgoingInvitations: [],
+    outgoingInvitationsError: null,
     teamContent: [],
     teamStats: null,
     userPermissions: null,
@@ -187,6 +190,7 @@ export function useTeams() {
 
     setLoading(true);
     setError(null);
+    setState(prev => ({ ...prev, teamMembers: [] }));
 
     try {
       const response = await fetch(`/api/teams/${teamId}`);
@@ -333,6 +337,11 @@ export function useTeams() {
     }
   }, [user, setError]);
 
+  /** Clear pending-invite list when switching teams (before fetching new team's invites). */
+  const resetOutgoingInvitations = useCallback(() => {
+    setState((prev) => ({ ...prev, outgoingInvitations: [], outgoingInvitationsError: null }));
+  }, []);
+
   const fetchOutgoingInvitations = useCallback(async (teamId: string): Promise<void> => {
     if (!user) return;
 
@@ -341,14 +350,26 @@ export function useTeams() {
         credentials: 'include'
       });
       if (!response.ok) {
-        setState((prev) => ({ ...prev, outgoingInvitations: [] }));
+        const msg = await parseApiErrorResponse(response, 'Failed to fetch invitations');
+        setState((prev) => ({
+          ...prev,
+          outgoingInvitationsError: msg
+        }));
         return;
       }
       const data = await response.json();
-      setState((prev) => ({ ...prev, outgoingInvitations: data.invitations || [] }));
+      setState((prev) => ({
+        ...prev,
+        outgoingInvitations: data.invitations || [],
+        outgoingInvitationsError: null
+      }));
     } catch (err) {
       console.error('Error fetching outgoing invitations:', err);
-      setState((prev) => ({ ...prev, outgoingInvitations: [] }));
+      setState((prev) => ({
+        ...prev,
+        outgoingInvitationsError:
+          err instanceof Error ? err.message : 'Failed to fetch outgoing invitations'
+      }));
     }
   }, [user]);
 
@@ -676,6 +697,7 @@ export function useTeams() {
     fetchTeamContent,
     shareContent,
     fetchOutgoingInvitations,
+    resetOutgoingInvitations,
     resendTeamInvitation,
     user
   };

@@ -127,15 +127,41 @@ export async function POST(
         const result = await teamService.inviteMember(teamId, user.id, invitationData, req);
 
         if (!result.success) {
-          return NextResponse.json(
-            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to invite member') },
-            { status: 500 }
-          );
+          const errMsg = result.error || 'Failed to invite member';
+          let status = 500;
+          let errType: AuthErrorType = AuthErrorType.NETWORK_ERROR;
+          if (errMsg.includes('Insufficient permissions')) {
+            status = 403;
+            errType = AuthErrorType.INSUFFICIENT_PERMISSIONS;
+          } else if (
+            errMsg.toLowerCase().includes('duplicate') ||
+            errMsg.toLowerCase().includes('unique') ||
+            errMsg.toLowerCase().includes('already')
+          ) {
+            status = 409;
+            errType = AuthErrorType.INVALID_REQUEST;
+          } else if (
+            errMsg.toLowerCase().includes('invalid') ||
+            errMsg.toLowerCase().includes('required')
+          ) {
+            status = 400;
+            errType = AuthErrorType.INVALID_REQUEST;
+          } else {
+            console.error('Unexpected inviteMember error:', errMsg);
+          }
+          return NextResponse.json({ error: createAuthError(errType, errMsg) }, { status });
         }
+
+        const invitation = result.invitation
+          ? (() => {
+              const { invitation_token: _t, ...rest } = result.invitation;
+              return rest;
+            })()
+          : undefined;
 
         return NextResponse.json(
           {
-            invitation: result.invitation,
+            invitation,
             emailSent: result.emailSent ?? false,
             ...(result.emailError ? { emailError: result.emailError } : {})
           },

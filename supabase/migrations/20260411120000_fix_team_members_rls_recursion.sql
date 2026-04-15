@@ -54,30 +54,50 @@ AS $$
   );
 $$;
 
--- Workspace membership (workspace_members table)
+-- Team helpers: privileges (always present)
+REVOKE ALL ON FUNCTION public.is_active_team_member(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_team_owner(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_team_owner_or_admin(uuid, text) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION public.is_active_team_member(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_team_owner(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_team_owner_or_admin(uuid, text) TO authenticated;
+
+GRANT EXECUTE ON FUNCTION public.is_active_team_member(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.is_team_owner(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.is_team_owner_or_admin(uuid, text) TO service_role;
+
+-- Workspace membership helpers only when workspace_members exists (avoids CREATE on missing relation)
+DO $wrap$
+BEGIN
+  IF to_regclass('public.workspace_members') IS NULL THEN
+    RAISE NOTICE 'Skipping workspace_members helper functions: table public.workspace_members does not exist';
+  ELSE
+    EXECUTE $wk$
 CREATE OR REPLACE FUNCTION public.is_active_workspace_member(p_workspace_id uuid, p_user_id text)
 RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $$
-  -- Do not reference workspace_members.status: older schemas omit this column.
+AS $body$
   SELECT EXISTS (
     SELECT 1
     FROM public.workspace_members
     WHERE workspace_id = p_workspace_id
       AND user_id::text = p_user_id
   );
-$$;
+$body$;
+$wk$;
 
+    EXECUTE $wk$
 CREATE OR REPLACE FUNCTION public.is_workspace_admin_member(p_workspace_id uuid, p_user_id text)
 RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $body$
   SELECT EXISTS (
     SELECT 1
     FROM public.workspace_members
@@ -85,25 +105,18 @@ AS $$
       AND user_id::text = p_user_id
       AND role::text = 'admin'
   );
-$$;
+$body$;
+$wk$;
 
-REVOKE ALL ON FUNCTION public.is_active_team_member(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.is_team_owner(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.is_team_owner_or_admin(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.is_active_workspace_member(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.is_workspace_admin_member(uuid, text) FROM PUBLIC;
-
-GRANT EXECUTE ON FUNCTION public.is_active_team_member(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_team_owner(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_team_owner_or_admin(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_active_workspace_member(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_workspace_admin_member(uuid, text) TO authenticated;
-
-GRANT EXECUTE ON FUNCTION public.is_active_team_member(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.is_team_owner(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.is_team_owner_or_admin(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.is_active_workspace_member(uuid, text) TO service_role;
-GRANT EXECUTE ON FUNCTION public.is_workspace_admin_member(uuid, text) TO service_role;
+    EXECUTE 'REVOKE ALL ON FUNCTION public.is_active_workspace_member(uuid, text) FROM PUBLIC';
+    EXECUTE 'REVOKE ALL ON FUNCTION public.is_workspace_admin_member(uuid, text) FROM PUBLIC';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.is_active_workspace_member(uuid, text) TO authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.is_workspace_admin_member(uuid, text) TO authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.is_active_workspace_member(uuid, text) TO service_role';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.is_workspace_admin_member(uuid, text) TO service_role';
+  END IF;
+END
+$wrap$;
 
 -- teams
 DROP POLICY IF EXISTS "Users can view teams they belong to" ON public.teams;

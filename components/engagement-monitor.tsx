@@ -29,15 +29,13 @@ export function EngagementMonitor() {
   })
   const { toast } = useToast()
 
-  // Calculate stats from mentions data
+  // Calculate stats from mentions data (poll only while monitoring is on)
   useEffect(() => {
     const calculateStats = async () => {
       try {
         // Fetch mentions for stats calculation
         const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=100', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         if (!mentionsResponse.ok) return
         
@@ -91,9 +89,7 @@ export function EngagementMonitor() {
         
         // Fetch auto-reply logs for match counting
         const logsResponse = await fetch('/api/auto-reply/logs', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         let autoRepliesFromLogs = autoReplies
         if (logsResponse.ok) {
@@ -118,9 +114,9 @@ export function EngagementMonitor() {
       }
     }
     
-    calculateStats()
-    // Refresh stats every 30 seconds when monitoring, or on mount
-    const interval = setInterval(calculateStats, 30000)
+    void calculateStats()
+    if (!isMonitoring) return
+    const interval = setInterval(() => void calculateStats(), 30000)
     return () => clearInterval(interval)
   }, [isMonitoring])
 
@@ -129,9 +125,7 @@ export function EngagementMonitor() {
       setIsLoadingMentions(true)
       try {
         const response = await fetch('/api/twitter/mentions?maxResults=50', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         if (response.ok) {
           const data = await response.json()
@@ -175,9 +169,7 @@ export function EngagementMonitor() {
     try {
       const response = await fetch('/api/mentions/stream', {
         method: 'GET',
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       })
       const data = await response.json().catch(() => ({}))
       if (response.ok && data.success) {
@@ -206,18 +198,14 @@ export function EngagementMonitor() {
     try {
       const response = await fetch('/api/mentions/stream', {
         method: 'DELETE',
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       })
       const data = await response.json()
       if (data.success) {
         setIsMonitoring(false)
         // Refresh mentions list after stopping
         const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         if (mentionsResponse.ok) {
           const mentionsData = await mentionsResponse.json()
@@ -445,9 +433,7 @@ export function EngagementMonitor() {
                   setIsLoadingMentions(true)
                   try {
                     const response = await fetch('/api/twitter/mentions?maxResults=50', {
-                      headers: {
-                        'x-user-id': 'demo-user',
-                      },
+                      credentials: 'include',
                     })
                     if (response.ok) {
                       const data = await response.json()
@@ -509,9 +495,7 @@ export function EngagementMonitor() {
                     onClick={async () => {
                       setIsLoadingMentions(true)
                       const response = await fetch('/api/twitter/mentions?maxResults=50', {
-                        headers: {
-                          'x-user-id': 'demo-user',
-                        },
+                        credentials: 'include',
                       })
                       if (response.ok) {
                         const data = await response.json()
@@ -605,8 +589,8 @@ export function EngagementMonitor() {
                     method: 'PUT',
                     headers: {
                       'Content-Type': 'application/json',
-                      'x-user-id': 'demo-user',
                     },
+                    credentials: 'include',
                     body: JSON.stringify({ analyzeAll: false, limit: 100 }),
                   })
                   if (response.ok) {
@@ -619,9 +603,7 @@ export function EngagementMonitor() {
                     // Refresh mentions after re-analysis
                     setTimeout(async () => {
                       const refreshResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-                        headers: {
-                          'x-user-id': 'demo-user',
-                        },
+                        credentials: 'include',
                       })
                       if (refreshResponse.ok) {
                         const refreshData = await refreshResponse.json()

@@ -6,6 +6,24 @@ import { withRateLimit } from '@/lib/rate-limiting';
 import { withActivityLogging } from '@/lib/activity-middleware';
 import { ContentType } from '@/lib/team-types';
 
+function mapTeamContentServiceFailure(message: string | undefined): {
+  status: number;
+  type: AuthErrorType;
+} {
+  const msg = message || '';
+  if (msg.includes('Insufficient permissions')) {
+    return { status: 403, type: AuthErrorType.INSUFFICIENT_PERMISSIONS };
+  }
+  const lower = msg.toLowerCase();
+  if (lower.includes('duplicate') || lower.includes('unique') || lower.includes('already')) {
+    return { status: 409, type: AuthErrorType.INVALID_REQUEST };
+  }
+  if (lower.includes('invalid') || lower.includes('required') || lower.includes('not found')) {
+    return { status: 400, type: AuthErrorType.INVALID_REQUEST };
+  }
+  return { status: 500, type: AuthErrorType.NETWORK_ERROR };
+}
+
 /**
  * GET /api/teams/[teamId]/content
  * Get team shared content
@@ -42,9 +60,10 @@ export async function GET(
       const result = await teamService.getTeamSharedContent(teamId, contentType || undefined);
 
       if (!result.success) {
+        const { status, type } = mapTeamContentServiceFailure(result.error);
         return NextResponse.json(
-          { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to get shared content') },
-          { status: 500 }
+          { error: createAuthError(type, result.error || 'Failed to get shared content') },
+          { status }
         );
       }
 
@@ -102,9 +121,10 @@ export async function POST(
         const result = await teamService.shareContent(teamId, user.id, contentData, req);
 
         if (!result.success) {
+          const { status, type } = mapTeamContentServiceFailure(result.error);
           return NextResponse.json(
-            { error: createAuthError(AuthErrorType.NETWORK_ERROR, result.error || 'Failed to share content') },
-            { status: 500 }
+            { error: createAuthError(type, result.error || 'Failed to share content') },
+            { status }
           );
         }
 

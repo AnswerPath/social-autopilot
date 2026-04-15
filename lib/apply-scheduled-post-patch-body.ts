@@ -51,7 +51,16 @@ export async function applyScheduledPostPatchBody(
   } else {
     if (typeof body.content === 'string') update.content = body.content.trim()
     if (Array.isArray(body.mediaUrls)) update.media_urls = body.mediaUrls
-    if (body.scheduledAt) update.scheduled_at = new Date(String(body.scheduledAt)).toISOString()
+    if (body.scheduledAt != null && body.scheduledAt !== '') {
+      const d = new Date(String(body.scheduledAt))
+      if (Number.isNaN(d.getTime())) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid scheduledAt: could not parse as a date' },
+          { status: 400 }
+        )
+      }
+      update.scheduled_at = d.toISOString()
+    }
   }
 
   if (body.status) update.status = body.status
@@ -86,11 +95,22 @@ export async function applyScheduledPostPatchBody(
   }
 
   if (Object.keys(update).length === 0) {
-    const { data: currentPost } = await supabaseAdmin
+    const { data: currentPost, error: fetchError } = await supabaseAdmin
       .from('scheduled_posts')
       .select('*')
       .eq('id', id)
-      .single()
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (fetchError) {
+      return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 })
+    }
+    if (!currentPost) {
+      return NextResponse.json(
+        { success: false, error: 'Scheduled post not found' },
+        { status: 404 }
+      )
+    }
 
     return NextResponse.json({ success: true, post: currentPost })
   }

@@ -3590,6 +3590,15 @@ INSERT INTO notification_templates (event_type, notification_type, channel, loca
 ('approval', 'approval_changes_requested', 'in_app', 'en', NULL, 'Changes requested on post.')
 ON CONFLICT (event_type, notification_type, channel, locale) DO NOTHING;
 
+-- SMS templates (aligned with 20260413120000_sms_notification_templates.sql)
+INSERT INTO notification_templates (event_type, notification_type, channel, locale, subject, body_template) VALUES
+('approval', 'approval_approved', 'sms', 'en', NULL, 'Your post has been approved.'),
+('approval', 'approval_rejected', 'sms', 'en', NULL, 'Your post was rejected.'),
+('approval', 'approval_changes_requested', 'sms', 'en', NULL, 'Changes requested on your post.'),
+('mention', 'new_mention', 'sms', 'en', NULL, 'You were mentioned by {{userName}}.'),
+('system', 'test_notification', 'sms', 'en', NULL, 'Test notification from Social Autopilot.')
+ON CONFLICT (event_type, notification_type, channel, locale) DO NOTHING;
+
 -- Placeholder templates for mention and analytics
 INSERT INTO notification_templates (event_type, notification_type, channel, locale, subject, body_template) VALUES
 ('mention', 'new_mention', 'in_app', 'en', NULL, 'You were mentioned by {{userName}}.'),
