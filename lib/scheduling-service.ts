@@ -46,6 +46,17 @@ export interface SchedulePostResult {
   conflictCheck?: ConflictCheck
 }
 
+/** Validated reschedule fields without persisting (single-write patch flows). */
+export type ReschedulePlanResult =
+  | { success: false; error?: string; conflictCheck?: ConflictCheck }
+  | {
+      success: true
+      scheduled_at: string
+      scheduled_timezone: string
+      user_timezone: string
+      conflictCheck?: ConflictCheck
+    }
+
 export class SchedulingService {
   private readonly conflictWindowMinutes: number = 5 // Default: 5 minutes
 
@@ -229,34 +240,25 @@ export class SchedulingService {
   }
 
   /**
-   * Reschedule an existing post
+   * Validate timezone + window + conflicts for a reschedule without writing.
    */
-  async reschedulePost(
+  async planReschedulePost(
     postId: string,
     userId: string,
     newScheduledDate: string,
     newScheduledTime: string,
     timezone?: string
-  ): Promise<SchedulePostResult> {
+  ): Promise<ReschedulePlanResult> {
     try {
       const tz = timezone || getUserTimezone()
       const newScheduledAtUtc = convertToUtc(newScheduledDate, newScheduledTime, tz)
 
-      // Validate schedule time
       const validation = this.validateScheduleTime(newScheduledAtUtc)
       if (!validation.valid) {
-        return {
-          success: false,
-          error: validation.error
-        }
+        return { success: false, error: validation.error }
       }
 
-      // Check for conflicts (excluding the current post)
-      const conflictCheck = await this.detectConflicts(
-        userId,
-        newScheduledAtUtc,
-        postId
-      )
+      const conflictCheck = await this.detectConflicts(userId, newScheduledAtUtc, postId)
 
       if (conflictCheck.hasConflict) {
         return {
@@ -266,13 +268,46 @@ export class SchedulingService {
         }
       }
 
-      // Update the post
+      return {
+        success: true,
+        scheduled_at: newScheduledAtUtc.toISOString(),
+        scheduled_timezone: tz,
+        user_timezone: tz,
+        conflictCheck
+      }
+    } catch (error) {
+      return { success: false, error: toErrorMessage(error, 'Failed to reschedule post') }
+    }
+  }
+
+  /**
+   * Reschedule an existing post
+   */
+  async reschedulePost(
+    postId: string,
+    userId: string,
+    newScheduledDate: string,
+    newScheduledTime: string,
+    timezone?: string
+  ): Promise<SchedulePostResult> {
+    const plan = await this.planReschedulePost(
+      postId,
+      userId,
+      newScheduledDate,
+      newScheduledTime,
+      timezone
+    )
+    if (!plan.success) {
+      return { success: false, error: plan.error, conflictCheck: plan.conflictCheck }
+    }
+
+    try {
       const { data, error } = await supabaseAdmin
         .from('scheduled_posts')
         .update({
-          scheduled_at: newScheduledAtUtc.toISOString(),
-          scheduled_timezone: tz,
-          user_timezone: tz
+          scheduled_at: plan.scheduled_at,
+          scheduled_timezone: plan.scheduled_timezone,
+          user_timezone: plan.user_timezone
         })
         .eq('id', postId)
         .eq('user_id', userId)
@@ -289,7 +324,7 @@ export class SchedulingService {
       return {
         success: true,
         post: data,
-        conflictCheck
+        conflictCheck: plan.conflictCheck
       }
     } catch (error) {
       return {

@@ -11,6 +11,11 @@ function resolvePublicAppOrigin(): string {
       'NEXT_PUBLIC_APP_URL must be set to a public HTTPS URL in production (required for team invite links).'
     )
   }
+  if (!isDev && raw && !looksLocal && !raw.startsWith('https://')) {
+    throw new Error(
+      'NEXT_PUBLIC_APP_URL must use https:// in production (required for team invite links).'
+    )
+  }
   return raw || 'http://localhost:3000'
 }
 

@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
     }
     const userId = user.id
 
+    const maxResultsRaw = request.nextUrl.searchParams.get('maxResults')
+    const maxResultsParsed = maxResultsRaw != null ? parseInt(maxResultsRaw, 10) : NaN
+    const maxResults = Number.isFinite(maxResultsParsed)
+      ? Math.min(100, Math.max(1, maxResultsParsed))
+      : 10
+
     const result = await getUnifiedCredentials(userId)
 
     if (!result.success || !result.credentials) {
@@ -81,7 +87,7 @@ export async function GET(request: NextRequest) {
 
       const me = await client.v2.me()
       const mentions = await client.v2.userMentionTimeline(me.data.id, {
-        max_results: 10,
+        max_results: maxResults,
         'tweet.fields': ['created_at', 'public_metrics', 'author_id'],
         'user.fields': ['username', 'name', 'profile_image_url', 'public_metrics'],
         expansions: ['author_id'],

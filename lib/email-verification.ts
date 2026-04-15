@@ -7,13 +7,14 @@ export const VERIFICATION_EXPIRY_HOURS = 24
 /**
  * Remove unused verification tokens for a user so only the latest link stays valid.
  */
-async function deleteUnusedTokensForUser(userId: string): Promise<void> {
+async function deleteUnusedTokensForUser(userId: string, excludeToken: string): Promise<void> {
   const supabase = getSupabaseAdmin()
   const { error } = await supabase
     .from('email_verifications')
     .delete()
     .eq('user_id', userId)
     .is('used_at', null)
+    .neq('token', excludeToken)
 
   if (error) {
     console.error('[email-verification] Failed to clear pending tokens', { userId, error })
@@ -54,7 +55,7 @@ export async function sendVerificationEmailForUser(
     return { success: false, error: result.error ?? 'Email send failed' }
   }
 
-  await deleteUnusedTokensForUser(userId)
+  await deleteUnusedTokensForUser(userId, token)
   return { success: true }
 }
 
@@ -100,13 +101,13 @@ export async function tryResendVerificationByEmail(email: string): Promise<{ suc
     }
 
     if (listData.users.length < perPage) {
-      return { success: false }
+      return { success: true }
     }
     page += 1
   }
 
   if (!matchedUserId) {
-    return { success: false }
+    return { success: true }
   }
 
   const { data: profile } = await supabase

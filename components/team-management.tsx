@@ -42,6 +42,7 @@ export function TeamManagement() {
     currentTeam,
     teamMembers,
     outgoingInvitations,
+    outgoingInvitationsError,
     loading,
     error,
     switchTeam,
@@ -332,7 +333,7 @@ export function TeamManagement() {
         </Card>
       )}
 
-      {currentTeam && outgoingInvitations.length > 0 && (
+      {currentTeam && (outgoingInvitationsError || outgoingInvitations.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -341,29 +342,38 @@ export function TeamManagement() {
             </CardTitle>
             <CardDescription>Invites waiting for the recipient to accept</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {outgoingInvitations.map((inv) => (
-                <li
-                  key={inv.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
-                >
-                  <span>
-                    <span className="font-medium">{inv.email}</span>
-                    <span className="text-muted-foreground"> · {inv.role}</span>
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={loading}
-                    onClick={() => void handleResendOutgoing(inv.id)}
+          <CardContent className="space-y-3">
+            {outgoingInvitationsError && (
+              <p className="text-sm text-destructive rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+                Failed to load invitations: {outgoingInvitationsError}
+              </p>
+            )}
+            {outgoingInvitations.length > 0 ? (
+              <ul className="space-y-2">
+                {outgoingInvitations.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
                   >
-                    Resend email
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <span>
+                      <span className="font-medium">{inv.email}</span>
+                      <span className="text-muted-foreground"> · {inv.role}</span>
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => void handleResendOutgoing(inv.id)}
+                    >
+                      Resend email
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : !outgoingInvitationsError ? (
+              <p className="text-sm text-muted-foreground">No pending invitations.</p>
+            ) : null}
           </CardContent>
         </Card>
       )}

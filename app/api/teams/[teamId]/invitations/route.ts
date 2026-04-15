@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, createAuthError } from '@/lib/auth-utils';
 import { AuthErrorType } from '@/lib/auth-types';
 import { teamService } from '@/lib/team-service';
-import type { TeamInvitation } from '@/lib/team-types';
+import type { PublicTeamInvitation, TeamInvitation } from '@/lib/team-types';
 
-function sanitizeInvitation(inv: TeamInvitation) {
+function sanitizeInvitation(inv: TeamInvitation): PublicTeamInvitation {
   const { invitation_token: _token, ...rest } = inv;
   return rest;
 }

@@ -3,6 +3,15 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { SchedulingService } from '@/lib/scheduling-service'
 import { recordRevision } from '@/lib/approval/revisions'
 import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
+import { isApproverForPost } from '@/lib/approval/is-approver-for-post'
+
+const OWNER_SETTABLE_STATUSES = [
+  'draft',
+  'cancelled',
+  'published',
+  'failed',
+  'processing'
+] as const
 
 /**
  * Shared implementation for PATCH /api/scheduled-posts/:id and
@@ -17,7 +26,7 @@ export async function applyScheduledPostPatchBody(
 
   if (body.scheduledDate && body.scheduledTime) {
     const schedulingService = new SchedulingService()
-    const result = await schedulingService.reschedulePost(
+    const plan = await schedulingService.planReschedulePost(
       id,
       userId,
       String(body.scheduledDate),
@@ -25,13 +34,13 @@ export async function applyScheduledPostPatchBody(
       body.timezone as string | undefined
     )
 
-    if (!result.success) {
-      if (result.conflictCheck && result.conflictCheck.hasConflict) {
+    if (!plan.success) {
+      if (plan.conflictCheck && plan.conflictCheck.hasConflict) {
         return NextResponse.json(
           {
             success: false,
-            error: result.error,
-            conflictCheck: result.conflictCheck
+            error: plan.error,
+            conflictCheck: plan.conflictCheck
           },
           { status: 409 }
         )
@@ -40,11 +49,15 @@ export async function applyScheduledPostPatchBody(
       return NextResponse.json(
         {
           success: false,
-          error: result.error
+          error: plan.error
         },
         { status: 400 }
       )
     }
+
+    update.scheduled_at = plan.scheduled_at
+    update.scheduled_timezone = plan.scheduled_timezone
+    update.user_timezone = plan.user_timezone
 
     if (typeof body.content === 'string') update.content = body.content.trim()
     if (Array.isArray(body.mediaUrls)) update.media_urls = body.mediaUrls
@@ -63,33 +76,56 @@ export async function applyScheduledPostPatchBody(
     }
   }
 
-  if (body.status) update.status = body.status
-  if (body.postedTweetId) update.posted_tweet_id = body.postedTweetId
-  if (body.error) update.error = body.error
-
-  if (body.submitForApproval === true && !update.status) {
-    update.status = 'pending_approval'
-    update.requires_approval = true
-  } else if (body.submitForApproval === true) {
+  if (body.submitForApproval === true) {
     update.status = 'pending_approval'
     update.requires_approval = true
   } else if (body.submitForApproval === false) {
     update.requires_approval = false
   }
 
-  if (update.status === 'pending_approval' || body.status === 'pending_approval') {
-    update.submitted_for_approval_at = new Date().toISOString()
-    if (!update.requires_approval) update.requires_approval = true
-  } else if (body.status === 'approved') {
-    update.approved_at = new Date().toISOString()
-    update.approved_by = (body.approvedBy as string) || userId
-  } else if (body.status === 'rejected') {
-    update.rejected_at = new Date().toISOString()
-    update.rejected_by = (body.rejectedBy as string) || userId
-    update.rejection_reason = body.rejectionReason
+  const rawStatus = typeof body.status === 'string' ? body.status : ''
+
+  if (!body.submitForApproval && rawStatus) {
+    if (OWNER_SETTABLE_STATUSES.includes(rawStatus as (typeof OWNER_SETTABLE_STATUSES)[number])) {
+      update.status = rawStatus
+    } else if (rawStatus === 'approved') {
+      if (!(await isApproverForPost(userId, id))) {
+        return NextResponse.json(
+          { success: false, error: 'Not authorized to approve this post' },
+          { status: 403 }
+        )
+      }
+      update.status = 'approved'
+      update.approved_at = new Date().toISOString()
+      update.approved_by = userId
+    } else if (rawStatus === 'rejected') {
+      if (!(await isApproverForPost(userId, id))) {
+        return NextResponse.json(
+          { success: false, error: 'Not authorized to reject this post' },
+          { status: 403 }
+        )
+      }
+      update.status = 'rejected'
+      update.rejected_at = new Date().toISOString()
+      update.rejected_by = userId
+      if (typeof body.rejectionReason === 'string') {
+        update.rejection_reason = body.rejectionReason
+      }
+    } else if (rawStatus === 'pending_approval') {
+      update.status = 'pending_approval'
+      update.requires_approval = true
+    }
   }
 
-  if (body.createRevision && body.status === 'draft') {
+  if (body.postedTweetId) update.posted_tweet_id = body.postedTweetId
+  if (body.error) update.error = body.error
+
+  if (update.status === 'pending_approval') {
+    update.submitted_for_approval_at = new Date().toISOString()
+    if (update.requires_approval === undefined) update.requires_approval = true
+  }
+
+  if (body.createRevision && rawStatus === 'draft') {
     update.parent_post_id = id
     update.revision_count = ((body.currentRevisionCount as number) || 0) + 1
   }

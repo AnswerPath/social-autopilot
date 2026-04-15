@@ -98,6 +98,9 @@ export interface TeamInvitation {
   };
 }
 
+/** API-safe invitation row (token never exposed). */
+export type PublicTeamInvitation = Omit<TeamInvitation, 'invitation_token'>;
+
 export interface TeamContentSharing {
   id: string;
   team_id: string;

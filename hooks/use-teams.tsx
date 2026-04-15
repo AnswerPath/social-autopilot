@@ -5,7 +5,8 @@ import { useAuth } from './use-auth';
 import { 
   Team, 
   TeamMember, 
-  TeamInvitation, 
+  TeamInvitation,
+  PublicTeamInvitation,
   TeamContentSharing,
   TeamStats,
   CreateTeamRequest,
@@ -60,7 +61,7 @@ export interface TeamsState {
   teamMembers: TeamMember[];
   teamInvitations: TeamInvitation[];
   /** Pending invites sent for the active team (when fetched). */
-  outgoingInvitations: TeamInvitation[];
+  outgoingInvitations: PublicTeamInvitation[];
   /** Set when listing outgoing invitations fails; list is left unchanged. */
   outgoingInvitationsError: string | null;
   teamContent: TeamContentSharing[];

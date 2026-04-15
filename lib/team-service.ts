@@ -425,31 +425,36 @@ export class TeamService {
     invitation: TeamInvitation & { team?: Team },
     inviterId: string
   ): Promise<{ sent: boolean }> {
-    const teamName = invitation.team?.name ?? 'your team';
-    const { data: inviterProfile } = await this.serviceDb()
-      .from('user_profiles')
-      .select('first_name, last_name, display_name')
-      .eq('user_id', inviterId)
-      .maybeSingle();
-    const inviterLabel =
-      inviterProfile?.display_name ||
-      [inviterProfile?.first_name, inviterProfile?.last_name].filter(Boolean).join(' ').trim() ||
-      undefined;
-    const inviteUrl = buildTeamInviteUrl(invitation.invitation_token);
-    const result = await sendTeamInvitationEmail({
-      to: invitation.email,
-      teamName,
-      role: invitation.role,
-      inviterLabel,
-      message: invitation.message,
-      expiresAt: new Date(invitation.expires_at),
-      inviteUrl
-    });
-    if (!result.success) {
-      console.error('[team-invite] Email send failed', { error: result.error });
+    try {
+      const teamName = invitation.team?.name ?? 'your team';
+      const { data: inviterProfile } = await this.serviceDb()
+        .from('user_profiles')
+        .select('first_name, last_name, display_name')
+        .eq('user_id', inviterId)
+        .maybeSingle();
+      const inviterLabel =
+        inviterProfile?.display_name ||
+        [inviterProfile?.first_name, inviterProfile?.last_name].filter(Boolean).join(' ').trim() ||
+        undefined;
+      const inviteUrl = buildTeamInviteUrl(invitation.invitation_token);
+      const result = await sendTeamInvitationEmail({
+        to: invitation.email,
+        teamName,
+        role: invitation.role,
+        inviterLabel,
+        message: invitation.message,
+        expiresAt: new Date(invitation.expires_at),
+        inviteUrl
+      });
+      if (!result.success) {
+        console.error('[team-invite] Email send failed', { error: result.error });
+        return { sent: false };
+      }
+      return { sent: true };
+    } catch (err) {
+      console.error('[team-invite] Invitation email setup or send threw', err);
       return { sent: false };
     }
-    return { sent: true };
   }
 
   /**

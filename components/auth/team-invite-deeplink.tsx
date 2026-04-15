@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 
@@ -14,11 +14,22 @@ export function TeamInviteDeepLink() {
   const searchParams = useSearchParams()
   const { user, loading } = useAuth()
   const inFlight = useRef(false)
+  const [storedInviteVersion, setStoredInviteVersion] = useState(0)
 
   useEffect(() => {
     const t = searchParams.get('teamInvite')
-    if (t) {
-      sessionStorage.setItem(STORAGE_KEY, t)
+    if (!t) return
+
+    sessionStorage.setItem(STORAGE_KEY, t)
+    setStoredInviteVersion((v) => v + 1)
+
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has('teamInvite')) {
+        url.searchParams.delete('teamInvite')
+        const next = `${url.pathname}${url.search}${url.hash}`
+        window.history.replaceState(null, '', next)
+      }
     }
   }, [searchParams])
 
@@ -61,7 +72,7 @@ export function TeamInviteDeepLink() {
         inFlight.current = false
       }
     })()
-  }, [user, loading])
+  }, [user, loading, storedInviteVersion])
 
   return null
 }

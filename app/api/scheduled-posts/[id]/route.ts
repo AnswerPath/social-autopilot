@@ -14,13 +14,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params
     const body = await request.json()
     return applyScheduledPostPatchBody(id, user.id, body)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    console.error('[PATCH /api/scheduled-posts/:id]', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to update scheduled post',
-        details: error.message
-      },
+      { success: false, error: 'Failed to update scheduled post' },
       { status: 500 }
     )
   }
