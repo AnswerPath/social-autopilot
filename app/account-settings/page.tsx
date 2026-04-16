@@ -10,7 +10,7 @@ import Link from 'next/link';
 export default function AccountSettingsPage() {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-muted/50 p-4">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
           <div className="mb-6">

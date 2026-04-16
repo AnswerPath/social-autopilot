@@ -22,7 +22,7 @@ export function SettingsPage() {
     return (
       <div className="container mx-auto py-6">
         <div className="flex items-center justify-center">
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>
     )
@@ -33,8 +33,8 @@ export function SettingsPage() {
       <div className="container mx-auto py-6">
         <div className="flex items-center justify-center">
           <div className="text-center">
-            <p className="text-lg font-semibold text-gray-900">Authentication Required</p>
-            <p className="text-gray-600 mt-2">Please log in to access settings.</p>
+            <p className="text-lg font-semibold text-foreground">Authentication Required</p>
+            <p className="text-muted-foreground mt-2">Please log in to access settings.</p>
           </div>
         </div>
       </div>
@@ -45,16 +45,16 @@ export function SettingsPage() {
   console.log('🔧 Settings page - Authenticated user ID:', userId)
   
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Settings className="h-8 w-8 text-gray-600" />
+    <div className="container mx-auto space-y-6 py-6">
+      <div className="flex animate-fade-up items-center gap-3">
+        <Settings className="h-8 w-8 text-muted-foreground" />
         <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-gray-600">Manage your Social Autopilot preferences and integrations</p>
+          <h1 className="font-heading text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground">Manage your Social Autopilot preferences and integrations</p>
         </div>
       </div>
 
-      <Tabs defaultValue="integrations" className="space-y-6">
+      <Tabs defaultValue="integrations" className="animate-fade-up space-y-6 delay-stagger-2">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="integrations" className="flex items-center gap-2">
             <Bot className="h-4 w-4" />

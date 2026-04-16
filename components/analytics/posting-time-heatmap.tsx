@@ -41,7 +41,7 @@ export function PostingTimeHeatmap({ data, loading = false }: PostingTimeHeatmap
   const getColorClass = (intensity: number): string => {
     switch (intensity) {
       case 0:
-        return 'bg-gray-100 hover:bg-gray-200'
+        return 'bg-muted hover:bg-muted'
       case 1:
         return 'bg-blue-100 hover:bg-blue-200'
       case 2:
@@ -51,7 +51,7 @@ export function PostingTimeHeatmap({ data, loading = false }: PostingTimeHeatmap
       case 4:
         return 'bg-blue-700 hover:bg-blue-800 text-white'
       default:
-        return 'bg-gray-100'
+        return 'bg-muted'
     }
   }
 
@@ -137,7 +137,7 @@ export function PostingTimeHeatmap({ data, loading = false }: PostingTimeHeatmap
                                 className={cn(
                                   'flex-1 h-8 rounded cursor-pointer transition-colors',
                                   colorClass,
-                                  'border border-gray-200'
+                                  'border border-border'
                                 )}
                                 style={{ minWidth: '24px' }}
                               />
@@ -165,11 +165,11 @@ export function PostingTimeHeatmap({ data, loading = false }: PostingTimeHeatmap
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
               <span>Less engagement</span>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 bg-gray-100 border border-gray-200 rounded" />
-                <div className="w-4 h-4 bg-blue-100 border border-gray-200 rounded" />
-                <div className="w-4 h-4 bg-blue-300 border border-gray-200 rounded" />
-                <div className="w-4 h-4 bg-blue-500 border border-gray-200 rounded" />
-                <div className="w-4 h-4 bg-blue-700 border border-gray-200 rounded" />
+                <div className="w-4 h-4 bg-muted border border-border rounded" />
+                <div className="w-4 h-4 bg-blue-100 border border-border rounded" />
+                <div className="w-4 h-4 bg-blue-300 border border-border rounded" />
+                <div className="w-4 h-4 bg-blue-500 border border-border rounded" />
+                <div className="w-4 h-4 bg-blue-700 border border-border rounded" />
               </div>
               <span>More engagement</span>
             </div>

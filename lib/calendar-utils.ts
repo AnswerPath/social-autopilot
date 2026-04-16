@@ -26,7 +26,7 @@ export interface CalendarDay {
 export function getStatusColor(status: CalendarPost['status']): string {
   switch (status) {
     case 'draft':
-      return 'bg-gray-100 border-gray-300 text-gray-700'
+      return 'bg-muted border-border text-foreground'
     case 'approved':
       return 'bg-blue-50 border-blue-400 text-blue-700'
     case 'pending_approval':
@@ -42,7 +42,7 @@ export function getStatusColor(status: CalendarPost['status']): string {
     case 'failed':
       return 'bg-red-50 border-red-400 text-red-700'
     default:
-      return 'bg-gray-50 border-gray-300 text-gray-600'
+      return 'bg-muted/50 border-border text-muted-foreground'
   }
 }
 

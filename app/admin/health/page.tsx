@@ -58,11 +58,11 @@ function AdminHealthContent() {
 
   if (forbidden) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-screen bg-muted/50 p-4">
         <div className="max-w-2xl mx-auto text-center py-12">
           <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Restricted</h2>
-          <p className="text-gray-600 mb-6">Only administrators can view system health.</p>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Access Restricted</h2>
+          <p className="text-muted-foreground mb-6">Only administrators can view system health.</p>
           <Link href="/dashboard">
             <Button>Return to Dashboard</Button>
           </Link>
@@ -73,8 +73,8 @@ function AdminHealthContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="min-h-screen bg-muted/50 p-4 flex items-center justify-center">
+        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -84,7 +84,7 @@ function AdminHealthContent() {
   const totalErrors = Object.values(stats).reduce((s, n) => s + n, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-muted/50 p-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -94,8 +94,8 @@ function AdminHealthContent() {
                 Back to Dashboard
               </Button>
             </Link>
-            <h1 className="text-3xl font-bold text-gray-900">System Health</h1>
-            <p className="text-gray-600">Database, errors, and monitoring overview</p>
+            <h1 className="text-3xl font-bold text-foreground">System Health</h1>
+            <p className="text-muted-foreground">Database, errors, and monitoring overview</p>
           </div>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className="h-4 w-4 mr-2" />

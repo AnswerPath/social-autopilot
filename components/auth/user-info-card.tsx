@@ -39,8 +39,8 @@ export function UserInfoCard() {
       <Card>
         <CardContent className="pt-6">
           <div className="text-center py-4">
-            <User className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-            <p className="text-sm text-gray-600">
+            <User className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
               {error || 'Unable to load user information'}
             </p>
           </div>
@@ -82,10 +82,10 @@ export function UserInfoCard() {
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 truncate">
+            <h3 className="font-semibold text-foreground truncate">
               {displayName}
             </h3>
-            <p className="text-sm text-gray-600 truncate">
+            <p className="text-sm text-muted-foreground truncate">
               {user.email}
             </p>
             <div className="flex items-center gap-2 mt-1">
@@ -103,16 +103,16 @@ export function UserInfoCard() {
         {/* Quick Stats */}
         <div className="grid grid-cols-2 gap-3 pt-2 border-t">
           <div className="text-center">
-            <div className="text-lg font-semibold text-gray-900">
+            <div className="text-lg font-semibold text-foreground">
               {user.permissions.length}
             </div>
-            <div className="text-xs text-gray-600">Permissions</div>
+            <div className="text-xs text-muted-foreground">Permissions</div>
           </div>
           <div className="text-center">
-            <div className="text-lg font-semibold text-gray-900">
+            <div className="text-lg font-semibold text-foreground">
               {user.role === 'ADMIN' ? 'Full' : user.role === 'EDITOR' ? 'Edit' : 'View'}
             </div>
-            <div className="text-xs text-gray-600">Access Level</div>
+            <div className="text-xs text-muted-foreground">Access Level</div>
           </div>
         </div>
 
@@ -129,7 +129,7 @@ export function UserInfoCard() {
         {/* Quick Permissions Preview */}
         {user.permissions.length > 0 && (
           <div className="pt-2 border-t">
-            <div className="text-xs text-gray-600 mb-2">Key Permissions:</div>
+            <div className="text-xs text-muted-foreground mb-2">Key Permissions:</div>
             <div className="flex flex-wrap gap-1">
               {user.permissions.slice(0, 4).map((permission) => (
                 <Badge key={permission} variant="outline" className="text-xs">

@@ -318,8 +318,8 @@ export function EngagementMonitor() {
     switch (sentiment) {
       case "positive": return "text-green-600 bg-green-50"
       case "negative": return "text-red-600 bg-red-50"
-      case "neutral": return "text-gray-600 bg-gray-50"
-      default: return "text-gray-600 bg-gray-50"
+      case "neutral": return "text-muted-foreground bg-muted/50"
+      default: return "text-muted-foreground bg-muted/50"
     }
   }
 
@@ -328,7 +328,7 @@ export function EngagementMonitor() {
       case "high": return "border-red-500 bg-red-50"
       case "medium": return "border-yellow-500 bg-yellow-50"
       case "low": return "border-green-500 bg-green-50"
-      default: return "border-gray-200"
+      default: return "border-border"
     }
   }
 
@@ -340,7 +340,7 @@ export function EngagementMonitor() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">New Mentions</p>
+                <p className="text-sm text-muted-foreground">New Mentions</p>
                 <p className="text-2xl font-bold">{stats.newMentions}</p>
               </div>
               <MessageSquare className="h-8 w-8 text-blue-600" />
@@ -353,7 +353,7 @@ export function EngagementMonitor() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Avg Response Time</p>
+                <p className="text-sm text-muted-foreground">Avg Response Time</p>
                 <p className="text-2xl font-bold">{stats.avgResponseTime}</p>
               </div>
               <Clock className="h-8 w-8 text-green-600" />
@@ -370,7 +370,7 @@ export function EngagementMonitor() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Sentiment Score</p>
+                <p className="text-sm text-muted-foreground">Sentiment Score</p>
                 <p className="text-2xl font-bold">{stats.sentimentScore.toFixed(1)}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-green-600" />
@@ -387,7 +387,7 @@ export function EngagementMonitor() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Auto Replies</p>
+                <p className="text-sm text-muted-foreground">Auto Replies</p>
                 <p className="text-2xl font-bold">{stats.autoReplies}</p>
               </div>
               <Settings className="h-8 w-8 text-purple-600" />
@@ -553,10 +553,10 @@ export function EngagementMonitor() {
                               <Badge variant="outline">
                                 {mention.priority} priority
                               </Badge>
-                              <span className="text-sm text-gray-500">{mention.followers.toLocaleString()} followers</span>
+                              <span className="text-sm text-muted-foreground">{mention.followers.toLocaleString()} followers</span>
                             </div>
-                            <p className="text-gray-900 mb-2">{mention.content}</p>
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <p className="text-foreground mb-2">{mention.content}</p>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
                               <span>{mention.time}</span>
                               {mention.replied && (
                                 <Badge variant="outline" className="text-green-600">
@@ -594,7 +594,7 @@ export function EngagementMonitor() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-medium">Sentiment Analysis</h3>
-              <p className="text-gray-600">Analyze sentiment of mentions</p>
+              <p className="text-muted-foreground">Analyze sentiment of mentions</p>
             </div>
             <Button
               variant="outline"
@@ -664,9 +664,9 @@ export function EngagementMonitor() {
                   <div className="text-2xl font-bold text-green-600">{sentimentStats.positive}%</div>
                   <div className="text-sm text-green-700">Positive</div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-2xl font-bold text-gray-600">{sentimentStats.neutral}%</div>
-                  <div className="text-sm text-gray-700">Neutral</div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-muted-foreground">{sentimentStats.neutral}%</div>
+                  <div className="text-sm text-foreground">Neutral</div>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-lg">
                   <div className="text-2xl font-bold text-red-600">{sentimentStats.negative}%</div>
@@ -705,8 +705,8 @@ export function EngagementMonitor() {
                   <div key={mention.id} className="flex items-center justify-between p-3 border-l-4 border-red-500 bg-red-50 rounded">
                     <div>
                       <span className="font-medium">{mention.user}</span>
-                      <p className="text-sm text-gray-700 mt-1">{mention.content}</p>
-                      <span className="text-xs text-gray-500">{mention.time}</span>
+                      <p className="text-sm text-foreground mt-1">{mention.content}</p>
+                      <span className="text-xs text-muted-foreground">{mention.time}</span>
                     </div>
                     <Button size="sm" variant="destructive">
                       <AlertTriangle className="h-4 w-4 mr-2" />
@@ -715,7 +715,7 @@ export function EngagementMonitor() {
                   </div>
                 ))}
                 {displayMentions.filter(m => m.sentiment === "negative" && !m.replied).length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">No negative mentions requiring urgent attention</p>
+                  <p className="text-sm text-muted-foreground text-center py-4">No negative mentions requiring urgent attention</p>
                 )}
               </div>
             </CardContent>

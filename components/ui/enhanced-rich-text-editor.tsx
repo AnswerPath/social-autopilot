@@ -512,7 +512,7 @@ export function EnhancedRichTextEditor({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
           <div className="flex-1">
             {/* Progress bar */}
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+            <div className="w-full bg-muted rounded-full h-2 mb-1">
               <div 
                 className={cn(
                   "h-2 rounded-full transition-all duration-200",

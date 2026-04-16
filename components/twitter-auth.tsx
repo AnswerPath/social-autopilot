@@ -70,8 +70,8 @@ export function TwitterAuth({ onAuthSuccess }: TwitterAuthProps) {
             </div>
             <div className="text-left">
               <p className="font-medium">{profile.name}</p>
-              <p className="text-sm text-gray-600">@{profile.username}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-sm text-muted-foreground">@{profile.username}</p>
+              <p className="text-xs text-muted-foreground">
                 {profile.public_metrics?.followers_count?.toLocaleString()} followers
               </p>
             </div>
@@ -103,7 +103,7 @@ export function TwitterAuth({ onAuthSuccess }: TwitterAuthProps) {
           </Alert>
         )}
         
-        <div className="space-y-3 text-sm text-gray-600">
+        <div className="space-y-3 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-500" />
             <span>Post and schedule tweets</span>
@@ -131,7 +131,7 @@ export function TwitterAuth({ onAuthSuccess }: TwitterAuthProps) {
           {isConnecting ? 'Connecting...' : 'Connect Twitter Account'}
         </Button>
         
-        <p className="text-xs text-gray-500 text-center">
+        <p className="text-xs text-muted-foreground text-center">
           We'll redirect you to Twitter to authorize the connection. 
           Your credentials are never stored on our servers.
         </p>

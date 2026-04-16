@@ -27,6 +27,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ContextualHelp } from "./help/contextual-help"
 import { HelpMenu } from "./help/help-menu"
 import { GettingStartedCard } from "./onboarding/getting-started-card"
+import { cn } from "@/lib/utils"
+
+const STAT_STAGGER = ["delay-stagger-1", "delay-stagger-2", "delay-stagger-3", "delay-stagger-4"] as const
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -257,16 +260,16 @@ export function Dashboard() {
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen min-h-0 bg-transparent">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} showTooltips={showTooltips} />
       
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <header className="border-b border-border bg-card/85 px-6 py-4 shadow-sm-soft backdrop-blur-md">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="animate-fade-up font-heading text-2xl font-bold text-foreground">
                   {activeTab === "dashboard" && "Dashboard"}
                   {activeTab === "calendar" && "Content Calendar"}
                   {activeTab === "approvals" && "Approvals"}
@@ -277,7 +280,7 @@ export function Dashboard() {
                 </h1>
                 <ContextualHelp sectionId={activeTab} />
               </div>
-              <p className="text-gray-600">
+              <p className="animate-fade-up text-muted-foreground delay-stagger-2">
                 {activeTab === "dashboard" && "Overview of your social media performance"}
                 {activeTab === "calendar" && "Manage and schedule your content"}
                 {activeTab === "approvals" && "Manage multi-step approval workflows"}
@@ -320,8 +323,8 @@ export function Dashboard() {
           {activeTab === "dashboard" && (
             <div className="space-y-6">
               {/* User Info Card + Getting Started */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 space-y-4">
+              <div className="grid grid-cols-1 gap-6 animate-fade-up delay-stagger-1 lg:grid-cols-3">
+                <div className="space-y-4 lg:col-span-1">
                   <UserInfoCard />
                   <GettingStartedCard />
                 </div>
@@ -350,7 +353,7 @@ export function Dashboard() {
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-gray-500" suppressHydrationWarning>
+                <span className="text-xs text-muted-foreground" suppressHydrationWarning>
                   {lastRefresh ? `Last updated: ${lastRefresh.toLocaleTimeString()}` : ''}
                 </span>
               </div>
@@ -373,9 +376,15 @@ export function Dashboard() {
               )}
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {stats.map((stat, index) => (
-                  <Card key={index}>
+                  <Card
+                    key={index}
+                    className={cn(
+                      "animate-fade-up",
+                      STAT_STAGGER[Math.min(index, STAT_STAGGER.length - 1)]
+                    )}
+                  >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
                       <stat.icon className="h-4 w-4 text-muted-foreground" />
@@ -395,7 +404,7 @@ export function Dashboard() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 animate-fade-up delay-stagger-3 lg:grid-cols-2">
                 {/* Recent Posts */}
                 <Card>
                   <CardHeader>
@@ -413,18 +422,18 @@ export function Dashboard() {
                             <AvatarFallback>{twitterProfile?.name?.[0] || 'SA'}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-900 line-clamp-2">{post.content}</p>
+                            <p className="line-clamp-2 text-sm text-foreground">{post.content}</p>
                             <div className="flex items-center gap-2 mt-2">
                               <Badge 
                                 variant={post.status === "published" ? "default" : post.status === "approved" ? "secondary" : "outline"}
                               >
                                 {post.status}
                               </Badge>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-muted-foreground">
                                 {post.publishedAt}
                               </span>
                             </div>
-                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                               <span>{post.engagement.likes} likes</span>
                               <span>{post.engagement.retweets} retweets</span>
                               <span>{post.engagement.replies} replies</span>
@@ -433,8 +442,8 @@ export function Dashboard() {
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <div className="py-8 text-center text-muted-foreground">
+                        <MessageSquare className="mx-auto mb-4 h-12 w-12 opacity-50" />
                         <p>No recent tweets found</p>
                         <p className="text-sm">Create your first post to get started!</p>
                       </div>
@@ -470,8 +479,8 @@ export function Dashboard() {
                                 {mention.sentiment}
                               </Badge>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{mention.content}</p>
-                            <span className="text-xs text-gray-500">{mention.time}</span>
+                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{mention.content}</p>
+                            <span className="text-xs text-muted-foreground">{mention.time}</span>
                           </div>
                           <Button size="sm" variant="outline">
                             Reply
@@ -479,8 +488,8 @@ export function Dashboard() {
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <div className="py-8 text-center text-muted-foreground">
+                        <Bell className="mx-auto mb-4 h-12 w-12 opacity-50" />
                         <p>No urgent mentions</p>
                         <p className="text-sm">All caught up!</p>
                       </div>
@@ -496,7 +505,7 @@ export function Dashboard() {
           {activeTab === "analytics" && <AnalyticsDashboard />}
           {activeTab === "team" && <TeamManagement />}
           {activeTab === "engagement" && (
-            <div className="space-y-6">
+            <div className="animate-fade-up space-y-6 delay-stagger-1">
               <EngagementMonitor />
               <Tabs defaultValue="rules" className="w-full">
                 <TabsList>

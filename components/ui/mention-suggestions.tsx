@@ -223,14 +223,14 @@ export function MentionSuggestions({
   }
 
   return (
-    <div className={cn("absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1", className)}>
+    <div className={cn("absolute top-full left-0 right-0 bg-background border border-border rounded-lg shadow-lg z-50 mt-1", className)}>
       <div className="p-2">
         {suggestionsWithMeta.map((entry, index) => {
           if (entry.kind === 'header') {
             return (
               <div
                 key={`header-${entry.type}-${index}`}
-                className="px-2 py-1 text-xs font-semibold text-gray-500"
+                className="px-2 py-1 text-xs font-semibold text-muted-foreground"
               >
                 {headerLabels[entry.type]}
               </div>
@@ -254,7 +254,7 @@ export function MentionSuggestions({
           return (
           <div
             key={`${user.id}-${index}`}
-            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
             onClick={() => handleSelect(user)}
           >
             <div className="relative flex shrink-0 overflow-hidden rounded-full h-8 w-8 bg-muted items-center justify-center">
@@ -288,11 +288,11 @@ export function MentionSuggestions({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500 truncate">
+                <span className="text-sm text-muted-foreground truncate">
                   @{user.username}
                 </span>
                 {user.followerCount && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {formatFollowerCount(user.followerCount)} followers
                   </span>
                 )}
@@ -330,8 +330,8 @@ export function MentionSuggestions({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2 border-t border-gray-100">
-        <p className="text-xs text-gray-500">
+      <div className="px-3 py-2 border-t border-border/80">
+        <p className="text-xs text-muted-foreground">
           Click a user to mention them in your post
         </p>
       </div>

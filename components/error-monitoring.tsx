@@ -110,7 +110,7 @@ export function ErrorMonitoring() {
       case 'low':
         return 'bg-blue-100 text-blue-800';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-muted text-foreground';
     }
   };
 

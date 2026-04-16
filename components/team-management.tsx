@@ -205,7 +205,7 @@ export function TeamManagement() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold">Team Management</h2>
-          <p className="text-gray-600">Manage team members and their permissions</p>
+          <p className="text-muted-foreground">Manage team members and their permissions</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {teams.length > 1 && (
@@ -306,8 +306,8 @@ export function TeamManagement() {
                       <span className="font-medium">{item.author}</span>
                       <Badge variant="outline">Pending Review</Badge>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2 line-clamp-2">{item.content}</p>
-                    <span className="text-xs text-gray-500">Submitted {item.submittedAt}</span>
+                    <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.content}</p>
+                    <span className="text-xs text-muted-foreground">Submitted {item.submittedAt}</span>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline">
@@ -421,9 +421,9 @@ export function TeamManagement() {
                       )}
                     </div>
                     {email ? (
-                      <p className="text-sm text-gray-600">{email}</p>
+                      <p className="text-sm text-muted-foreground">{email}</p>
                     ) : null}
-                    <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                    <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
                       <span>
                         Last active:{' '}
                         {member.last_active_at

@@ -43,7 +43,7 @@ export function GeneralSettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Show contextual tooltips</Label>
-              <p className="text-sm text-gray-600">Show short tooltips on sidebar and key buttons when you hover</p>
+              <p className="text-sm text-muted-foreground">Show short tooltips on sidebar and key buttons when you hover</p>
             </div>
             <Switch
               checked={showTooltips}
@@ -102,7 +102,7 @@ export function GeneralSettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Auto-save drafts</Label>
-              <p className="text-sm text-gray-600">Automatically save posts as drafts while typing</p>
+              <p className="text-sm text-muted-foreground">Automatically save posts as drafts while typing</p>
             </div>
             <Switch defaultChecked />
           </div>
@@ -112,7 +112,7 @@ export function GeneralSettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Smart scheduling</Label>
-              <p className="text-sm text-gray-600">Suggest optimal posting times based on audience activity</p>
+              <p className="text-sm text-muted-foreground">Suggest optimal posting times based on audience activity</p>
             </div>
             <Switch defaultChecked />
           </div>

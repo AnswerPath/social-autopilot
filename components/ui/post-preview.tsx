@@ -107,10 +107,10 @@ function MediaPreview({
             />
           ) : (
             <div className={cn(
-              "bg-gray-100 flex items-center justify-center",
+              "bg-muted flex items-center justify-center",
               isMobile ? "h-[200px]" : "h-[400px]"
             )}>
-              <Video className="h-12 w-12 text-gray-400" />
+              <Video className="h-12 w-12 text-muted-foreground" />
             </div>
           )}
         </div>
@@ -135,10 +135,10 @@ function MediaPreview({
                 />
               ) : (
                 <div className={cn(
-                  "bg-gray-100 flex items-center justify-center",
+                  "bg-muted flex items-center justify-center",
                   isMobile ? "h-[100px]" : "h-[150px]"
                 )}>
-                  <Video className="h-6 w-6 text-gray-400" />
+                  <Video className="h-6 w-6 text-muted-foreground" />
                 </div>
               )}
               
@@ -156,12 +156,12 @@ function MediaPreview({
       ) : (
         // Fallback for too many media
         <div className={cn(
-          "bg-gray-100 flex items-center justify-center",
+          "bg-muted flex items-center justify-center",
           isMobile ? "h-[200px]" : "h-[300px]"
         )}>
           <div className="text-center">
-            <Image className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-600">
+            <Image className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
               {attachments.length} media files
             </p>
           </div>
@@ -195,7 +195,7 @@ export function PostPreview({
   return (
     <Card className={cn(
       "border-0 shadow-none",
-      isDark ? "bg-black text-white" : "bg-white text-black",
+      isDark ? "bg-black text-white" : "bg-background text-black",
       isMobile ? "max-w-[350px]" : "max-w-[600px]",
       className
     )}>
@@ -227,21 +227,21 @@ export function PostPreview({
                 </div>
               )}
               <span className={cn(
-                "text-gray-500 truncate",
+                "text-muted-foreground truncate",
                 isMobile ? "text-xs" : "text-sm"
               )}>
                 @{userData.username}
               </span>
-              <span className="text-gray-500">·</span>
+              <span className="text-muted-foreground">·</span>
               <span className={cn(
-                "text-gray-500",
+                "text-muted-foreground",
                 isMobile ? "text-xs" : "text-sm"
               )}>
                 now
               </span>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </div>
@@ -289,7 +289,7 @@ export function PostPreview({
         {characterCount > 250 && (
           <div className="mt-3 flex items-center justify-between">
             <div className="flex-1">
-              <div className="w-full bg-gray-200 rounded-full h-1" role="progressbar" aria-valuenow={characterCount} aria-valuemin={0} aria-valuemax={280}>
+              <div className="w-full bg-muted rounded-full h-1" role="progressbar" aria-valuenow={characterCount} aria-valuemin={0} aria-valuemax={280}>
                 <div 
                   className={cn(
                     "h-1 rounded-full transition-all duration-200",
@@ -303,7 +303,7 @@ export function PostPreview({
             </div>
             <span className={cn(
               "ml-3 text-sm font-medium",
-              characterCount <= 280 * 0.7 ? "text-gray-500" :
+              characterCount <= 280 * 0.7 ? "text-muted-foreground" :
               characterCount <= 280 * 0.9 ? "text-yellow-600" :
               characterCount <= 280 ? "text-orange-600" : "text-red-600 font-bold"
             )}>
@@ -313,21 +313,21 @@ export function PostPreview({
         )}
         
         {/* Actions */}
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-border">
           <div className="flex items-center space-x-6">
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-blue-500 hover:bg-blue-50" aria-label="Reply">
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50" aria-label="Reply">
               <MessageCircle className="h-4 w-4" />
               <span className="ml-2 text-sm">0</span>
             </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-green-500 hover:bg-green-50" aria-label="Repost">
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-green-500 hover:bg-green-50" aria-label="Repost">
               <Repeat2 className="h-4 w-4" />
               <span className="ml-2 text-sm">0</span>
             </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-red-500 hover:bg-red-50" aria-label="Like">
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-red-500 hover:bg-red-50" aria-label="Like">
               <Heart className="h-4 w-4" />
               <span className="ml-2 text-sm">0</span>
             </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-blue-500 hover:bg-blue-50" aria-label="Share">
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50" aria-label="Share">
               <Share className="h-4 w-4" />
             </Button>
           </div>

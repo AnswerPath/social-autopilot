@@ -214,7 +214,7 @@ export function TwitterApiSettings() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">API Key</Label>
                 <div className="flex items-center gap-2">
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded">{status.apiKey}</code>
+                  <code className="text-sm bg-muted px-2 py-1 rounded">{status.apiKey}</code>
                   <Badge variant={status.isValid ? "default" : "secondary"}>
                     {status.isValid ? "Valid" : "Stored"}
                   </Badge>
@@ -223,7 +223,7 @@ export function TwitterApiSettings() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Access Token</Label>
                 <div className="flex items-center gap-2">
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded">{status.accessToken}</code>
+                  <code className="text-sm bg-muted px-2 py-1 rounded">{status.accessToken}</code>
                   {status.encryptionVersion && (
                     <Badge variant="outline">v{status.encryptionVersion}</Badge>
                   )}
@@ -231,7 +231,7 @@ export function TwitterApiSettings() {
               </div>
             </div>
             
-            <div className="flex items-center gap-4 text-sm text-gray-600">
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
                 <Database className="h-3 w-3" />
                 <span>Stored in database</span>
@@ -275,12 +275,12 @@ export function TwitterApiSettings() {
                   <div className="flex items-center gap-2 mt-1">
                     <Twitter className="h-4 w-4 text-blue-500" />
                     <span className="font-medium">{validationDetails.user.name}</span>
-                    <span className="text-gray-600">@{validationDetails.user.username}</span>
+                    <span className="text-muted-foreground">@{validationDetails.user.username}</span>
                     {validationDetails.user.verified && (
                       <CheckCircle className="h-4 w-4 text-blue-500" />
                     )}
                   </div>
-                  <div className="text-sm text-gray-600 mt-1">
+                  <div className="text-sm text-muted-foreground mt-1">
                     {validationDetails.user.followers_count.toLocaleString()} followers
                   </div>
                 </div>
@@ -443,7 +443,7 @@ export function TwitterApiSettings() {
                   {showSecrets.bearerToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Bearer token enables limited read access in the current environment and full access when deployed to production
               </p>
             </div>

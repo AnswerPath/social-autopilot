@@ -73,9 +73,9 @@ function DraggablePostItem({ post, onEdit, onDelete, userTimezone }: CalendarPos
            'Scheduled'}
         </Badge>
       </div>
-      <p className="line-clamp-2 text-gray-700 mb-2">{post.content}</p>
+      <p className="line-clamp-2 text-foreground mb-2">{post.content}</p>
       <div className="flex items-center justify-between mt-1">
-        <span className="text-gray-500 text-xs">You</span>
+        <span className="text-muted-foreground text-xs">You</span>
         <div className="flex gap-1">
           <Button 
             size="sm" 
@@ -126,7 +126,7 @@ export function CalendarDay({
 
   if (day === null) {
     return (
-      <div className="min-h-[120px] p-2 border rounded-lg bg-gray-50" />
+      <div className="min-h-[120px] p-2 border rounded-lg bg-muted/50" />
     )
   }
 
@@ -135,14 +135,14 @@ export function CalendarDay({
       ref={setNodeRef}
       className={cn(
         "min-h-[120px] p-2 border rounded-lg",
-        "bg-white hover:bg-gray-50 transition-colors",
-        isToday && "ring-2 ring-blue-500",
-        isOver && "bg-blue-100 border-blue-400"
+        "bg-background transition-colors duration-base hover:bg-muted/50",
+        isToday && "ring-2 ring-info",
+        isOver && "border-info bg-info/10"
       )}
     >
       <div className={cn(
         "text-sm font-medium mb-2",
-        isToday ? "text-blue-600" : "text-gray-900"
+        isToday ? "text-info" : "text-foreground"
       )}>
         {day}
       </div>

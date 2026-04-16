@@ -55,10 +55,10 @@ export function UserMenu() {
             <AvatarImage src={getAvatarUrl(32)} alt={displayName} />
             <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
-          <span className="hidden sm:inline text-sm font-medium text-gray-700 max-w-[120px] truncate">
+          <span className="hidden sm:inline text-sm font-medium text-foreground max-w-[120px] truncate">
             {displayName}
           </span>
-          <ChevronDown className="h-4 w-4 text-gray-500" />
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

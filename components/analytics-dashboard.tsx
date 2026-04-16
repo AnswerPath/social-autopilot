@@ -16,6 +16,9 @@ import { DateRangeSelector, type DateRange } from "./analytics/date-range-select
 import { PostingRecommendations } from "./analytics/posting-recommendations"
 import { format } from 'date-fns'
 import { useAuth } from "@/hooks/use-auth"
+import { cn } from "@/lib/utils"
+
+const KPI_STAGGER = ["delay-stagger-1", "delay-stagger-2", "delay-stagger-3", "delay-stagger-4"] as const
 
 interface SummaryMetrics {
   totalImpressions: number
@@ -69,7 +72,7 @@ export function AnalyticsDashboard() {
   if (authLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-gray-600">Loading analytics...</p>
+        <p className="text-muted-foreground">Loading analytics...</p>
       </div>
     )
   }
@@ -78,8 +81,8 @@ export function AnalyticsDashboard() {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
-          <p className="text-lg font-semibold text-gray-900">Authentication Required</p>
-          <p className="text-gray-600 mt-2">Please log in to view analytics.</p>
+          <p className="text-lg font-semibold text-foreground">Authentication Required</p>
+          <p className="text-muted-foreground mt-2">Please log in to view analytics.</p>
         </div>
       </div>
     )
@@ -779,9 +782,9 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="animate-fade-up space-y-6">
       {/* Controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex animate-fade-up items-center justify-between delay-stagger-1">
         <DateRangeSelector
           dateRange={dateRange}
           onDateRangeChange={handleDateRangeChange}
@@ -856,20 +859,26 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-4 w-4 bg-muted rounded animate-pulse" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 w-20 bg-gray-200 rounded animate-pulse mb-2" />
-                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+                <div className="h-8 w-20 bg-muted rounded animate-pulse mb-2" />
+                <div className="h-4 w-32 bg-muted rounded animate-pulse" />
               </CardContent>
             </Card>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           {kpiMetrics.map((metric, index) => (
-            <Card key={index}>
+            <Card
+              key={index}
+              className={cn(
+                "animate-fade-up",
+                KPI_STAGGER[Math.min(index, KPI_STAGGER.length - 1)]
+              )}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">{metric.title}</CardTitle>
                 <metric.icon className="h-4 w-4 text-muted-foreground" />
@@ -899,7 +908,7 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 animate-fade-up delay-stagger-3 lg:grid-cols-2">
         {/* Engagement Chart */}
         <Card>
           <CardHeader>
@@ -984,10 +993,10 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex items-start gap-4 p-4 border rounded-lg">
-                  <div className="h-8 w-8 bg-gray-200 rounded-full animate-pulse" />
+                  <div className="h-8 w-8 bg-muted rounded-full animate-pulse" />
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                    <div className="h-3 w-3/4 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-4 w-full bg-muted rounded animate-pulse" />
+                    <div className="h-3 w-3/4 bg-muted rounded animate-pulse" />
                   </div>
                 </div>
               ))}
@@ -1004,8 +1013,8 @@ function AnalyticsDashboardContent({ user }: { user: { id: string } }) {
                     <span className="text-sm font-bold text-blue-600">#{index + 1}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 mb-2">{post.content}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <p className="text-sm text-foreground mb-2">{post.content}</p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Heart className="h-3 w-3" />
                         {post.engagement.likes}

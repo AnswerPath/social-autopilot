@@ -136,7 +136,7 @@ export function ActivityLogsDashboard() {
       case ActivityLevel.INFO:
         return <Info className="h-4 w-4 text-blue-500" />;
       default:
-        return <Info className="h-4 w-4 text-gray-500" />;
+        return <Info className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
@@ -378,7 +378,7 @@ export function ActivityLogsDashboard() {
                         <AlertDescription>{error}</AlertDescription>
                       </Alert>
                     ) : logs.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
+                      <div className="text-center py-8 text-muted-foreground">
                         No activity logs found matching your criteria.
                       </div>
                     ) : (
@@ -417,7 +417,7 @@ export function ActivityLogsDashboard() {
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center space-x-2">
-                                    <User className="h-4 w-4 text-gray-500" />
+                                    <User className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm">{log.user_id?.substring(0, 8)}...</span>
                                   </div>
                                 </TableCell>
@@ -427,7 +427,7 @@ export function ActivityLogsDashboard() {
                                       {log.resource_type}:{log.resource_id.substring(0, 8)}...
                                     </span>
                                   ) : (
-                                    <span className="text-gray-400">-</span>
+                                    <span className="text-muted-foreground">-</span>
                                   )}
                                 </TableCell>
                                 <TableCell>
@@ -437,7 +437,7 @@ export function ActivityLogsDashboard() {
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex items-center space-x-2">
-                                    <Calendar className="h-4 w-4 text-gray-500" />
+                                    <Calendar className="h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm">{formatDate(log.created_at)}</span>
                                   </div>
                                 </TableCell>
@@ -632,7 +632,7 @@ export function ActivityLogsDashboard() {
               {selectedLog.details && Object.keys(selectedLog.details).length > 0 && (
                 <div>
                   <Label className="text-sm font-medium">Details</Label>
-                  <pre className="text-xs bg-gray-100 p-3 rounded mt-1 overflow-auto">
+                  <pre className="text-xs bg-muted p-3 rounded mt-1 overflow-auto">
                     {JSON.stringify(selectedLog.details, null, 2)}
                   </pre>
                 </div>
@@ -641,7 +641,7 @@ export function ActivityLogsDashboard() {
               {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
                 <div>
                   <Label className="text-sm font-medium">Metadata</Label>
-                  <pre className="text-xs bg-gray-100 p-3 rounded mt-1 overflow-auto">
+                  <pre className="text-xs bg-muted p-3 rounded mt-1 overflow-auto">
                     {JSON.stringify(selectedLog.metadata, null, 2)}
                   </pre>
                 </div>

@@ -157,7 +157,7 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
   const getIntensityClass = (intensity: number): string => {
     switch (intensity) {
       case 0:
-        return 'bg-gray-100 hover:bg-gray-200'
+        return 'bg-muted hover:bg-muted'
       case 1:
         return 'bg-blue-100 hover:bg-blue-200'
       case 2:
@@ -167,7 +167,7 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
       case 4:
         return 'bg-blue-700 hover:bg-blue-800'
       default:
-        return 'bg-gray-100 hover:bg-gray-200'
+        return 'bg-muted hover:bg-muted'
     }
   }
 
@@ -190,11 +190,11 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
     return (
       <Card>
         <CardHeader>
-          <div className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-64 bg-gray-200 rounded animate-pulse mt-2" />
+          <div className="h-6 w-48 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-64 bg-muted rounded animate-pulse mt-2" />
         </CardHeader>
         <CardContent>
-          <div className="h-[300px] bg-gray-200 rounded animate-pulse" />
+          <div className="h-[300px] bg-muted rounded animate-pulse" />
         </CardContent>
       </Card>
     )
@@ -265,7 +265,7 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
                           return (
                             <div
                               key={dayIndex}
-                              className="w-3 h-3 rounded-sm border border-gray-200 bg-gray-50"
+                              className="w-3 h-3 rounded-sm border border-border bg-muted/50"
                             />
                           )
                         }
@@ -275,7 +275,7 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
                               <TooltipTrigger asChild>
                                 <div
                                   className={cn(
-                                    "w-3 h-3 rounded-sm border border-gray-200 transition-colors cursor-pointer",
+                                    "w-3 h-3 rounded-sm border border-border transition-colors cursor-pointer",
                                     getIntensityClass(day.intensity),
                                     isToday(day.date) && 'ring-2 ring-blue-500 ring-offset-1'
                                   )}
@@ -306,11 +306,11 @@ export function PerformanceHeatmap({ data, loading = false }: PerformanceHeatmap
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span>Less</span>
             <div className="flex gap-1">
-              <div className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200" />
-              <div className="w-3 h-3 rounded-sm bg-blue-100 border border-gray-200" />
-              <div className="w-3 h-3 rounded-sm bg-blue-300 border border-gray-200" />
-              <div className="w-3 h-3 rounded-sm bg-blue-500 border border-gray-200" />
-              <div className="w-3 h-3 rounded-sm bg-blue-700 border border-gray-200" />
+              <div className="w-3 h-3 rounded-sm bg-muted border border-border" />
+              <div className="w-3 h-3 rounded-sm bg-blue-100 border border-border" />
+              <div className="w-3 h-3 rounded-sm bg-blue-300 border border-border" />
+              <div className="w-3 h-3 rounded-sm bg-blue-500 border border-border" />
+              <div className="w-3 h-3 rounded-sm bg-blue-700 border border-border" />
             </div>
             <span>More</span>
           </div>

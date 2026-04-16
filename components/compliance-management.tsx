@@ -169,7 +169,7 @@ export function ComplianceManagement({ userId }: { userId: string }) {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground"></div>
             <span className="ml-2">Loading compliance data...</span>
           </div>
         </CardContent>
@@ -392,7 +392,7 @@ export function ComplianceManagement({ userId }: { userId: string }) {
         {/* Data Retention */}
         <div className="space-y-4">
           <h3 className="font-semibold">Data Retention Policy</h3>
-          <div className="p-4 border rounded-lg bg-gray-50">
+          <div className="p-4 border rounded-lg bg-muted/50">
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="font-medium">API Credentials:</span>

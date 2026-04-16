@@ -21,10 +21,10 @@ export function OnboardingProgress({ currentStep, className }: OnboardingProgres
         <div
           key={key}
           className={cn(
-            'h-2 w-2 rounded-full transition-colors',
+            'h-2 w-2 rounded-full transition-colors duration-base',
             key < currentStep && 'bg-blue-600',
             key === currentStep && 'bg-blue-600 ring-2 ring-blue-300 ring-offset-2',
-            key > currentStep && 'bg-gray-200'
+            key > currentStep && 'bg-muted'
           )}
           aria-current={key === currentStep ? 'step' : undefined}
         />

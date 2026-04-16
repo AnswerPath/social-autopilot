@@ -40,10 +40,12 @@ export function Sidebar({ activeTab, onTabChange, showTooltips = true }: Sidebar
             <Button
               key={item.id}
               data-tour={item.id}
-              variant={activeTab === item.id ? "default" : "ghost"}
+              variant={activeTab === item.id ? "secondary" : "ghost"}
               className={cn(
-                "w-full justify-start",
-                activeTab === item.id && "bg-blue-600 text-white hover:bg-blue-700"
+                "w-full justify-start border-l-2 transition-all duration-base ease-out",
+                activeTab === item.id
+                  ? "border-primary bg-sidebar-accent text-sidebar-accent-foreground shadow-xs"
+                  : "border-transparent hover:bg-sidebar-accent/70"
               )}
               onClick={() => onTabChange(item.id)}
             >
@@ -67,13 +69,13 @@ export function Sidebar({ activeTab, onTabChange, showTooltips = true }: Sidebar
   )
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-6 border-b border-gray-200">
+    <div className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar/95 shadow-sm-soft backdrop-blur-sm">
+      <div className="border-b border-sidebar-border p-6">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Zap className="h-5 w-5 text-white" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary shadow-sm-soft">
+            <Zap className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold text-gray-900">Social Autopilot</span>
+          <span className="font-heading text-xl font-bold text-sidebar-foreground">Social Autopilot</span>
         </div>
       </div>
       {navContent}

@@ -108,20 +108,20 @@ function VerifyEmailContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-muted/50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-6 text-center">
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1 className="text-2xl font-semibold text-foreground">
           {status === 'loading' && 'Verifying your email…'}
           {status === 'success' && 'Email verified'}
           {status === 'error' && 'Verification failed'}
           {status === 'missing_token' && 'Invalid link'}
         </h1>
 
-        {status === 'loading' && <p className="text-gray-600">Please wait.</p>}
+        {status === 'loading' && <p className="text-muted-foreground">Please wait.</p>}
 
         {status === 'success' && (
           <>
-            <p className="text-gray-600">{message}</p>
+            <p className="text-muted-foreground">{message}</p>
             <Link
               href="/"
               className="inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500"
@@ -133,9 +133,9 @@ function VerifyEmailContent() {
 
         {status === 'error' && (
           <>
-            <p className="text-gray-600">{message}</p>
+            <p className="text-muted-foreground">{message}</p>
             <div className="space-y-4 text-left pt-2">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Need a new link? We can send another verification email.
               </p>
               <Button type="button" onClick={resendWithSession} disabled={resendBusy} className="w-full">
@@ -158,7 +158,7 @@ function VerifyEmailContent() {
                   </Button>
                 </form>
               )}
-              {resendHint && <p className="text-sm text-gray-700">{resendHint}</p>}
+              {resendHint && <p className="text-sm text-foreground">{resendHint}</p>}
             </div>
             <Link
               href="/auth"
@@ -171,7 +171,7 @@ function VerifyEmailContent() {
 
         {status === 'missing_token' && (
           <>
-            <p className="text-gray-600">This link is invalid or has already been used.</p>
+            <p className="text-muted-foreground">This link is invalid or has already been used.</p>
             <Link
               href="/auth"
               className="inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500"
@@ -189,8 +189,8 @@ export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <p className="text-gray-600">Loading…</p>
+        <div className="min-h-screen flex items-center justify-center bg-muted/50">
+          <p className="text-muted-foreground">Loading…</p>
         </div>
       }
     >

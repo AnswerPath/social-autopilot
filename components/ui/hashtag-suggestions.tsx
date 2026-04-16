@@ -141,14 +141,14 @@ export function HashtagSuggestions({
   }
 
   return (
-    <div className={cn("absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 p-3", className)}>
+    <div className={cn("absolute top-full left-0 right-0 bg-background border border-border rounded-lg shadow-lg z-50 mt-1 p-3", className)}>
       <div className="space-y-3">
         {/* Related */}
         {suggestions.filter(s => s.type === 'related').length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Hash className="h-4 w-4 text-blue-500" />
-              <span className="text-sm font-medium text-gray-700">Related</span>
+              <span className="text-sm font-medium text-foreground">Related</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {suggestions.filter(s => s.type === 'related').map((suggestion, index) => (
@@ -170,7 +170,7 @@ export function HashtagSuggestions({
           <div>
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="h-4 w-4 text-orange-500" />
-              <span className="text-sm font-medium text-gray-700">Trending</span>
+              <span className="text-sm font-medium text-foreground">Trending</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {suggestions.filter(s => s.type === 'trending').map((suggestion, index) => (
@@ -198,15 +198,15 @@ export function HashtagSuggestions({
         {suggestions.filter(s => s.type === 'recent').length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Clock className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium text-gray-700">Recent</span>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">Recent</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {suggestions.filter(s => s.type === 'recent').map((suggestion, index) => (
                 <Badge
                   key={`recent-${index}`}
                   variant="outline"
-                  className="cursor-pointer hover:bg-gray-100 text-gray-700"
+                  className="cursor-pointer hover:bg-muted text-foreground"
                   onClick={() => handleSelect(suggestion.tag)}
                 >
                   #{suggestion.tag}
@@ -218,8 +218,8 @@ export function HashtagSuggestions({
       </div>
 
       {/* Footer */}
-      <div className="mt-3 pt-2 border-t border-gray-100">
-        <p className="text-xs text-gray-500">
+      <div className="mt-3 pt-2 border-t border-border/80">
+        <p className="text-xs text-muted-foreground">
           Click a hashtag to add it to your post
         </p>
       </div>
