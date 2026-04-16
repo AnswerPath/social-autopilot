@@ -42,8 +42,7 @@ export function SettingsPage() {
   }
   
   const userId = user.id
-  console.log('🔧 Settings page - Authenticated user ID:', userId)
-  
+
   return (
     <div className="container mx-auto space-y-6 py-6">
       <div className="flex animate-fade-up items-center gap-3">

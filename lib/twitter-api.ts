@@ -135,7 +135,11 @@ export async function getUserTweets(
     console.log('🔍 Getting user tweets for:', userId)
 
     if (credentials.apiKey.includes('demo_')) {
-      return { success: true, data: [], error: 'Configure real Twitter credentials to load tweets.' }
+      return {
+        success: false,
+        data: [],
+        error: 'Configure real Twitter credentials to load tweets.',
+      }
     }
 
     if (credentials.bearerToken && !credentials.bearerToken.includes('demo_')) {
@@ -143,42 +147,81 @@ export async function getUserTweets(
         const meResp = await fetch('https://api.twitter.com/2/users/me?user.fields=public_metrics', {
           headers: { Authorization: `Bearer ${credentials.bearerToken}` },
         })
-        if (meResp.ok) {
-          const meData = await meResp.json()
-          const params = new URLSearchParams({
-            'tweet.fields': 'created_at,public_metrics',
-            max_results: String(Math.min(100, Math.max(1, maxResults))),
-          })
-          const tlResp = await fetch(
-            `https://api.twitter.com/2/users/${meData.data.id}/tweets?${params.toString()}`,
-            { headers: { Authorization: `Bearer ${credentials.bearerToken}` } }
-          )
-          if (tlResp.ok) {
-            const tl = await tlResp.json()
-            const items: TwitterPost[] = (tl.data || []).map((tweet: any) => ({
-              id: tweet.id,
-              text: tweet.text,
-              created_at: tweet.created_at,
-              public_metrics: tweet.public_metrics || {
-                retweet_count: 0,
-                like_count: 0,
-                reply_count: 0,
-                impression_count: 0,
-              },
-              author_id: tweet.author_id || meData.data.id,
-            }))
-            return { success: true, data: items.slice(0, maxResults) }
-          }
+        if (!meResp.ok) {
+          const body = await meResp.text().catch(() => '')
+          console.warn('⚠️ Twitter /users/me failed:', meResp.status, body)
+          const error =
+            meResp.status === 401 || meResp.status === 403
+              ? 'Invalid or expired Twitter credentials.'
+              : meResp.status === 429
+                ? 'Twitter rate limit exceeded. Try again later.'
+                : meResp.status >= 500
+                  ? 'Twitter service error. Try again later.'
+                  : `Twitter request failed (${meResp.status}).`
+          return { success: false, data: [], error }
         }
-      } catch (e: any) {
-        console.warn('⚠️ Bearer tweet fetch failed:', e?.message)
+
+        const meData = await meResp.json()
+        const params = new URLSearchParams({
+          'tweet.fields': 'created_at,public_metrics',
+          max_results: String(Math.min(100, Math.max(1, maxResults))),
+        })
+        const tlResp = await fetch(
+          `https://api.twitter.com/2/users/${meData.data.id}/tweets?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${credentials.bearerToken}` } }
+        )
+        if (!tlResp.ok) {
+          const body = await tlResp.text().catch(() => '')
+          console.warn('⚠️ Twitter timeline fetch failed:', tlResp.status, body)
+          const error =
+            tlResp.status === 401 || tlResp.status === 403
+              ? 'Invalid or expired Twitter credentials.'
+              : tlResp.status === 429
+                ? 'Twitter rate limit exceeded. Try again later.'
+                : tlResp.status >= 500
+                  ? 'Twitter service error. Try again later.'
+                  : `Twitter timeline fetch failed (${tlResp.status}).`
+          return { success: false, data: [], error }
+        }
+
+        const tl = (await tlResp.json()) as {
+          data?: Array<{
+            id: string
+            text: string
+            created_at?: string
+            author_id?: string
+            public_metrics?: TwitterPost['public_metrics']
+          }>
+        }
+        const items: TwitterPost[] = (tl.data || []).map((tweet) => ({
+          id: tweet.id,
+          text: tweet.text,
+          created_at: tweet.created_at,
+          public_metrics: tweet.public_metrics || {
+            retweet_count: 0,
+            like_count: 0,
+            reply_count: 0,
+            impression_count: 0,
+          },
+          author_id: tweet.author_id || meData.data.id,
+        }))
+        return { success: true, data: items.slice(0, maxResults) }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to fetch tweets'
+        console.warn('⚠️ Bearer tweet fetch failed:', msg)
+        return {
+          success: false,
+          data: [],
+          error: msg,
+        }
       }
     }
 
     return {
-      success: true,
+      success: false,
       data: [],
-      error: 'Tweet timeline is not available in this environment. Use the app dashboard or a Node.js API route.',
+      error:
+        'Tweet timeline is not available in this environment. Use the app dashboard or a Node.js API route.',
     }
   } catch (error: any) {
     console.error('❌ Error fetching tweets:', error)
@@ -201,14 +244,19 @@ export async function getMentions(
     console.log('🔍 Getting mentions for:', userId)
 
     if (credentials.apiKey.includes('demo_')) {
-      return { success: true, data: [], error: 'Configure real Twitter credentials to load mentions.' }
+      return {
+        success: false,
+        data: [],
+        error: 'Configure real Twitter credentials to load mentions.',
+      }
     }
 
     // Mention timeline requires OAuth 1.0a signing (Node.js routes); no fake data in edge
     return {
-      success: true,
+      success: false,
       data: [],
-      error: 'Mentions are loaded via server API routes with OAuth. No data available from this context.',
+      error:
+        'Mentions are loaded via server API routes with OAuth. No data available from this context.',
     }
   } catch (error: any) {
     console.error('❌ Error fetching mentions:', error)

@@ -125,6 +125,7 @@
 
   body {
     @apply min-h-screen text-foreground antialiased;
+
     font-feature-settings: "cv11", "ss01", "kern";
     background-color: hsl(var(--background));
     background-image: linear-gradient(
@@ -133,31 +134,17 @@
       hsl(var(--gradient-to)) 55%,
       hsl(var(--gradient-to)) 100%
     );
-    background-attachment: fixed;
+  }
+
+  @media (min-width: 768px) {
+    body {
+      background-attachment: fixed;
+    }
   }
 
   ::selection {
     background-color: hsl(var(--primary) / 0.12);
     color: hsl(var(--foreground));
-  }
-
-  h1 {
-    @apply font-heading text-4xl font-bold tracking-tight md:text-5xl;
-  }
-  h2 {
-    @apply font-heading text-3xl font-semibold tracking-tight md:text-4xl;
-  }
-  h3 {
-    @apply font-heading text-2xl font-semibold tracking-tight;
-  }
-  h4 {
-    @apply font-heading text-xl font-semibold tracking-tight;
-  }
-  h5 {
-    @apply font-heading text-lg font-semibold;
-  }
-  h6 {
-    @apply font-heading text-base font-semibold;
   }
 
   .text-display {

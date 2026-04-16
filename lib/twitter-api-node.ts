@@ -135,7 +135,7 @@ export async function getUserTweets(
     if (credentials.apiKey.includes('demo_')) {
       console.log('⚠️ Demo credentials — no tweets returned')
       return {
-        success: true,
+        success: false,
         data: [],
         error: 'Demo API keys cannot load tweets. Add real Twitter credentials in Settings.',
       }
@@ -190,7 +190,7 @@ export async function getMentions(
     if (credentials.apiKey.includes('demo_')) {
       console.log('⚠️ Demo credentials — no mentions returned')
       return {
-        success: true,
+        success: false,
         data: [],
         error: 'Demo API keys cannot load mentions. Add real Twitter credentials in Settings.',
       }

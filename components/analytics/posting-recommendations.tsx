@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Clock, TrendingUp, Loader2, Calendar } from "lucide-react"
+import { Clock, TrendingUp, Calendar } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/use-auth"
 import { PostingTimeHeatmap } from "./posting-time-heatmap"
@@ -29,6 +30,7 @@ export function PostingRecommendations() {
   const { user, loading: authLoading } = useAuth()
 
   const fetchRecommendations = React.useCallback(async () => {
+    if (!user?.id) return
     try {
       setLoading(true)
       setError(null)
@@ -56,9 +58,10 @@ export function PostingRecommendations() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user?.id])
 
   const fetchHeatmap = React.useCallback(async () => {
+    if (!user?.id) return
     try {
       const response = await fetch('/api/analytics/recommendations/heatmap', {
         credentials: 'include',
@@ -73,7 +76,7 @@ export function PostingRecommendations() {
       console.error('Error fetching heatmap:', err)
       // Don't set error state for heatmap failures, it's optional
     }
-  }, [])
+  }, [user?.id])
 
   React.useEffect(() => {
     if (authLoading) return
@@ -125,6 +128,24 @@ export function PostingRecommendations() {
   }
 
   if (error) {
+    if (!user?.id) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Posting Time Recommendations</CardTitle>
+            <CardDescription>AI-powered suggestions for optimal posting times</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-4">
+              <p className="text-sm">{error}</p>
+              <Button asChild className="mt-4" size="sm">
+                <Link href="/auth">Sign in</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    }
     return (
       <Card>
         <CardHeader>
@@ -239,7 +260,7 @@ export function PostingRecommendations() {
           <div className="mt-6 p-4 bg-muted rounded-lg">
             <p className="text-sm text-muted-foreground">
               <strong>Note:</strong> Recommendations are based on your historical post performance.
-              They improve as you collect more analytics data. Consider your audience's timezone
+              They improve as you collect more analytics data. Consider your audience&apos;s timezone
               when scheduling posts.
             </p>
           </div>

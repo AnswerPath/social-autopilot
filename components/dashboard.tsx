@@ -66,8 +66,8 @@ export function Dashboard() {
     console.log('🔄 Dashboard: Starting data fetch...')
     
     try {
-      let errors: string[] = []
-      let notes: string[] = []
+      const errors: string[] = []
+      const notes: string[] = []
 
       // Fetch user profile
       try {
@@ -103,7 +103,7 @@ export function Dashboard() {
         const tweetsResponse = await fetch('/api/twitter/tweets?maxResults=5', { credentials: 'include' })
         const tweetsData = await tweetsResponse.json()
         
-        if (tweetsData.success) {
+        if (tweetsData.success && !tweetsData.requiresSetup) {
           setRecentTweets(tweetsData.tweets || [])
           console.log('✅ Dashboard: Tweets loaded:', tweetsData.tweets?.length || 0, 'tweets')
 
@@ -112,7 +112,11 @@ export function Dashboard() {
           }
         } else {
           setRecentTweets([])
-          errors.push('Tweets: ' + (tweetsData.error || 'Unknown error'))
+          errors.push(
+            'Tweets: ' +
+              (tweetsData.error ||
+                (tweetsData.requiresSetup ? 'Credentials not configured' : 'Unknown error'))
+          )
         }
       } catch (error) {
         console.error('❌ Dashboard: Tweets fetch error:', error)

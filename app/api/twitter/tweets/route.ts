@@ -29,10 +29,11 @@ export async function GET(request: NextRequest) {
     if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
       return NextResponse.json({
-        success: true,
+        success: false,
         mock: false,
         tweets: [] as unknown[],
         requiresSetup: true,
+        error: 'Twitter credentials not configured',
       })
     }
 

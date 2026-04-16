@@ -30,16 +30,21 @@ const EMPTY_SUGGESTED: User[] = []
 
 function getRecentMentions(allUsers: User[]): User[] {
   const saved = localStorage.getItem('recent-mentions')
-  if (saved) {
-    const recentUsernames = JSON.parse(saved) as string[]
-    return recentUsernames
-      .map((username: string) => {
-        const user = allUsers.find((u) => u.username === username)
-        return user ? { ...user, type: 'recent' as const } : null
-      })
-      .filter(Boolean) as User[]
+  if (!saved) return []
+  let recentUsernames: unknown
+  try {
+    recentUsernames = JSON.parse(saved)
+  } catch {
+    return []
   }
-  return []
+  if (!Array.isArray(recentUsernames)) return []
+  return recentUsernames
+    .filter((u): u is string => typeof u === 'string')
+    .map((username) => {
+      const user = allUsers.find((u) => u.username === username)
+      return user ? { ...user, type: 'recent' as const } : null
+    })
+    .filter(Boolean) as User[]
 }
 
 function saveRecentMention(username: string, allUsers: User[]) {

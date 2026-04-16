@@ -11,8 +11,10 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return auth.response
     const userId = auth.userId
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const rawLimit = parseInt(searchParams.get('limit') || '50', 10)
+    const rawOffset = parseInt(searchParams.get('offset') || '0', 10)
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50
+    const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0
 
     const { data, error } = await supabaseAdmin
       .from('scheduled_posts')

@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireSessionUserId } from '@/lib/require-session-user'
+import { isAdmin } from '@/lib/admin-auth'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireSessionUserId(request)
     if (!auth.ok) return auth.response
+
+    if (!(await isAdmin(request))) {
+      return NextResponse.json(
+        { success: false, error: 'Admin access required' },
+        { status: 403 }
+      )
+    }
 
     console.log('🚀 Starting database setup via API...')
     

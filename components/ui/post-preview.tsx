@@ -195,7 +195,7 @@ export function PostPreview({
   return (
     <Card className={cn(
       "border-0 shadow-none",
-      isDark ? "bg-black text-white" : "bg-background text-black",
+      isDark ? "bg-black text-white" : "bg-white text-black",
       isMobile ? "max-w-[350px]" : "max-w-[600px]",
       className
     )}>
