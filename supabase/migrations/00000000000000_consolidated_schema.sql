@@ -2581,7 +2581,9 @@ WHERE requires_approval IS NULL;
 -- ========================================
 
 -- View for posts pending approval
-CREATE OR REPLACE VIEW posts_pending_approval AS
+CREATE OR REPLACE VIEW posts_pending_approval
+WITH (security_invoker = true)
+AS
 SELECT 
     sp.*,
     ac.comment_count,
@@ -2599,7 +2601,9 @@ WHERE sp.status = 'pending_approval'
 ORDER BY sp.submitted_for_approval_at ASC;
 
 -- View for approval statistics
-CREATE OR REPLACE VIEW approval_statistics AS
+CREATE OR REPLACE VIEW approval_statistics
+WITH (security_invoker = true)
+AS
 SELECT 
     user_id,
     COUNT(*) as total_posts,
@@ -2790,7 +2794,9 @@ CREATE INDEX IF NOT EXISTS idx_approval_notifications_status ON approval_notific
 -- 7. Dashboard view for managers
 -- ========================================
 
-CREATE OR REPLACE VIEW approval_dashboard_summary AS
+CREATE OR REPLACE VIEW approval_dashboard_summary
+WITH (security_invoker = true)
+AS
 SELECT 
     sp.id AS post_id,
     sp.user_id,
@@ -3582,6 +3588,15 @@ INSERT INTO notification_templates (event_type, notification_type, channel, loca
 ('approval', 'approval_approved', 'in_app', 'en', NULL, 'Post was approved.'),
 ('approval', 'approval_rejected', 'in_app', 'en', NULL, 'Post was rejected.'),
 ('approval', 'approval_changes_requested', 'in_app', 'en', NULL, 'Changes requested on post.')
+ON CONFLICT (event_type, notification_type, channel, locale) DO NOTHING;
+
+-- SMS templates (aligned with 20260413120000_sms_notification_templates.sql)
+INSERT INTO notification_templates (event_type, notification_type, channel, locale, subject, body_template) VALUES
+('approval', 'approval_approved', 'sms', 'en', NULL, 'Your post has been approved.'),
+('approval', 'approval_rejected', 'sms', 'en', NULL, 'Your post was rejected.'),
+('approval', 'approval_changes_requested', 'sms', 'en', NULL, 'Changes requested on your post.'),
+('mention', 'new_mention', 'sms', 'en', NULL, 'You were mentioned by {{userName}}.'),
+('system', 'test_notification', 'sms', 'en', NULL, 'Test notification from Social Autopilot.')
 ON CONFLICT (event_type, notification_type, channel, locale) DO NOTHING;
 
 -- Placeholder templates for mention and analytics

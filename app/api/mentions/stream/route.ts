@@ -3,6 +3,7 @@ import { getUnifiedCredentials } from '@/lib/unified-credentials';
 import { createMentionMonitoringService } from '@/lib/mention-monitoring';
 import { XApiCredentials } from '@/lib/x-api-service';
 import { isEnabled } from '@/lib/feature-flags';
+import { getCurrentUser } from '@/lib/auth-utils';
 
 /**
  * Store active monitoring services per user
@@ -30,8 +31,12 @@ export async function GET(request: NextRequest) {
         { status: 503 }
       );
     }
-    const userId = request.headers.get('x-user-id') || 'demo-user';
-    
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+    const userId = user.id;
+
     // FIRST: Check for real credentials BEFORE checking existing monitors
     // This ensures we don't start demo mode if credentials exist
     const credentialsResult = await getUnifiedCredentials(userId);
@@ -59,47 +64,28 @@ export async function GET(request: NextRequest) {
         }
       } else {
         console.log('⚠️ Invalid or demo credentials detected');
-        apiKey = null; // Force demo mode
+        apiKey = null;
       }
     }
-    
+
     // Check if monitoring is already active for this user
     const existingMonitor = activeMonitors.get(userId);
     if (existingMonitor) {
-      // If it's a demo monitor and we now have real credentials, stop demo and switch
-      if (existingMonitor.type === 'demo' && hasRealCredentials) {
-        console.log('🔄 Real credentials detected, switching from demo to real monitoring');
-        
-        // Stop demo interval immediately
+      if (existingMonitor.type === 'demo') {
         if (existingMonitor.interval) {
           clearInterval(existingMonitor.interval);
-          console.log('🛑 Stopped demo interval');
+          console.log('🛑 Cleared legacy demo monitor interval');
         }
         activeMonitors.delete(userId);
-        
-        // Continue to start real monitoring below
-      } else if (existingMonitor.type === 'demo') {
-        // Still in demo mode, return existing status
-        return NextResponse.json(
-          { success: true, message: 'Demo monitoring already active', status: 'running', mode: 'demo' },
-          { status: 200 }
-        );
       } else {
-        // Real monitoring already active
         return NextResponse.json(
           { success: true, message: 'Monitoring already active', status: 'running' },
           { status: 200 }
         );
       }
     }
-    
-    // Use demo mode ONLY if credentials are not available or invalid
-    // AND we've confirmed there are no real credentials
+
     if (!hasRealCredentials) {
-      console.log('⚠️ No valid X API credentials found, running in demo mode');
-      
-      // IMPORTANT: Double-check that we don't have credentials before starting demo
-      // This prevents race conditions where credentials were just added
       const doubleCheck = await getUnifiedCredentials(userId);
       if (doubleCheck.success && doubleCheck.credentials) {
         const creds = doubleCheck.credentials as XApiCredentials;
@@ -110,7 +96,7 @@ export async function GET(request: NextRequest) {
         if (checkApiKey && checkApiSecret && checkAccessToken && checkAccessSecret &&
             !checkApiKey.includes('demo_') && !checkApiSecret.includes('demo_') &&
             !checkAccessToken.includes('demo_') && !checkAccessSecret.includes('demo_')) {
-          console.log('✅ Real credentials found on double-check, switching to real monitoring');
+          console.log('✅ Real credentials found on double-check');
           hasRealCredentials = true;
           apiKey = checkApiKey;
           apiSecret = checkApiSecret;
@@ -118,61 +104,17 @@ export async function GET(request: NextRequest) {
           accessSecret = checkAccessSecret;
         }
       }
-      
-      // Only start demo mode if we still don't have credentials
-      if (!hasRealCredentials) {
-        // Generate demo mentions periodically
-        const demoInterval = setInterval(async () => {
-          try {
-            // Before generating demo mention, check if credentials were added
-            const checkCreds = await getUnifiedCredentials(userId);
-            if (checkCreds.success && checkCreds.credentials) {
-              const creds: XApiCredentials = checkCreds.credentials as XApiCredentials;
-              const checkApiKey = creds.apiKey ?? null;
-              const checkApiSecret = creds.apiKeySecret ?? null;
-              const checkAccessToken = creds.accessToken ?? null;
-              const checkAccessSecret = creds.accessTokenSecret ?? null;
-              if (checkApiKey && checkApiSecret && checkAccessToken && checkAccessSecret &&
-                  !checkApiKey.includes('demo_') && !checkApiSecret.includes('demo_') &&
-                  !checkAccessToken.includes('demo_') && !checkAccessSecret.includes('demo_')) {
-                // Real credentials found! Stop demo mode
-                console.log('🛑 Real credentials detected during demo interval, stopping demo mode');
-                clearInterval(demoInterval);
-                activeMonitors.delete(userId);
-                return;
-              }
-            }
-            
-            const response = await fetch(`${request.nextUrl.origin}/api/mentions/demo`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-user-id': userId,
-              },
-              body: JSON.stringify({ count: 1 }),
-            });
-            const data = await response.json();
-            if (data.success) {
-              console.log('Demo mention generated:', data.mentions?.[0]?.text);
-            }
-          } catch (error) {
-            console.error('Error generating demo mention:', error);
-          }
-        }, 30000); // Generate a demo mention every 30 seconds
+    }
 
-        // Store demo interval
-        activeMonitors.set(userId, { type: 'demo', interval: demoInterval });
-
-        return NextResponse.json(
-          { 
-            success: true, 
-            message: 'Demo mode monitoring started (no valid X API credentials)',
-            status: 'running',
-            mode: 'demo'
-          },
-          { status: 200 }
-        );
-      }
+    if (!hasRealCredentials) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Valid X API credentials are required to start mention monitoring. Add them in Settings, then try again.',
+        },
+        { status: 400 }
+      );
     }
 
     // Validate that we have all required credentials before creating monitor
@@ -233,8 +175,12 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
-    
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+    const userId = user.id;
+
     const monitor = activeMonitors.get(userId);
     if (!monitor) {
       // Even if monitor not found, return success (might have been cleared already)
@@ -284,8 +230,12 @@ export async function DELETE(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
-    
+    const user = await getCurrentUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+    const userId = user.id;
+
     const monitor = activeMonitors.get(userId);
     if (!monitor) {
       return NextResponse.json(

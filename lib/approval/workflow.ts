@@ -349,7 +349,7 @@ export async function ensureWorkflowAssignment(
       stepName: firstStep.step_name,
       workflowId: workflow.id
     },
-    channels: ['in_app', 'email']
+    channels: ['in_app', 'email', 'sms']
   })
 
   return data as PostApprovalAssignment
@@ -404,7 +404,7 @@ export async function advanceWorkflowStep(
         recipientIds: resolveApprovers(nextStep),
         notificationType: 'approval_step_ready',
         payload: { stepName: nextStep.step_name, workflowId: workflow.id },
-        channels: ['in_app', 'email']
+        channels: ['in_app', 'email', 'sms']
       })
     } else {
       newAssignmentStatus = 'approved'

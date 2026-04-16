@@ -3,12 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { SchedulingService } from '@/lib/scheduling-service'
 import { recordRevision } from '@/lib/approval/revisions'
 import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
+import { applyScheduledPostPatchBody } from '@/lib/apply-scheduled-post-patch-body'
+import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
-
-function getUserId(): string {
-  return 'demo-user'
-}
 
 // Enhanced GET to include approval workflow data
 export async function GET(request: NextRequest) {
@@ -16,7 +14,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month') // YYYY-MM
     const status = searchParams.get('status') // Filter by approval status
-    const userId = getUserId()
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
+    }
+    const userId = user.id
 
     let from: string | null = null
     let to: string | null = null
@@ -69,18 +71,29 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('Received schedule request:', JSON.stringify(body, null, 2))
     
-    const { 
-      content, 
-      mediaUrls, 
-      scheduledAt, 
-      scheduledDate, 
-      scheduledTime, 
+    const {
+      content,
+      mediaUrls,
+      scheduledAt,
+      scheduledDate,
+      scheduledTime,
       timezone,
-      status, 
-      submitForApproval 
+      status,
+      submitForApproval,
+      postId
     } = body
-    
-    const userId = getUserId()
+
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
+    }
+    const userId = user.id
+
+    // Updating an existing post: same behavior as PATCH (content-only, scheduledAt, etc.)
+    if (postId && typeof postId === 'string') {
+      return applyScheduledPostPatchBody(postId, userId, body)
+    }
+
     const schedulingService = new SchedulingService()
 
     // Support both legacy format (scheduledAt) and new format (scheduledDate + scheduledTime)

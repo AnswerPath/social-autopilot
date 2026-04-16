@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MessageSquare, Heart, AlertTriangle, TrendingUp, Settings, Plus, Reply, ExternalLink, Clock, RefreshCw } from 'lucide-react'
+import { MessageSquare, AlertTriangle, TrendingUp, Settings, Reply, ExternalLink, Clock, RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { AutoReplyRules } from '@/components/engagement/auto-reply-rules'
 
@@ -30,63 +29,13 @@ export function EngagementMonitor() {
   })
   const { toast } = useToast()
 
-  const mentions = [
-    {
-      id: 1,
-      user: "@customer_jane",
-      content: "Having issues with login, can someone help? @company",
-      sentiment: "negative",
-      time: "5 min ago",
-      platform: "twitter",
-      followers: 1200,
-      replied: false,
-      priority: "high"
-    },
-    {
-      id: 2,
-      user: "@happy_user",
-      content: "Love the new update! Great work team @company 👏",
-      sentiment: "positive",
-      time: "12 min ago",
-      platform: "twitter",
-      followers: 850,
-      replied: false,
-      priority: "medium"
-    },
-    {
-      id: 3,
-      user: "@tech_reviewer",
-      content: "Just tried @company's new feature. Impressed with the UX improvements!",
-      sentiment: "positive",
-      time: "1 hour ago",
-      platform: "twitter",
-      followers: 5600,
-      replied: true,
-      priority: "low"
-    },
-    {
-      id: 4,
-      user: "@confused_user",
-      content: "How do I reset my password? @company",
-      sentiment: "neutral",
-      time: "2 hours ago",
-      platform: "twitter",
-      followers: 320,
-      replied: false,
-      priority: "medium"
-    }
-  ]
-
-
-  // Calculate stats from mentions data
+  // Calculate stats from mentions data (poll only while monitoring is on)
   useEffect(() => {
     const calculateStats = async () => {
       try {
         // Fetch mentions for stats calculation
         const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=100', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         if (!mentionsResponse.ok) return
         
@@ -140,9 +89,7 @@ export function EngagementMonitor() {
         
         // Fetch auto-reply logs for match counting
         const logsResponse = await fetch('/api/auto-reply/logs', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         let autoRepliesFromLogs = autoReplies
         if (logsResponse.ok) {
@@ -167,9 +114,9 @@ export function EngagementMonitor() {
       }
     }
     
-    calculateStats()
-    // Refresh stats every 30 seconds when monitoring, or on mount
-    const interval = setInterval(calculateStats, 30000)
+    void calculateStats()
+    if (!isMonitoring) return
+    const interval = setInterval(() => void calculateStats(), 30000)
     return () => clearInterval(interval)
   }, [isMonitoring])
 
@@ -178,9 +125,7 @@ export function EngagementMonitor() {
       setIsLoadingMentions(true)
       try {
         const response = await fetch('/api/twitter/mentions?maxResults=50', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         if (response.ok) {
           const data = await response.json()
@@ -212,10 +157,10 @@ export function EngagementMonitor() {
     }
 
     fetchMentions()
-    
-    // Refresh mentions more frequently if monitoring (every 30 seconds for demo mode)
+
+    // While monitoring, poll for new mentions periodically
     if (isMonitoring) {
-      const interval = setInterval(fetchMentions, 30000) // 30 seconds
+      const interval = setInterval(fetchMentions, 30000)
       return () => clearInterval(interval)
     }
   }, [isMonitoring])
@@ -224,37 +169,25 @@ export function EngagementMonitor() {
     try {
       const response = await fetch('/api/mentions/stream', {
         method: 'GET',
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       })
-      const data = await response.json()
-      if (data.success) {
+      const data = await response.json().catch(() => ({}))
+      if (response.ok && data.success) {
         setIsMonitoring(true)
-        // If in demo mode, generate initial demo mentions
-        if (data.mode === 'demo') {
-          await fetch('/api/mentions/demo', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': 'demo-user',
-            },
-            body: JSON.stringify({ count: 5 }),
-          })
-          // Refresh mentions list
-          const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-            headers: {
-              'x-user-id': 'demo-user',
-            },
-          })
-          if (mentionsResponse.ok) {
-            const mentionsData = await mentionsResponse.json()
-            setRealMentions(mentionsData.mentions || [])
-          }
-        }
+      } else {
+        toast({
+          title: 'Cannot start monitoring',
+          description: typeof data.error === 'string' ? data.error : `Request failed (${response.status})`,
+          variant: 'destructive',
+        })
       }
     } catch (error) {
       console.error('Error starting monitoring:', error)
+      toast({
+        title: 'Cannot start monitoring',
+        description: error instanceof Error ? error.message : 'Request failed',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -265,18 +198,14 @@ export function EngagementMonitor() {
     try {
       const response = await fetch('/api/mentions/stream', {
         method: 'DELETE',
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       })
       const data = await response.json()
       if (data.success) {
         setIsMonitoring(false)
         // Refresh mentions list after stopping
         const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-          headers: {
-            'x-user-id': 'demo-user',
-          },
+          credentials: 'include',
         })
         if (mentionsResponse.ok) {
           const mentionsData = await mentionsResponse.json()
@@ -317,16 +246,14 @@ export function EngagementMonitor() {
     }
   }
 
-  const displayMentions = realMentions.map(mention => {
+  const displayMentions = realMentions.map((mention, index) => {
     // Handle both API format and database format
     const username = mention.username || mention.author_username || 'unknown'
     const text = mention.text || mention.content || ''
     const createdAt = mention.created_at || mention.createdAt || new Date().toISOString()
     const sentiment = mention.sentiment || 'neutral'
-    const followers = mention.public_metrics?.followers_count || 
-                     (mention.public_metrics?.followers_count) || 
-                     Math.floor(Math.random() * 5000) + 100 // Random for demo
-    
+    const followers = mention.public_metrics?.followers_count ?? 0
+
     // Determine priority based on sentiment and other factors
     let priority = 'low'
     if (sentiment === 'negative') {
@@ -334,9 +261,9 @@ export function EngagementMonitor() {
     } else if (followers > 1000 || sentiment === 'positive') {
       priority = 'medium'
     }
-    
+
     return {
-      id: mention.id || mention.tweet_id || `mention-${Math.random()}`,
+      id: mention.id || mention.tweet_id || `mention-${index}`,
       user: `@${username}`,
       content: text,
       sentiment: sentiment,
@@ -484,159 +411,6 @@ export function EngagementMonitor() {
                   Monitoring Active
                 </Badge>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    setIsLoadingMentions(true)
-                    const response = await fetch('/api/mentions/demo', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'x-user-id': 'demo-user',
-                      },
-                      body: JSON.stringify({ count: 5 }),
-                    })
-                    
-                    if (!response.ok) {
-                      const errorText = await response.text()
-                      throw new Error(`HTTP ${response.status}: ${errorText}`)
-                    }
-                    
-                    const data = await response.json()
-                    if (data.success) {
-                      toast({
-                        title: 'Success',
-                        description: data.message || `Generated ${data.mentions?.length || 0} demo mentions`,
-                      })
-                      // Wait a moment for database to be ready, then refresh mentions list
-                      setTimeout(async () => {
-                        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-                          headers: {
-                            'x-user-id': 'demo-user',
-                          },
-                        })
-          if (mentionsResponse.ok) {
-            const mentionsData = await mentionsResponse.json()
-            console.log('[EngagementMonitor] Fetched mentions:', mentionsData.mentions?.length || 0)
-            console.log('[EngagementMonitor] Mentions data:', mentionsData)
-            
-            // Log sentiment distribution from fetched mentions
-            if (mentionsData.mentions && mentionsData.mentions.length > 0) {
-              const sentimentCounts = mentionsData.mentions.reduce((acc: Record<string, number>, m: any) => {
-                const sent = m.sentiment || 'null/undefined'
-                acc[sent] = (acc[sent] || 0) + 1
-                return acc
-              }, {} as Record<string, number>)
-              console.log('[EngagementMonitor] Sentiment distribution in fetched data:', sentimentCounts)
-              console.log('[EngagementMonitor] First 5 mentions with sentiment:', mentionsData.mentions.slice(0, 5).map((m: any) => ({
-                text: (m.text || '').substring(0, 40) + '...',
-                sentiment: m.sentiment || 'MISSING',
-                id: m.id
-              })))
-            }
-            
-            setRealMentions(mentionsData.mentions || [])
-                        } else {
-                          console.error('[EngagementMonitor] Failed to fetch mentions:', mentionsResponse.status)
-                        }
-                      }, 500) // Small delay to ensure DB write is complete
-                    } else {
-                      console.error('Failed to generate demo mentions:', data.error)
-                      toast({
-                        title: 'Error',
-                        description: data.error || 'Failed to generate demo mentions',
-                        variant: 'destructive',
-                      })
-                    }
-                  } catch (error) {
-                    console.error('Error generating demo mentions:', error)
-                    toast({
-                      title: 'Error',
-                      description: error instanceof Error ? error.message : 'Failed to generate demo mentions',
-                      variant: 'destructive',
-                    })
-                  } finally {
-                    setIsLoadingMentions(false)
-                  }
-                }}
-                disabled={isLoadingMentions}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {isLoadingMentions ? 'Generating...' : 'Generate Demo Mentions'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  setIsLoadingMentions(true)
-                  try {
-                    // First, stop monitoring if it's active (especially if in demo mode)
-                    if (isMonitoring) {
-                      try {
-                        await fetch('/api/mentions/stream', {
-                          method: 'DELETE',
-                          headers: {
-                            'x-user-id': 'demo-user',
-                          },
-                        })
-                        setIsMonitoring(false)
-                        console.log('🛑 Stopped monitoring before cleanup')
-                      } catch (stopError) {
-                        console.warn('Warning: Could not stop monitoring:', stopError)
-                        // Continue with cleanup anyway
-                      }
-                    }
-                    
-                    // Now clean up demo mentions
-                    const response = await fetch('/api/mentions/cleanup-demo', {
-                      method: 'POST',
-                      headers: {
-                        'x-user-id': 'demo-user',
-                      },
-                    })
-                    const data = await response.json()
-                    if (data.success) {
-                      toast({
-                        title: 'Success',
-                        description: data.message || `Cleaned up ${data.deletedCount || 0} demo mentions${data.demoMonitoringStopped ? ' and stopped demo monitoring' : ''}`,
-                      })
-                      // Refresh mentions list after cleanup
-                      setTimeout(async () => {
-                        const mentionsResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-                          headers: {
-                            'x-user-id': 'demo-user',
-                          },
-                        })
-                        if (mentionsResponse.ok) {
-                          const mentionsData = await mentionsResponse.json()
-                          setRealMentions(mentionsData.mentions || [])
-                        }
-                      }, 500)
-                    } else {
-                      toast({
-                        title: 'Error',
-                        description: data.error || 'Failed to clean up demo mentions',
-                        variant: 'destructive',
-                      })
-                    }
-                  } catch (error) {
-                    console.error('Error cleaning up demo mentions:', error)
-                    toast({
-                      title: 'Error',
-                      description: error instanceof Error ? error.message : 'Failed to clean up demo mentions',
-                      variant: 'destructive',
-                    })
-                  } finally {
-                    setIsLoadingMentions(false)
-                  }
-                }}
-                disabled={isLoadingMentions}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Clean Up Demo Mentions
-              </Button>
             </div>
             {/* Filters */}
             <div className="flex items-center gap-4">
@@ -659,9 +433,7 @@ export function EngagementMonitor() {
                   setIsLoadingMentions(true)
                   try {
                     const response = await fetch('/api/twitter/mentions?maxResults=50', {
-                      headers: {
-                        'x-user-id': 'demo-user',
-                      },
+                      credentials: 'include',
                     })
                     if (response.ok) {
                       const data = await response.json()
@@ -713,9 +485,9 @@ export function EngagementMonitor() {
                   <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p className="text-muted-foreground mb-2">No mentions found</p>
                   <p className="text-sm text-muted-foreground mb-4">
-                    {isMonitoring 
+                    {isMonitoring
                       ? 'Monitoring is active. Mentions will appear here when they are captured.'
-                      : 'Click "Generate Demo Mentions" to create test mentions, or start monitoring to capture real mentions.'}
+                      : 'Configure X API credentials in Settings, start monitoring, then use Refresh to load the latest mentions.'}
                   </p>
                   <Button
                     variant="outline"
@@ -723,9 +495,7 @@ export function EngagementMonitor() {
                     onClick={async () => {
                       setIsLoadingMentions(true)
                       const response = await fetch('/api/twitter/mentions?maxResults=50', {
-                        headers: {
-                          'x-user-id': 'demo-user',
-                        },
+                        credentials: 'include',
                       })
                       if (response.ok) {
                         const data = await response.json()
@@ -819,8 +589,8 @@ export function EngagementMonitor() {
                     method: 'PUT',
                     headers: {
                       'Content-Type': 'application/json',
-                      'x-user-id': 'demo-user',
                     },
+                    credentials: 'include',
                     body: JSON.stringify({ analyzeAll: false, limit: 100 }),
                   })
                   if (response.ok) {
@@ -833,9 +603,7 @@ export function EngagementMonitor() {
                     // Refresh mentions after re-analysis
                     setTimeout(async () => {
                       const refreshResponse = await fetch('/api/twitter/mentions?maxResults=50', {
-                        headers: {
-                          'x-user-id': 'demo-user',
-                        },
+                        credentials: 'include',
                       })
                       if (refreshResponse.ok) {
                         const refreshData = await refreshResponse.json()

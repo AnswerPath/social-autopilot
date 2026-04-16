@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { createSupabaseServiceRoleClient } from '@/lib/supabase';
 import { isDevMode } from '@/lib/auth-utils';
 import { 
   Team, 
@@ -28,10 +28,18 @@ import {
 } from '@/lib/team-types';
 import { logActivity, ActivityCategory, ActivityLevel } from '@/lib/activity-logging';
 import { NextRequest } from 'next/server';
+import { buildTeamInviteUrl, sendTeamInvitationEmail } from '@/lib/team-invite-email';
+
+/** Shown in API responses when Resend skips or rejects a send (details stay in server logs). */
+export const TEAM_INVITE_EMAIL_CLIENT_ERROR =
+  'Email could not be sent. The invitation was saved; check Resend configuration and server logs.';
 
 export class TeamService {
   private static instance: TeamService;
-  private supabaseAdmin = getSupabaseAdmin();
+  /** Fresh service-role client so reads/writes are not affected by a poisoned singleton (user JWT on admin client). */
+  private serviceDb() {
+    return createSupabaseServiceRoleClient();
+  }
   private mockTeams: Team[] = []; // Store mock teams in development mode
   private mockInvitations: TeamInvitation[] = []; // Store mock invitations in development mode
 
@@ -79,7 +87,7 @@ export class TeamService {
       }
 
       // Generate unique slug
-      const { data: slugData, error: slugError } = await this.supabaseAdmin
+      const { data: slugData, error: slugError } = await this.serviceDb()
         .rpc('generate_team_slug', { team_name: teamData.name });
 
       if (slugError) throw slugError;
@@ -87,7 +95,7 @@ export class TeamService {
       const slug = slugData || teamData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
 
       // Create team
-      const { data: team, error: teamError } = await this.supabaseAdmin
+      const { data: team, error: teamError } = await this.serviceDb()
         .from('teams')
         .insert({
           name: teamData.name,
@@ -105,7 +113,7 @@ export class TeamService {
       if (teamError) throw teamError;
 
       // Add creator as team owner
-      const { error: memberError } = await this.supabaseAdmin
+      const { error: memberError } = await this.serviceDb()
         .from('team_members')
         .insert({
           team_id: team.id,
@@ -146,8 +154,8 @@ export class TeamService {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
       
       const query = isUuid 
-        ? this.supabaseAdmin.from('teams').select('*').eq('id', identifier)
-        : this.supabaseAdmin.from('teams').select('*').eq('slug', identifier);
+        ? this.serviceDb().from('teams').select('*').eq('id', identifier)
+        : this.serviceDb().from('teams').select('*').eq('slug', identifier);
 
       const { data: team, error } = await query.single();
 
@@ -178,7 +186,7 @@ export class TeamService {
       }
 
       // Update team
-      const { data: team, error } = await this.supabaseAdmin
+      const { data: team, error } = await this.serviceDb()
         .from('teams')
         .update({
           ...updateData,
@@ -228,7 +236,7 @@ export class TeamService {
       }
 
       // Delete team (cascade will handle related records)
-      const { error } = await this.supabaseAdmin
+      const { error } = await this.serviceDb()
         .from('teams')
         .delete()
         .eq('id', teamId);
@@ -288,7 +296,7 @@ export class TeamService {
         return { success: true, members: [] };
       }
 
-      let query = this.supabaseAdmin
+      let query = this.serviceDb()
         .from('team_members')
         .select('*')
         .eq('team_id', teamId);
@@ -319,7 +327,13 @@ export class TeamService {
     inviterId: string,
     invitationData: InviteMemberRequest,
     request?: NextRequest
-  ): Promise<{ success: boolean; invitation?: TeamInvitation; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    invitation?: TeamInvitation;
+    error?: string;
+    emailSent?: boolean;
+    emailError?: string;
+  }> {
     try {
       // Check if user has permission to invite members
       const hasPermission = await this.checkTeamPermission(teamId, inviterId, 'canInviteMembers');
@@ -335,7 +349,7 @@ export class TeamService {
       expiresAt.setDate(expiresAt.getDate() + 7);
 
       // Create invitation
-      const { data: invitation, error } = await this.supabaseAdmin
+      const { data: invitation, error } = await this.serviceDb()
         .from('team_invitations')
         .insert({
           team_id: teamId,
@@ -353,7 +367,20 @@ export class TeamService {
         `)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        const isUniqueViolation =
+          error.code === '23505' ||
+          (typeof error.message === 'string' && error.message.includes('duplicate key'));
+        if (isUniqueViolation) {
+          return this.rotatePendingInvitationAndNotify(
+            teamId,
+            inviterId,
+            invitationData,
+            request
+          );
+        }
+        throw error;
+      }
 
       // Log invitation
       await logActivity(
@@ -373,10 +400,242 @@ export class TeamService {
         }
       );
 
-      return { success: true, invitation };
+      const { sent: emailSent } = await this.sendTeamInvitationNotification(
+        invitation as TeamInvitation & { team?: Team },
+        inviterId
+      );
+
+      return {
+        success: true,
+        invitation,
+        emailSent,
+        ...(emailSent ? {} : { emailError: TEAM_INVITE_EMAIL_CLIENT_ERROR })
+      };
 
     } catch (error: any) {
       console.error('Error inviting member:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send invite email (does not throw; logs provider message on failure).
+   */
+  private async sendTeamInvitationNotification(
+    invitation: TeamInvitation & { team?: Team },
+    inviterId: string
+  ): Promise<{ sent: boolean }> {
+    try {
+      const teamName = invitation.team?.name ?? 'your team';
+      const { data: inviterProfile } = await this.serviceDb()
+        .from('user_profiles')
+        .select('first_name, last_name, display_name')
+        .eq('user_id', inviterId)
+        .maybeSingle();
+      const inviterLabel =
+        inviterProfile?.display_name ||
+        [inviterProfile?.first_name, inviterProfile?.last_name].filter(Boolean).join(' ').trim() ||
+        undefined;
+      const inviteUrl = buildTeamInviteUrl(invitation.invitation_token);
+      const result = await sendTeamInvitationEmail({
+        to: invitation.email,
+        teamName,
+        role: invitation.role,
+        inviterLabel,
+        message: invitation.message,
+        expiresAt: new Date(invitation.expires_at),
+        inviteUrl
+      });
+      if (!result.success) {
+        console.error('[team-invite] Email send failed', { error: result.error });
+        return { sent: false };
+      }
+      return { sent: true };
+    } catch (err) {
+      console.error('[team-invite] Invitation email setup or send threw', err);
+      return { sent: false };
+    }
+  }
+
+  /**
+   * Same email invited again: rotate token for pending row and resend email.
+   */
+  private async rotatePendingInvitationAndNotify(
+    teamId: string,
+    inviterId: string,
+    invitationData: InviteMemberRequest,
+    request?: NextRequest,
+    invitationId?: string
+  ): Promise<{
+    success: boolean;
+    invitation?: TeamInvitation;
+    error?: string;
+    emailSent?: boolean;
+    emailError?: string;
+  }> {
+    let query = this.serviceDb()
+      .from('team_invitations')
+      .select(`
+        *,
+        team:teams(name, slug)
+      `)
+      .eq('team_id', teamId);
+
+    if (invitationId) {
+      query = query.eq('id', invitationId);
+    } else {
+      query = query.eq('email', invitationData.email);
+    }
+
+    const { data: existing, error: fetchError } = await query.maybeSingle();
+
+    if (fetchError || !existing) {
+      return { success: false, error: fetchError?.message || 'Invitation not found' };
+    }
+
+    if (existing.status !== InvitationStatus.PENDING) {
+      return {
+        success: false,
+        error: 'This email already has an invitation or is already on the team.'
+      };
+    }
+
+    const newToken = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const { data: invitation, error: updateError } = await this.serviceDb()
+      .from('team_invitations')
+      .update({
+        invitation_token: newToken,
+        expires_at: expiresAt.toISOString(),
+        role: invitationData.role,
+        permissions: invitationData.permissions || {},
+        invited_by: inviterId,
+        message: invitationData.message,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existing.id)
+      .select(`
+        *,
+        team:teams(name, slug)
+      `)
+      .single();
+
+    if (updateError || !invitation) {
+      return { success: false, error: updateError?.message || 'Failed to refresh invitation' };
+    }
+
+    await logActivity(
+      inviterId,
+      'member_invited',
+      ActivityCategory.USER_MANAGEMENT,
+      ActivityLevel.INFO,
+      {
+        resourceType: 'team',
+        resourceId: teamId,
+        details: {
+          email: invitationData.email,
+          role: invitationData.role,
+          invitationId: invitation.id,
+          resent: true
+        },
+        request
+      }
+    );
+
+    const { sent: emailSent } = await this.sendTeamInvitationNotification(
+      invitation as TeamInvitation & { team?: Team },
+      inviterId
+    );
+
+    return {
+      success: true,
+      invitation,
+      emailSent,
+      ...(emailSent ? {} : { emailError: TEAM_INVITE_EMAIL_CLIENT_ERROR })
+    };
+  }
+
+  /**
+   * Resend email for a pending invitation (rotates token and extends expiry).
+   */
+  async resendTeamInvitation(
+    teamId: string,
+    inviterId: string,
+    invitationId: string,
+    request?: NextRequest
+  ): Promise<{
+    success: boolean;
+    invitation?: TeamInvitation;
+    error?: string;
+    emailSent?: boolean;
+    emailError?: string;
+  }> {
+    const hasPermission = await this.checkTeamPermission(teamId, inviterId, 'canInviteMembers');
+    if (!hasPermission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    const { data: existing, error: fetchError } = await this.serviceDb()
+      .from('team_invitations')
+      .select('id, team_id, email, role, permissions, message, status')
+      .eq('id', invitationId)
+      .eq('team_id', teamId)
+      .maybeSingle();
+
+    if (fetchError || !existing) {
+      return { success: false, error: 'Invitation not found' };
+    }
+
+    if (existing.status !== InvitationStatus.PENDING) {
+      return { success: false, error: 'Only pending invitations can be resent.' };
+    }
+
+    const invitationData: InviteMemberRequest = {
+      email: existing.email,
+      role: existing.role as TeamRole,
+      permissions: existing.permissions || {},
+      message: existing.message
+    };
+
+    return this.rotatePendingInvitationAndNotify(
+      teamId,
+      inviterId,
+      invitationData,
+      request,
+      existing.id
+    );
+  }
+
+  /**
+   * Pending invitations sent for a team (for admins to resend or review).
+   */
+  async getPendingInvitationsForTeam(
+    teamId: string,
+    requesterId: string
+  ): Promise<{ success: boolean; invitations?: TeamInvitation[]; error?: string }> {
+    try {
+      const hasPermission = await this.checkTeamPermission(teamId, requesterId, 'canInviteMembers');
+      if (!hasPermission) {
+        return { success: false, error: 'Insufficient permissions' };
+      }
+
+      const { data: invitations, error } = await this.serviceDb()
+        .from('team_invitations')
+        .select(`
+          *,
+          team:teams(name, slug)
+        `)
+        .eq('team_id', teamId)
+        .eq('status', InvitationStatus.PENDING)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return { success: true, invitations: invitations || [] };
+    } catch (error: any) {
+      console.error('Error listing team invitations:', error);
       return { success: false, error: error.message };
     }
   }
@@ -391,7 +650,7 @@ export class TeamService {
   ): Promise<{ success: boolean; team?: Team; error?: string }> {
     try {
       // Get invitation
-      const { data: invitation, error: inviteError } = await this.supabaseAdmin
+      const { data: invitation, error: inviteError } = await this.serviceDb()
         .from('team_invitations')
         .select(`
           *,
@@ -410,8 +669,18 @@ export class TeamService {
         return { success: false, error: 'Invitation has expired' };
       }
 
+      const { data: authUser, error: authLookupError } = await this.serviceDb().auth.admin.getUserById(userId);
+      if (authLookupError || !authUser?.user?.email) {
+        return { success: false, error: 'Could not verify authenticated user email' };
+      }
+      const userEmail = authUser.user.email.trim().toLowerCase();
+      const inviteEmail = String(invitation.email).trim().toLowerCase();
+      if (userEmail !== inviteEmail) {
+        return { success: false, error: 'Invitation email does not match authenticated user' };
+      }
+
       // Add user to team
-      const { error: memberError } = await this.supabaseAdmin
+      const { error: memberError } = await this.serviceDb()
         .from('team_members')
         .insert({
           team_id: invitation.team_id,
@@ -425,7 +694,7 @@ export class TeamService {
       if (memberError) throw memberError;
 
       // Update invitation status
-      const { error: updateError } = await this.supabaseAdmin
+      const { error: updateError } = await this.serviceDb()
         .from('team_invitations')
         .update({
           status: InvitationStatus.ACCEPTED,
@@ -475,7 +744,7 @@ export class TeamService {
       }
 
       // Update member role
-      const { data: member, error } = await this.supabaseAdmin
+      const { data: member, error } = await this.serviceDb()
         .from('team_members')
         .update({
           role: roleData.role,
@@ -531,7 +800,7 @@ export class TeamService {
       }
 
       // Remove member
-      const { error } = await this.supabaseAdmin
+      const { error } = await this.serviceDb()
         .from('team_members')
         .update({ status: TeamMemberStatus.LEFT })
         .eq('team_id', teamId)
@@ -582,7 +851,7 @@ export class TeamService {
       }
 
       // Create content sharing record
-      const { data: sharing, error } = await this.supabaseAdmin
+      const { data: sharing, error } = await this.serviceDb()
         .from('team_content_sharing')
         .insert({
           team_id: teamId,
@@ -632,7 +901,7 @@ export class TeamService {
     contentType?: ContentType
   ): Promise<{ success: boolean; content?: TeamContentSharing[]; error?: string }> {
     try {
-      let query = this.supabaseAdmin
+      let query = this.serviceDb()
         .from('team_content_sharing')
         .select('*')
         .eq('team_id', teamId);
@@ -663,27 +932,27 @@ export class TeamService {
   async getTeamStats(teamId: string): Promise<{ success: boolean; stats?: TeamStats; error?: string }> {
     try {
       // Get member count
-      const { count: memberCount } = await this.supabaseAdmin
+      const { count: memberCount } = await this.serviceDb()
         .from('team_members')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId)
         .eq('status', TeamMemberStatus.ACTIVE);
 
       // Get pending invitations count
-      const { count: pendingInvitations } = await this.supabaseAdmin
+      const { count: pendingInvitations } = await this.serviceDb()
         .from('team_invitations')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId)
         .eq('status', InvitationStatus.PENDING);
 
       // Get shared content count
-      const { count: contentShared } = await this.supabaseAdmin
+      const { count: contentShared } = await this.serviceDb()
         .from('team_content_sharing')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId);
 
       // Get workspaces count
-      const { count: workspacesCount } = await this.supabaseAdmin
+      const { count: workspacesCount } = await this.serviceDb()
         .from('team_workspaces')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId);
@@ -692,14 +961,14 @@ export class TeamService {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const { count: activityCount } = await this.supabaseAdmin
+      const { count: activityCount } = await this.serviceDb()
         .from('team_activity_logs')
         .select('*', { count: 'exact', head: true })
         .eq('team_id', teamId)
         .gte('created_at', thirtyDaysAgo.toISOString());
 
       // Get last activity
-      const { data: lastActivity } = await this.supabaseAdmin
+      const { data: lastActivity } = await this.serviceDb()
         .from('team_activity_logs')
         .select('created_at')
         .eq('team_id', teamId)
@@ -739,7 +1008,7 @@ export class TeamService {
   ): Promise<boolean> {
     try {
       // Get user's role in team
-      const { data: member, error } = await this.supabaseAdmin
+      const { data: member, error } = await this.serviceDb()
         .from('team_members')
         .select('role')
         .eq('team_id', teamId)
@@ -767,7 +1036,7 @@ export class TeamService {
     userId: string
   ): Promise<{ success: boolean; permissions?: TeamPermissions; role?: TeamRole; error?: string }> {
     try {
-      const { data: member, error } = await this.supabaseAdmin
+      const { data: member, error } = await this.serviceDb()
         .from('team_members')
         .select('role, permissions')
         .eq('team_id', teamId)
@@ -809,7 +1078,7 @@ export class TeamService {
         return { success: true, teams: userTeams }
       }
 
-      const { data: teams, error } = await this.supabaseAdmin
+      const { data: teams, error } = await this.serviceDb()
         .from('team_members')
         .select(`
           team:teams(*)
@@ -846,7 +1115,7 @@ export class TeamService {
         };
       }
 
-      const { data: invitations, error } = await this.supabaseAdmin
+      const { data: invitations, error } = await this.serviceDb()
         .from('team_invitations')
         .select(`
           *,
