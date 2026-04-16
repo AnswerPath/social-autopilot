@@ -155,12 +155,17 @@ export async function applyScheduledPostPatchBody(
     .from('scheduled_posts')
     .update(update)
     .eq('id', id)
-    .eq('user_id', userId)
     .select('*')
-    .single()
+    .maybeSingle()
 
   if (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+  if (!data) {
+    return NextResponse.json(
+      { success: false, error: 'Scheduled post not found' },
+      { status: 404 }
+    )
   }
 
   try {

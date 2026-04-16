@@ -7,14 +7,21 @@ export const VERIFICATION_EXPIRY_HOURS = 24
 /**
  * Remove unused verification tokens for a user so only the latest link stays valid.
  */
-async function deleteUnusedTokensForUser(userId: string, excludeToken: string): Promise<void> {
+async function deleteUnusedTokensForUser(
+  userId: string,
+  excludeTokenCreatedAt: string | Date
+): Promise<void> {
+  const excludeTokenCreatedAtIso =
+    typeof excludeTokenCreatedAt === 'string'
+      ? excludeTokenCreatedAt
+      : excludeTokenCreatedAt.toISOString()
   const supabase = getSupabaseAdmin()
   const { error } = await supabase
     .from('email_verifications')
     .delete()
     .eq('user_id', userId)
     .is('used_at', null)
-    .neq('token', excludeToken)
+    .lt('created_at', excludeTokenCreatedAtIso)
 
   if (error) {
     console.error('[email-verification] Failed to clear pending tokens', { userId, error })
@@ -34,11 +41,15 @@ export async function sendVerificationEmailForUser(
   expiresAt.setHours(expiresAt.getHours() + VERIFICATION_EXPIRY_HOURS)
 
   const supabase = getSupabaseAdmin()
-  const { error: insertError } = await supabase.from('email_verifications').insert({
-    user_id: userId,
-    token,
-    expires_at: expiresAt.toISOString()
-  })
+  const { data: insertedVerification, error: insertError } = await supabase
+    .from('email_verifications')
+    .insert({
+      user_id: userId,
+      token,
+      expires_at: expiresAt.toISOString()
+    })
+    .select('created_at')
+    .single()
 
   if (insertError) {
     console.error('[email-verification] Failed to create verification record', { userId, error: insertError })
@@ -55,7 +66,7 @@ export async function sendVerificationEmailForUser(
     return { success: false, error: result.error ?? 'Email send failed' }
   }
 
-  await deleteUnusedTokensForUser(userId, token)
+  await deleteUnusedTokensForUser(userId, insertedVerification?.created_at ?? new Date().toISOString())
   return { success: true }
 }
 
@@ -82,6 +93,7 @@ export async function tryResendVerificationByEmail(email: string): Promise<{ suc
   let page = 1
   const perPage = 1000
   let matchedUserId: string | null = null
+  let matchedUserEmail: string | null = null
 
   for (;;) {
     const { data: listData, error: listError } = await supabase.auth.admin.listUsers({
@@ -97,6 +109,7 @@ export async function tryResendVerificationByEmail(email: string): Promise<{ suc
     const found = listData.users.find((u) => u.email?.toLowerCase() === normalized)
     if (found?.id) {
       matchedUserId = found.id
+      matchedUserEmail = (found.email ?? normalized).trim().toLowerCase()
       break
     }
 
@@ -106,7 +119,7 @@ export async function tryResendVerificationByEmail(email: string): Promise<{ suc
     page += 1
   }
 
-  if (!matchedUserId) {
+  if (!matchedUserId || !matchedUserEmail) {
     return { success: true }
   }
 
@@ -120,6 +133,6 @@ export async function tryResendVerificationByEmail(email: string): Promise<{ suc
     return { success: true }
   }
 
-  await sendVerificationEmailForUser(matchedUserId, email)
+  await sendVerificationEmailForUser(matchedUserId, matchedUserEmail)
   return { success: true }
 }

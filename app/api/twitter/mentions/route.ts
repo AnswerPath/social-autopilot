@@ -46,13 +46,16 @@ export async function GET(request: NextRequest) {
     const result = await getUnifiedCredentials(userId)
 
     if (!result.success || !result.credentials) {
-      console.log(`❌ No credentials found for user ${userId}`)
-      return NextResponse.json({
-        success: true,
-        mentions: [],
-        mock: true,
-        requiresCredentials: true,
-      })
+      console.log('No credentials found for user')
+      return NextResponse.json(
+        {
+          success: false,
+          mentions: [],
+          mock: true,
+          requiresCredentials: true,
+        },
+        { status: 400 }
+      )
     }
 
     const credentials = result.credentials
@@ -65,12 +68,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (!isNonDemoXCredentials(twitterCredentials)) {
-      return NextResponse.json({
-        success: true,
-        mentions: [],
-        mock: true,
-        requiresCredentials: true,
-      })
+      return NextResponse.json(
+        {
+          success: false,
+          mentions: [],
+          mock: true,
+          requiresCredentials: true,
+        },
+        { status: 400 }
+      )
     }
 
     if (result.migrated) {
