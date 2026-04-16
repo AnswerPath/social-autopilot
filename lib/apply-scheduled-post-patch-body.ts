@@ -5,13 +5,21 @@ import { recordRevision } from '@/lib/approval/revisions'
 import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
 import { isApproverForPost } from '@/lib/approval/is-approver-for-post'
 
-const OWNER_SETTABLE_STATUSES = [
-  'draft',
-  'cancelled',
-  'published',
-  'failed',
-  'processing'
-] as const
+const OWNER_SETTABLE_STATUSES = ['draft', 'cancelled'] as const
+
+function bodyHasApprovalDecisionFields(body: Record<string, unknown>): boolean {
+  const status = typeof body.status === 'string' ? body.status : ''
+  if (status === 'approved' || status === 'rejected' || status === 'pending_approval') {
+    return true
+  }
+  if (body.rejectionReason != null && body.rejectionReason !== '') {
+    return true
+  }
+  if (body.approved === true || body.rejected === true) return true
+  if (body.approvalDecision != null && body.approvalDecision !== '') return true
+  if (body.approverId != null && body.approverId !== '') return true
+  return false
+}
 
 /**
  * Shared implementation for PATCH /api/scheduled-posts/:id and
@@ -87,7 +95,7 @@ export async function applyScheduledPostPatchBody(
   if (body.submitForApproval === true) {
     update.status = 'pending_approval'
     update.requires_approval = true
-  } else if (body.submitForApproval === false) {
+  } else if (body.submitForApproval === false && !bodyHasApprovalDecisionFields(body)) {
     update.requires_approval = false
   }
 
@@ -124,9 +132,6 @@ export async function applyScheduledPostPatchBody(
       update.requires_approval = true
     }
   }
-
-  if (body.postedTweetId) update.posted_tweet_id = body.postedTweetId
-  if (body.error) update.error = body.error
 
   if (update.status === 'pending_approval') {
     update.submitted_for_approval_at = new Date().toISOString()

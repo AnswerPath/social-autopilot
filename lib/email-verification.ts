@@ -36,6 +36,15 @@ export async function sendVerificationEmailForUser(
   userId: string,
   email: string
 ): Promise<{ success: boolean; error?: string }> {
+  const appBaseUrl = getAppBaseUrl()
+  const usesLocalhostFallback =
+    appBaseUrl === 'http://localhost:3000' ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(appBaseUrl)
+  if (process.env.NODE_ENV !== 'development' && usesLocalhostFallback) {
+    console.error('[email-verification] Invalid app base URL in non-development', { userId, appBaseUrl })
+    return { success: false, error: 'Invalid app base URL' }
+  }
+
   const token = crypto.randomUUID()
   const expiresAt = new Date()
   expiresAt.setHours(expiresAt.getHours() + VERIFICATION_EXPIRY_HOURS)
@@ -54,16 +63,6 @@ export async function sendVerificationEmailForUser(
   if (insertError) {
     console.error('[email-verification] Failed to create verification record', { userId, error: insertError })
     return { success: false, error: 'Could not create verification' }
-  }
-
-  const appBaseUrl = getAppBaseUrl()
-  const usesLocalhostFallback =
-    appBaseUrl === 'http://localhost:3000' ||
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(appBaseUrl)
-  if (process.env.NODE_ENV !== 'development' && usesLocalhostFallback) {
-    throw new Error(
-      `Invalid getAppBaseUrl() value in non-development environment: "${appBaseUrl}". Refusing to build verifyUrl with localhost.`
-    )
   }
 
   const verifyUrl = `${appBaseUrl}/auth/verify-email?token=${token}`
