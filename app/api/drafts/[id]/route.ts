@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
-
-// Helper function to get user ID (placeholder for demo)
-function getUserId(): string {
-  // In a real app, this would extract from JWT token or session
-  return 'demo-user'
-}
 
 // GET /api/drafts/[id] - Get a specific draft
 export async function GET(
@@ -15,8 +10,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const { id } = await params
-    const userId = getUserId()
 
     const { data, error } = await supabaseAdmin
       .from('scheduled_posts')
@@ -45,11 +43,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const { id } = await params
     const body = await request.json()
     const { content, mediaUrls, autoSave = false } = body
-    
-    const userId = getUserId()
 
     // Check if draft exists and belongs to user
     const { data: existingDraft, error: fetchError } = await supabaseAdmin
@@ -111,8 +111,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const { id } = await params
-    const userId = getUserId()
 
     const { error } = await supabaseAdmin
       .from('scheduled_posts')

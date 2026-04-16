@@ -1,32 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTwitterCredentials } from '@/lib/database-storage'
 import { TwitterApi } from 'twitter-api-v2'
+import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Fetching Twitter profile...')
-    
-    const result = await getTwitterCredentials('demo-user')
-    
+
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Authentication required',
+          profile: null,
+          requiresSetup: false,
+        },
+        { status: 401 }
+      )
+    }
+
+    const result = await getTwitterCredentials(user.id)
+
     if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
-        mock: true,
-        profile: {
-          id: '1234567890',
-          username: 'your_username',
-          name: 'Your Social Media Brand',
-          description: 'Automated social media management made simple 🚀',
-          public_metrics: {
-            followers_count: 15420,
-            following_count: 892,
-            tweet_count: 3456,
-          },
-          profile_image_url: '/placeholder.svg?height=100&width=100'
-        }
+        mock: false,
+        profile: null,
+        requiresSetup: true,
       })
     }
 
@@ -75,7 +79,7 @@ export async function GET(request: NextRequest) {
         accessSecret: credentials.accessSecret,
       })
 
-      const user = await client.v2.me({
+      const twUser = await client.v2.me({
         'user.fields': ['description', 'public_metrics', 'profile_image_url']
       })
 
@@ -84,16 +88,16 @@ export async function GET(request: NextRequest) {
         success: true,
         mock: false,
         profile: {
-          id: user.data.id,
-          username: user.data.username,
-          name: user.data.name,
-          description: user.data.description || '',
+          id: twUser.data.id,
+          username: twUser.data.username,
+          name: twUser.data.name,
+          description: twUser.data.description || '',
           public_metrics: {
-            followers_count: user.data.public_metrics?.followers_count || 0,
-            following_count: user.data.public_metrics?.following_count || 0,
-            tweet_count: user.data.public_metrics?.tweet_count || 0,
+            followers_count: twUser.data.public_metrics?.followers_count || 0,
+            following_count: twUser.data.public_metrics?.following_count || 0,
+            tweet_count: twUser.data.public_metrics?.tweet_count || 0,
           },
-          profile_image_url: user.data.profile_image_url || '/placeholder.svg?height=100&width=100'
+          profile_image_url: twUser.data.profile_image_url || '/placeholder.svg?height=100&width=100'
         }
       })
     } catch (apiError: any) {
@@ -104,46 +108,23 @@ export async function GET(request: NextRequest) {
       ;(globalThis as any).__last_profile_error = errorInfo
     }
 
-    // Enhanced mock data for development or API fallback
-    console.log('📊 Using enhanced mock data with real credentials')
+    console.log('❌ Twitter API unavailable; returning empty profile')
     return NextResponse.json({
-      success: true,
-      mock: true,
-      enhanced: true,
-      profile: {
-        id: '1234567890',
-        username: 'social_autopilot',
-        name: 'Social Autopilot Pro',
-        description: 'AI-powered social media automation • Scheduling • Analytics • Growth 🚀',
-        public_metrics: {
-          followers_count: 28750,
-          following_count: 1240,
-          tweet_count: 5680,
-        },
-        profile_image_url: '/placeholder.svg?height=100&width=100'
-      },
-      note: 'Twitter API call failed; returning enhanced mock data',
-      error: (globalThis as any).__last_profile_error
-    })
+      success: false,
+      mock: false,
+      profile: null,
+      error: 'Twitter API call failed',
+      note: 'Could not load profile from X. Try again or check credentials.',
+      details: (globalThis as any).__last_profile_error,
+    }, { status: 502 })
 
   } catch (error) {
     console.error('❌ Profile fetch error:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
       error: 'Failed to fetch profile',
-      mock: true,
-      profile: {
-        id: '1234567890',
-        username: 'demo_user',
-        name: 'Demo User',
-        description: 'Demo account for Social Autopilot',
-        public_metrics: {
-          followers_count: 1000,
-          following_count: 500,
-          tweet_count: 100,
-        },
-        profile_image_url: '/placeholder.svg?height=100&width=100'
-      }
+      mock: false,
+      profile: null,
     }, { status: 500 })
   }
 }

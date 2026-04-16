@@ -20,40 +20,31 @@ interface MentionSuggestionsProps {
   isVisible: boolean
   onSelect: (user: User) => void
   className?: string
+  /** Optional directory lists (defaults empty in production; tests may pass fixtures). */
+  connections?: User[]
+  suggestedUsers?: User[]
 }
 
-// Mock user data (in real app, this would come from API)
-const CONNECTIONS: User[] = [
-  { id: '1', username: 'john_doe', displayName: 'John Doe', avatar: '/placeholder-user.jpg', verified: true, followerCount: 125000, type: 'connection' },
-  { id: '2', username: 'jane_smith', displayName: 'Jane Smith', avatar: '/placeholder-user.jpg', verified: false, followerCount: 45000, type: 'connection' },
-  { id: '3', username: 'tech_guru', displayName: 'Tech Guru', avatar: '/placeholder-user.jpg', verified: true, followerCount: 89000, type: 'connection' },
-  { id: '4', username: 'startup_founder', displayName: 'Startup Founder', avatar: '/placeholder-user.jpg', verified: false, followerCount: 23000, type: 'connection' },
-  { id: '5', username: 'dev_lead', displayName: 'Dev Lead', avatar: '/placeholder-user.jpg', verified: false, followerCount: 15600, type: 'connection' }
-]
+const EMPTY_CONNECTIONS: User[] = []
+const EMPTY_SUGGESTED: User[] = []
 
-const SUGGESTED_USERS: User[] = [
-  { id: '6', username: 'ai_researcher', displayName: 'AI Researcher', avatar: '/placeholder-user.jpg', verified: true, followerCount: 67000, type: 'suggested' },
-  { id: '7', username: 'design_expert', displayName: 'Design Expert', avatar: '/placeholder-user.jpg', verified: false, followerCount: 34000, type: 'suggested' },
-  { id: '8', username: 'marketing_pro', displayName: 'Marketing Pro', avatar: '/placeholder-user.jpg', verified: false, followerCount: 28000, type: 'suggested' }
-]
-
-// Get recent mentions from localStorage
-const getRecentMentions = (): User[] => {
+function getRecentMentions(allUsers: User[]): User[] {
   const saved = localStorage.getItem('recent-mentions')
   if (saved) {
-    const recentUsernames = JSON.parse(saved)
-    return recentUsernames.map((username: string) => {
-      const user = [...CONNECTIONS, ...SUGGESTED_USERS].find(u => u.username === username)
-      return user ? { ...user, type: 'recent' as const } : null
-    }).filter(Boolean) as User[]
+    const recentUsernames = JSON.parse(saved) as string[]
+    return recentUsernames
+      .map((username: string) => {
+        const user = allUsers.find((u) => u.username === username)
+        return user ? { ...user, type: 'recent' as const } : null
+      })
+      .filter(Boolean) as User[]
   }
   return []
 }
 
-// Save mention to recent
-const saveRecentMention = (username: string) => {
-  const recent = getRecentMentions().map(u => u.username)
-  const newRecent = [username, ...recent.filter(u => u !== username)].slice(0, 5)
+function saveRecentMention(username: string, allUsers: User[]) {
+  const recent = getRecentMentions(allUsers).map((u) => u.username)
+  const newRecent = [username, ...recent.filter((u) => u !== username)].slice(0, 5)
   localStorage.setItem('recent-mentions', JSON.stringify(newRecent))
 }
 
@@ -81,15 +72,25 @@ const formatFollowerCount = (count?: number): string => {
   return count.toString()
 }
 
-export function MentionSuggestions({ query, isVisible, onSelect, className }: MentionSuggestionsProps) {
+export function MentionSuggestions({
+  query,
+  isVisible,
+  onSelect,
+  className,
+  connections: connectionsProp,
+  suggestedUsers: suggestedUsersProp,
+}: MentionSuggestionsProps) {
   const [suggestions, setSuggestions] = useState<User[]>([])
+  const connections = connectionsProp ?? EMPTY_CONNECTIONS
+  const suggestedUsers = suggestedUsersProp ?? EMPTY_SUGGESTED
+  const allDirectoryUsers = useMemo(() => [...connections, ...suggestedUsers], [connections, suggestedUsers])
 
   // Filter users based on query
   const filteredUsers = useMemo(() => {
     if (!query.trim()) return []
 
     const lowercaseQuery = query.toLowerCase()
-    const allUsers = [...CONNECTIONS, ...SUGGESTED_USERS]
+    const allUsers = allDirectoryUsers
     
     return allUsers.filter(user => {
       const username = user.username.toLowerCase()
@@ -101,7 +102,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
         displayName.startsWith(lowercaseQuery[0])
       )
     })
-  }, [query])
+  }, [query, allDirectoryUsers])
 
   // Generate suggestions with priority
   useEffect(() => {
@@ -110,9 +111,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       return
     }
 
-    const recent = getRecentMentions()
-    const connections = CONNECTIONS
-    const suggested = SUGGESTED_USERS
+    const recent = getRecentMentions(allDirectoryUsers)
     const filtered = filteredUsers
 
     const ensureUnique = (users: User[]) => {
@@ -133,7 +132,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
         connections.some(c => c.id === u.id)
       )
       const filteredSuggested = filtered.filter(u =>
-        suggested.some(s => s.id === u.id)
+        suggestedUsers.some(s => s.id === u.id)
       )
       const remaining = filtered.filter(
         u =>
@@ -152,7 +151,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       const connectionsWithoutRecent = connections.filter(
         c => !recentIds.has(c.id)
       )
-      const suggestedWithoutRecentOrConnections = suggested.filter(
+      const suggestedWithoutRecentOrConnections = suggestedUsers.filter(
         s => !recentIds.has(s.id) && !connectionsWithoutRecent.some(c => c.id === s.id)
       )
 
@@ -164,7 +163,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
     }
 
     setSuggestions(combined.slice(0, 8)) // Limit to 8 suggestions
-  }, [query, isVisible, filteredUsers])
+  }, [query, isVisible, filteredUsers, allDirectoryUsers, connections, suggestedUsers])
 
   // Handle user selection
   const handleSelect = (user: User) => {
@@ -173,7 +172,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       avatar: user.avatar ?? '/placeholder-user.jpg'
     }
 
-    saveRecentMention(normalizedUser.username)
+    saveRecentMention(normalizedUser.username, allDirectoryUsers)
     onSelect(normalizedUser)
   }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
 
@@ -51,11 +52,13 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const { id: postId } = await params
     const body = await request.json()
     const { status, comment, commentType, resolveComment } = body
-
-    const userId = 'demo-user' // In real app, get from auth
 
     // Update post status if provided
     if (status) {

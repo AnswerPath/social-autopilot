@@ -38,10 +38,7 @@ export function Dashboard() {
   const [mentions, setMentions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
-  const [dataSource, setDataSource] = useState<'real' | 'mock' | 'demo' | 'error'>('demo')
-  const [profileIsMock, setProfileIsMock] = useState<boolean | null>(null)
-  const [tweetsAreMock, setTweetsAreMock] = useState<boolean | null>(null)
-  const [mentionsAreMock, setMentionsAreMock] = useState<boolean | null>(null)
+  const [dataSource, setDataSource] = useState<'real' | 'error' | 'loading'>('loading')
   const [apiNotes, setApiNotes] = useState<string[]>([])
   const [followerTrendBadge, setFollowerTrendBadge] = useState<string | null>(null)
 
@@ -60,12 +57,12 @@ export function Dashboard() {
 
   const fetchTwitterData = async () => {
     setIsLoading(true)
+    setDataSource('loading')
     setApiNotes([])
     setFollowerTrendBadge(null)
     console.log('🔄 Dashboard: Starting data fetch...')
     
     try {
-      let hasRealData = false
       let errors: string[] = []
       let notes: string[] = []
 
@@ -78,24 +75,22 @@ export function Dashboard() {
         if (profileData.success && profileData.profile) {
           setTwitterProfile(profileData.profile)
           console.log('✅ Dashboard: Profile loaded:', profileData.profile.username)
-          
-          // Use API-provided mock flag when available
-          setProfileIsMock(!!profileData.mock)
-          if (profileData.mock === false) {
-            hasRealData = true
-          } else if (profileData.profile.username !== 'demo_user' && profileData.profile.username !== 'your_account') {
-            // Fallback heuristic if mock flag not provided
-            hasRealData = true
+
+          if (profileData.note) {
+            notes.push('Profile: ' + profileData.note)
           }
-          
+        } else if (profileData.success && profileData.requiresSetup) {
+          setTwitterProfile(null)
           if (profileData.note) {
             notes.push('Profile: ' + profileData.note)
           }
         } else {
+          setTwitterProfile(null)
           errors.push('Profile: ' + (profileData.error || 'Unknown error'))
         }
       } catch (error) {
         console.error('❌ Dashboard: Profile fetch error:', error)
+        setTwitterProfile(null)
         errors.push('Profile: Network error')
       }
 
@@ -108,20 +103,17 @@ export function Dashboard() {
         if (tweetsData.success) {
           setRecentTweets(tweetsData.tweets || [])
           console.log('✅ Dashboard: Tweets loaded:', tweetsData.tweets?.length || 0, 'tweets')
-          
-          setTweetsAreMock(!!tweetsData.mock)
-          if (tweetsData.mock === false) {
-            hasRealData = true
-          }
 
           if (tweetsData.note) {
             notes.push('Tweets: ' + tweetsData.note)
           }
         } else {
+          setRecentTweets([])
           errors.push('Tweets: ' + (tweetsData.error || 'Unknown error'))
         }
       } catch (error) {
         console.error('❌ Dashboard: Tweets fetch error:', error)
+        setRecentTweets([])
         errors.push('Tweets: Network error')
       }
 
@@ -134,20 +126,17 @@ export function Dashboard() {
         if (mentionsData.success) {
           setMentions(mentionsData.mentions || [])
           console.log('✅ Dashboard: Mentions loaded:', mentionsData.mentions?.length || 0, 'mentions')
-          
-          setMentionsAreMock(!!mentionsData.mock)
-          if (mentionsData.mock === false) {
-            hasRealData = true
-          }
 
           if (mentionsData.note) {
             notes.push('Mentions: ' + mentionsData.note)
           }
         } else {
+          setMentions([])
           errors.push('Mentions: ' + (mentionsData.error || 'Unknown error'))
         }
       } catch (error) {
         console.error('❌ Dashboard: Mentions fetch error:', error)
+        setMentions([])
         errors.push('Mentions: Network error')
       }
 
@@ -174,23 +163,12 @@ export function Dashboard() {
         setFollowerTrendBadge(null)
       }
 
-      // Determine data source
       if (errors.length > 0) {
         setDataSource('error')
         console.warn('⚠️ Dashboard: Some data fetch errors:', errors)
-      } else if (hasRealData) {
-        setDataSource('real')
-        console.log('✅ Dashboard: Using real Twitter data')
-      } else if (profileIsMock === false || tweetsAreMock === false || mentionsAreMock === false) {
-        // Any real segment indicates partial real data
-        setDataSource('real')
-        console.log('✅ Dashboard: Using partially real Twitter data')
-      } else if (twitterProfile?.username === 'your_account') {
-        setDataSource('mock')
-        console.log('📊 Dashboard: Using realistic mock data (real credentials)')
       } else {
-        setDataSource('demo')
-        console.log('🎭 Dashboard: Using demo data')
+        setDataSource('real')
+        console.log('✅ Dashboard: Data fetch completed')
       }
 
       setApiNotes(notes)
@@ -204,7 +182,6 @@ export function Dashboard() {
   }
 
   const stats = useMemo(() => {
-    const tweetsMock = tweetsAreMock === true
     const avgPerTweet =
       recentTweets.length > 0
         ? Math.round(
@@ -243,18 +220,13 @@ export function Dashboard() {
       },
       {
         title: "Avg Engagement",
-        value:
-          tweetsMock || recentTweets.length === 0
-            ? tweetsMock
-              ? "—"
-              : "0"
-            : String(avgPerTweet),
-        description: tweetsMock ? "Sample data (posts API unavailable)" : "Likes + reposts per tweet",
+        value: recentTweets.length > 0 ? String(avgPerTweet) : "0",
+        description: "Likes + reposts per tweet",
         icon: TrendingUp,
-        trend: tweetsMock ? "Demo data" : null,
+        trend: null,
       },
     ]
-  }, [twitterProfile, recentTweets, mentions, tweetsAreMock, followerTrendBadge])
+  }, [twitterProfile, recentTweets, mentions, followerTrendBadge])
 
   const recentPostsData = recentTweets.map(tweet => ({
     id: tweet.id,
@@ -360,15 +332,13 @@ export function Dashboard() {
                   <Badge 
                     variant={
                       dataSource === 'real' ? 'default' : 
-                      dataSource === 'mock' ? 'secondary' : 
-                      dataSource === 'demo' ? 'outline' : 
+                      dataSource === 'loading' ? 'secondary' : 
                       'destructive'
                     }
                   >
-                    {dataSource === 'real' && '🔴 Live Data'}
-                    {dataSource === 'mock' && '📊 Enhanced Mock Data'}
-                    {dataSource === 'demo' && '🎭 Demo Data'}
-                    {dataSource === 'error' && '⚠️ Error'}
+                    {dataSource === 'real' && 'Live data'}
+                    {dataSource === 'loading' && 'Loading…'}
+                    {dataSource === 'error' && 'Some sources unavailable'}
                   </Badge>
                   {twitterProfile && (
                     <div className="flex items-center gap-2">
@@ -432,9 +402,6 @@ export function Dashboard() {
                     <CardTitle>Recent Posts</CardTitle>
                     <CardDescription>
                       Your latest content activity
-                      {dataSource === 'mock' && (
-                        <Badge variant="outline" className="ml-2">Enhanced Mock Data</Badge>
-                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -484,9 +451,6 @@ export function Dashboard() {
                     </CardTitle>
                     <CardDescription>
                       Mentions requiring immediate attention
-                      {dataSource === 'mock' && (
-                        <Badge variant="outline" className="ml-2">Enhanced Mock Data</Badge>
-                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">

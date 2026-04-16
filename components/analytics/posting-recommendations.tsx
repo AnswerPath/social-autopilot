@@ -26,21 +26,15 @@ export function PostingRecommendations() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  const { user } = useAuth()
-  const userId = user?.id || 'demo-user'
+  const { user, loading: authLoading } = useAuth()
 
-  React.useEffect(() => {
-    fetchRecommendations()
-    fetchHeatmap()
-  }, [])
-
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = React.useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
       const response = await fetch('/api/analytics/recommendations', {
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
       })
 
       const result = await response.json()
@@ -62,12 +56,12 @@ export function PostingRecommendations() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const fetchHeatmap = async () => {
+  const fetchHeatmap = React.useCallback(async () => {
     try {
       const response = await fetch('/api/analytics/recommendations/heatmap', {
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
       })
 
       const result = await response.json()
@@ -79,7 +73,20 @@ export function PostingRecommendations() {
       console.error('Error fetching heatmap:', err)
       // Don't set error state for heatmap failures, it's optional
     }
-  }
+  }, [])
+
+  React.useEffect(() => {
+    if (authLoading) return
+    if (!user?.id) {
+      setLoading(false)
+      setError('Sign in to see posting recommendations.')
+      setRecommendations([])
+      setHeatmapData(null)
+      return
+    }
+    void fetchRecommendations()
+    void fetchHeatmap()
+  }, [authLoading, user?.id, fetchRecommendations, fetchHeatmap])
 
   const formatTime = (hour: number): string => {
     const period = hour >= 12 ? 'PM' : 'AM'

@@ -17,14 +17,23 @@ export function EngagementMonitor() {
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [filterValue, setFilterValue] = useState('all')
   const [isStopping, setIsStopping] = useState(false)
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<{
+    newMentions: number
+    avgResponseTime: string
+    sentimentScore: number
+    autoReplies: number
+    newMentionsToday: number
+    responseTimeChange: string | null
+    sentimentChange: number | null
+    autoRepliesPercent: number
+  }>({
     newMentions: 0,
     avgResponseTime: '0m',
     sentimentScore: 0,
     autoReplies: 0,
     newMentionsToday: 0,
-    responseTimeChange: '0m',
-    sentimentChange: 0,
+    responseTimeChange: null,
+    sentimentChange: null,
     autoRepliesPercent: 0,
   })
   const { toast } = useToast()
@@ -105,8 +114,8 @@ export function EngagementMonitor() {
           sentimentScore: Math.round(sentimentScore * 10) / 10,
           autoReplies: autoRepliesFromLogs,
           newMentionsToday: newMentionsToday,
-          responseTimeChange: '-2m improved', // TODO: Calculate from historical data
-          sentimentChange: 0.3, // TODO: Calculate from historical data
+          responseTimeChange: null,
+          sentimentChange: null,
           autoRepliesPercent,
         })
       } catch (error) {
@@ -349,7 +358,11 @@ export function EngagementMonitor() {
               </div>
               <Clock className="h-8 w-8 text-green-600" />
             </div>
-            <Badge variant="secondary" className="mt-2">{stats.responseTimeChange}</Badge>
+            {stats.responseTimeChange != null ? (
+              <Badge variant="secondary" className="mt-2">{stats.responseTimeChange}</Badge>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-2">No trend data yet</p>
+            )}
           </CardContent>
         </Card>
 
@@ -362,7 +375,11 @@ export function EngagementMonitor() {
               </div>
               <TrendingUp className="h-8 w-8 text-green-600" />
             </div>
-            <Badge variant="secondary" className="mt-2">+{stats.sentimentChange.toFixed(1)} this week</Badge>
+            {stats.sentimentChange != null ? (
+              <Badge variant="secondary" className="mt-2">+{stats.sentimentChange.toFixed(1)} this week</Badge>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-2">No trend data yet</p>
+            )}
           </CardContent>
         </Card>
 

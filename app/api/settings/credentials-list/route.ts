@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listUserCredentials } from '@/lib/database-storage'
 import { getXApiCredentials } from '@/lib/x-api-storage'
-
-function getUserId(request: NextRequest): string {
-  return 'demo-user'
-}
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
     
     // Get all credentials (for migration purposes)
     const result = await listUserCredentials(userId)

@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAutoReplyService } from '@/lib/auto-reply/service';
 import { supabaseAdmin } from '@/lib/supabase';
+import { requireSessionUserId } from '@/lib/require-session-user';
 
 export const runtime = 'nodejs';
 
 // POST - Manually trigger auto-reply for a mention
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const body = await request.json();
     const { mentionId } = body;
 

@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { HashtagSuggestions } from '@/components/ui/hashtag-suggestions'
 
 // Mock localStorage
@@ -10,11 +10,22 @@ const localStorageMock = {
   clear: jest.fn(),
 }
 Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
+  value: localStorageMock,
 })
+
+const FIXTURE_TRENDING = [
+  { tag: 'AI', count: 125_000, type: 'trending' as const },
+  { tag: 'TechNews', count: 89_000, type: 'trending' as const },
+  { tag: 'Tag3', count: 50_000, type: 'trending' as const },
+  { tag: 'Tag4', count: 40_000, type: 'trending' as const },
+  { tag: 'Tag5', count: 30_000, type: 'trending' as const },
+]
 
 describe('HashtagSuggestions', () => {
   const mockOnSelect = jest.fn()
+
+  const renderWithTrending = (ui: React.ReactElement) =>
+    render(React.cloneElement(ui, { trendingHashtags: FIXTURE_TRENDING }))
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -22,7 +33,7 @@ describe('HashtagSuggestions', () => {
   })
 
   it('renders hashtag suggestions when visible', () => {
-    render(
+    renderWithTrending(
       <HashtagSuggestions
         content="I love JavaScript programming"
         isVisible={true}
@@ -35,7 +46,7 @@ describe('HashtagSuggestions', () => {
   })
 
   it('does not render when not visible', () => {
-    render(
+    renderWithTrending(
       <HashtagSuggestions
         content="I love JavaScript programming"
         isVisible={false}
@@ -55,18 +66,13 @@ describe('HashtagSuggestions', () => {
       />
     )
 
-    // Should show JavaScript-related hashtags
     expect(screen.getByText('#WebDev')).toBeInTheDocument()
     expect(screen.getByText('#Frontend')).toBeInTheDocument()
   })
 
   it('shows trending hashtags', () => {
-    render(
-      <HashtagSuggestions
-        content=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithTrending(
+      <HashtagSuggestions content="" isVisible={true} onSelect={mockOnSelect} />
     )
 
     expect(screen.getByText('#AI')).toBeInTheDocument()
@@ -95,13 +101,7 @@ describe('HashtagSuggestions', () => {
   it('loads recent hashtags from localStorage', () => {
     localStorageMock.getItem.mockReturnValue(JSON.stringify(['WebDev', 'JavaScript']))
 
-    render(
-      <HashtagSuggestions
-        content=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
-    )
+    renderWithTrending(<HashtagSuggestions content="" isVisible={true} onSelect={mockOnSelect} />)
 
     expect(screen.getByText('Recent')).toBeInTheDocument()
     expect(screen.getByText('#WebDev')).toBeInTheDocument()
@@ -109,46 +109,27 @@ describe('HashtagSuggestions', () => {
   })
 
   it('shows follower counts for trending hashtags', () => {
-    render(
-      <HashtagSuggestions
-        content=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
-    )
+    renderWithTrending(<HashtagSuggestions content="" isVisible={true} onSelect={mockOnSelect} />)
 
-    // Check for follower count display
     expect(screen.getByText('125k')).toBeInTheDocument()
     expect(screen.getByText('89k')).toBeInTheDocument()
   })
 
   it('prioritizes related hashtags over trending', () => {
-    render(
-      <HashtagSuggestions
-        content="JavaScript programming"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithTrending(
+      <HashtagSuggestions content="JavaScript programming" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Related hashtags should appear first
     const relatedSection = screen.getByText('Related').closest('div')
     const trendingSection = screen.getByText('Trending').closest('div')
-    
-    expect(relatedSection?.compareDocumentPosition(trendingSection)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+
+    expect(relatedSection?.compareDocumentPosition(trendingSection!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
   it('shows different badge styles for different types', () => {
-    render(
-      <HashtagSuggestions
-        content=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
-    )
+    renderWithTrending(<HashtagSuggestions content="" isVisible={true} onSelect={mockOnSelect} />)
 
     const trendingBadge = screen.getByText('#AI').closest('[class*="cursor-pointer"]')
-    const recentBadge = screen.getByText('Recent').closest('div')?.querySelector('[class*="cursor-pointer"]')
 
     expect(trendingBadge).toHaveClass('text-orange-700')
   })
@@ -162,21 +143,13 @@ describe('HashtagSuggestions', () => {
       />
     )
 
-    // Should not show too many suggestions
     const hashtagBadges = screen.getAllByText(/^#[A-Za-z]/)
     expect(hashtagBadges.length).toBeLessThanOrEqual(12)
   })
 
   it('shows empty state when no content', () => {
-    render(
-      <HashtagSuggestions
-        content=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
-    )
+    renderWithTrending(<HashtagSuggestions content="" isVisible={true} onSelect={mockOnSelect} />)
 
-    // Should still show trending hashtags
     expect(screen.getByText('Trending')).toBeInTheDocument()
   })
 })

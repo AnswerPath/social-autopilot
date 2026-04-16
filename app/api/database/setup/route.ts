@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+
     console.log('🚀 Starting database setup via API...')
     
-    // Step 1: Clean up any existing corrupted data
+    // Step 1: Clean up any existing corrupted Twitter credentials for this user
     console.log('🧹 Cleaning up corrupted data...')
     const { error: deleteError } = await supabaseAdmin
       .from('user_credentials')
       .delete()
-      .eq('user_id', 'demo-user')
+      .eq('user_id', auth.userId)
       .eq('credential_type', 'twitter')
     
     if (deleteError && !deleteError.message.includes('relation "user_credentials" does not exist')) {

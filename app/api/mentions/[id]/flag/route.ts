@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createFlaggingService } from '@/lib/priority/flagging-service';
 import { supabaseAdmin } from '@/lib/supabase';
+import { requireSessionUserId } from '@/lib/require-session-user';
 
 export const runtime = 'nodejs';
 
@@ -10,7 +11,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const { id: mentionId } = await params;
 
     // Fetch mention
@@ -64,7 +67,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const { id: mentionId } = await params;
 
     // Verify mention belongs to user

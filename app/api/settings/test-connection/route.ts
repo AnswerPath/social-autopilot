@@ -2,17 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTwitterCredentials, updateCredentialValidation } from '@/lib/database-storage'
 import { testTwitterConnection } from '@/lib/twitter-validation'
 import { TwitterApi } from 'twitter-api-v2'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
 
-function getUserId(request: NextRequest): string {
-  // In a real app, extract from JWT token or session
-  return 'demo-user'
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
     
     const result = await getTwitterCredentials(userId)
     

@@ -7,18 +7,14 @@ import {
   getCredentialMetadata 
 } from '@/lib/database-storage'
 import { validateTwitterCredentials } from '@/lib/twitter-validation'
-
-// Helper function to get user ID (in production, get from auth session)
-function getUserId(request: NextRequest): string {
-  // In a real app, extract from JWT token or session
-  // For demo purposes, using a fixed user ID
-  return 'demo-user'
-}
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 // Get current credentials metadata
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
     
     const result = await getCredentialMetadata(userId)
     
@@ -49,6 +45,10 @@ export async function GET(request: NextRequest) {
 // Store new credentials
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const body = await request.json()
     const { apiKey, apiSecret, accessToken, accessSecret, bearerToken } = body
     
@@ -59,8 +59,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    
-    const userId = getUserId(request)
     
     const credentials = {
       apiKey: apiKey.trim(),
@@ -112,7 +110,9 @@ export async function POST(request: NextRequest) {
 // Delete credentials
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
     
     const result = await deleteTwitterCredentials(userId)
     

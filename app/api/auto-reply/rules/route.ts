@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { AutoReplyRule } from '@/lib/auto-reply/rule-engine';
+import { requireSessionUserId } from '@/lib/require-session-user';
 
 export const runtime = 'nodejs';
 
 // GET - List all auto-reply rules for a user
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     
     const { data: rules, error } = await supabaseAdmin
       .from('auto_reply_rules')
@@ -40,7 +43,9 @@ export async function GET(request: NextRequest) {
 // POST - Create a new auto-reply rule
 export async function POST(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const body = await request.json();
 
     const {
@@ -111,7 +116,9 @@ export async function POST(request: NextRequest) {
 // PATCH - Update an auto-reply rule
 export async function PATCH(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -168,7 +175,9 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete an auto-reply rule
 export async function DELETE(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

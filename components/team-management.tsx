@@ -149,22 +149,13 @@ export function TeamManagement() {
     [currentTeam, resendTeamInvitation]
   )
 
-  const pendingApprovals = [
-    {
-      id: 1,
-      author: "Priya Patel",
-      content: "Excited to share our latest case study on improving customer engagement...",
-      submittedAt: "2 hours ago",
-      type: "post"
-    },
-    {
-      id: 2,
-      author: "Carlos Rodriguez",
-      content: "Join us for our upcoming webinar on social media automation best practices",
-      submittedAt: "4 hours ago",
-      type: "post"
-    }
-  ]
+  const pendingApprovals: Array<{
+    id: number
+    author: string
+    content: string
+    submittedAt: string
+    type: string
+  }> = []
 
   const rolePermissions = {
     Admin: ["Create posts", "Schedule posts", "Approve posts", "Manage team", "View analytics", "Export data"],

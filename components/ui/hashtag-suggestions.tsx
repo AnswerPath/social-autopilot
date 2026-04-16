@@ -16,21 +16,11 @@ interface HashtagSuggestionsProps {
   isVisible: boolean
   onSelect: (hashtag: string) => void
   className?: string
+  /** Optional trending list (defaults empty in production; tests may pass fixtures). */
+  trendingHashtags?: { tag: string; count: number; type: 'trending' }[]
 }
 
-// Mock trending hashtags (in real app, this would come from API)
-const TRENDING_HASHTAGS = [
-  { tag: 'AI', count: 125000, type: 'trending' as const },
-  { tag: 'TechNews', count: 89000, type: 'trending' as const },
-  { tag: 'Innovation', count: 67000, type: 'trending' as const },
-  { tag: 'Startup', count: 45000, type: 'trending' as const },
-  { tag: 'WebDev', count: 32000, type: 'trending' as const },
-  { tag: 'JavaScript', count: 28000, type: 'trending' as const },
-  { tag: 'React', count: 24000, type: 'trending' as const },
-  { tag: 'TypeScript', count: 19000, type: 'trending' as const },
-  { tag: 'OpenSource', count: 15000, type: 'trending' as const },
-  { tag: 'Developer', count: 12000, type: 'trending' as const }
-]
+const EMPTY_TRENDING: { tag: string; count: number; type: 'trending' }[] = []
 
 const formatCount = (count: number): string => {
   const formatted = count / 1000
@@ -92,8 +82,15 @@ const saveRecentHashtag = (tag: string) => {
   localStorage.setItem('recent-hashtags', JSON.stringify(newRecent))
 }
 
-export function HashtagSuggestions({ content, isVisible, onSelect, className }: HashtagSuggestionsProps) {
+export function HashtagSuggestions({
+  content,
+  isVisible,
+  onSelect,
+  className,
+  trendingHashtags: trendingHashtagsProp,
+}: HashtagSuggestionsProps) {
   const [suggestions, setSuggestions] = useState<HashtagSuggestion[]>([])
+  const trendingSource = trendingHashtagsProp ?? EMPTY_TRENDING
 
   // Generate suggestions based on content
   useEffect(() => {
@@ -107,11 +104,11 @@ export function HashtagSuggestions({ content, isVisible, onSelect, className }: 
     const recentWithFallback =
       recent.length > 0
         ? recent
-        : TRENDING_HASHTAGS.slice(2, 4).map(tag => ({
+        : trendingSource.slice(2, 4).map((tag) => ({
             tag: tag.tag,
             type: 'recent' as const,
           }))
-    const trending = TRENDING_HASHTAGS.slice(0, 5)
+    const trending = trendingSource.slice(0, 5)
 
     const seen = new Set<string>()
     const combined: HashtagSuggestion[] = []
@@ -131,7 +128,7 @@ export function HashtagSuggestions({ content, isVisible, onSelect, className }: 
     addUnique(trending)
 
     setSuggestions(combined.slice(0, 12)) // Limit total suggestions
-  }, [content, isVisible])
+  }, [content, isVisible, trendingSource])
 
   // Handle hashtag selection
   const handleSelect = (hashtag: string) => {

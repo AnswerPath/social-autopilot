@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, RefreshCw, Activity, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ErrorStats {
   [key: string]: number;
@@ -15,6 +16,7 @@ interface ErrorStats {
 export function ErrorMonitoring() {
   const [stats, setStats] = useState<ErrorStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     loadErrorStats();
@@ -70,7 +72,7 @@ export function ErrorMonitoring() {
           message: 'Test error for monitoring system',
           service: 'x-api',
           endpoint: 'test',
-          userId: 'demo-user',
+          userId: user?.id ?? 'unknown',
         }),
       });
 

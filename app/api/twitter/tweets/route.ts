@@ -30,8 +30,9 @@ export async function GET(request: NextRequest) {
       console.log('❌ No credentials found')
       return NextResponse.json({
         success: true,
-        mock: true,
-        tweets: generateMockTweets(false).slice(0, maxResults),
+        mock: false,
+        tweets: [] as unknown[],
+        requiresSetup: true,
       })
     }
 
@@ -132,7 +133,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, mock: false, tweets: filtered })
     } catch (apiError: any) {
       const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
-      console.log('⚠️ Twitter API error, falling back to enhanced mock:', errorInfo)
+      console.log('⚠️ Twitter API error:', errorInfo)
       ;(globalThis as any).__last_tweets_error = errorInfo
     }
 
@@ -144,16 +145,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, mock: false, cached: true, tweets: sliced, note: 'Served cached tweets due to rate limit or error' })
     }
 
-    // Enhanced mock data
-    console.log('📊 Using enhanced mock data with real credentials')
+    console.log('❌ Twitter API unavailable; returning empty tweets')
     return NextResponse.json({
-      success: true,
-      mock: true,
-      enhanced: true,
-      tweets: generateMockTweets(true).slice(0, maxResults),
-      note: 'Twitter API call failed; returning enhanced mock data',
-      error: (globalThis as any).__last_tweets_error,
-    })
+      success: false,
+      mock: false,
+      tweets: [],
+      error: 'Twitter API call failed',
+      note: 'Could not load tweets from X. Try again or check credentials.',
+      details: (globalThis as any).__last_tweets_error,
+    }, { status: 502 })
 
   } catch (error) {
     console.error('❌ Tweets fetch error:', error)
@@ -161,56 +161,10 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: 'Failed to fetch tweets',
-        mock: true,
-        tweets: generateMockTweets(false).slice(0, maxResults),
+        mock: false,
+        tweets: [],
       },
       { status: 500 }
     )
   }
-}
-
-function generateMockTweets(enhanced: boolean) {
-  const baseTweets = [
-    {
-      id: '1',
-      text: enhanced 
-        ? '🚀 Just automated 50 social media posts for the week! Social Autopilot is saving me 10+ hours. The AI-powered scheduling is incredible. #SocialMediaAutomation #ProductivityHack'
-        : 'Just posted a new update about our product!',
-      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      public_metrics: {
-        retweet_count: enhanced ? 24 : 5,
-        like_count: enhanced ? 156 : 12,
-        reply_count: enhanced ? 18 : 3,
-        impression_count: enhanced ? 1200 : 200,
-      }
-    },
-    {
-      id: '2',
-      text: enhanced
-        ? '📊 Analytics update: Our automated posts are getting 3x more engagement than manual posts. The AI really understands optimal timing and content structure. Game changer! 📈'
-        : 'Check out our latest analytics dashboard!',
-      created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-      public_metrics: {
-        retweet_count: enhanced ? 31 : 8,
-        like_count: enhanced ? 203 : 15,
-        reply_count: enhanced ? 27 : 4,
-        impression_count: enhanced ? 1800 : 300,
-      }
-    },
-    {
-      id: '3',
-      text: enhanced
-        ? '💡 Pro tip: Use Social Autopilot\'s bulk upload feature to schedule a month of content in 15 minutes. Just uploaded 120 posts with custom hashtags and optimal timing! ⚡'
-        : 'Working on some exciting new features!',
-      created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-      public_metrics: {
-        retweet_count: enhanced ? 45 : 3,
-        like_count: enhanced ? 287 : 8,
-        reply_count: enhanced ? 34 : 2,
-        impression_count: enhanced ? 2400 : 350,
-      }
-    }
-  ]
-
-  return baseTweets
 }
