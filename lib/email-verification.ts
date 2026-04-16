@@ -56,7 +56,17 @@ export async function sendVerificationEmailForUser(
     return { success: false, error: 'Could not create verification' }
   }
 
-  const verifyUrl = `${getAppBaseUrl()}/auth/verify-email?token=${token}`
+  const appBaseUrl = getAppBaseUrl()
+  const usesLocalhostFallback =
+    appBaseUrl === 'http://localhost:3000' ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(appBaseUrl)
+  if (process.env.NODE_ENV !== 'development' && usesLocalhostFallback) {
+    throw new Error(
+      `Invalid getAppBaseUrl() value in non-development environment: "${appBaseUrl}". Refusing to build verifyUrl with localhost.`
+    )
+  }
+
+  const verifyUrl = `${appBaseUrl}/auth/verify-email?token=${token}`
   const subject = 'Verify your email - Social Autopilot'
   const body = `Please verify your email by clicking the link below:\n\n${verifyUrl}\n\nThis link expires in ${VERIFICATION_EXPIRY_HOURS} hours. If you didn't create an account, you can ignore this email.`
 
@@ -66,7 +76,11 @@ export async function sendVerificationEmailForUser(
     return { success: false, error: result.error ?? 'Email send failed' }
   }
 
-  await deleteUnusedTokensForUser(userId, insertedVerification?.created_at ?? new Date().toISOString())
+  if (insertedVerification?.created_at) {
+    await deleteUnusedTokensForUser(userId, insertedVerification.created_at)
+  } else {
+    console.error('[email-verification] Skipping token cleanup because created_at is missing', { userId })
+  }
   return { success: true }
 }
 

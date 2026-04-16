@@ -23,6 +23,14 @@ export async function applyScheduledPostPatchBody(
   body: Record<string, unknown>
 ): Promise<NextResponse> {
   const update: Record<string, unknown> = {}
+  let isApprover = false
+
+  const resolveIsApprover = async (): Promise<boolean> => {
+    if (!isApprover) {
+      isApprover = await isApproverForPost(userId, id)
+    }
+    return isApprover
+  }
 
   if (body.scheduledDate && body.scheduledTime) {
     const schedulingService = new SchedulingService()
@@ -89,7 +97,7 @@ export async function applyScheduledPostPatchBody(
     if (OWNER_SETTABLE_STATUSES.includes(rawStatus as (typeof OWNER_SETTABLE_STATUSES)[number])) {
       update.status = rawStatus
     } else if (rawStatus === 'approved') {
-      if (!(await isApproverForPost(userId, id))) {
+      if (!(await resolveIsApprover())) {
         return NextResponse.json(
           { success: false, error: 'Not authorized to approve this post' },
           { status: 403 }
@@ -99,7 +107,7 @@ export async function applyScheduledPostPatchBody(
       update.approved_at = new Date().toISOString()
       update.approved_by = userId
     } else if (rawStatus === 'rejected') {
-      if (!(await isApproverForPost(userId, id))) {
+      if (!(await resolveIsApprover())) {
         return NextResponse.json(
           { success: false, error: 'Not authorized to reject this post' },
           { status: 403 }
@@ -151,12 +159,32 @@ export async function applyScheduledPostPatchBody(
     return NextResponse.json({ success: true, post: currentPost })
   }
 
-  const { data, error } = await supabaseAdmin
+  const allowedApprovalKeys = [
+    'status',
+    'approved_at',
+    'approved_by',
+    'rejected_at',
+    'rejected_by',
+    'rejection_reason'
+  ] as const
+  const updateStatus = typeof update.status === 'string' ? update.status : null
+  const isApprovalStatus = updateStatus === 'approved' || updateStatus === 'rejected'
+  const isApprovalAction =
+    Object.keys(update).length > 0 &&
+    Object.keys(update).every((key) =>
+      allowedApprovalKeys.includes(key as (typeof allowedApprovalKeys)[number])
+    ) &&
+    isApprovalStatus
+
+  let updateQuery = supabaseAdmin
     .from('scheduled_posts')
     .update(update)
     .eq('id', id)
-    .select('*')
-    .maybeSingle()
+  if (!(isApprovalAction && isApprover)) {
+    updateQuery = updateQuery.eq('user_id', userId)
+  }
+
+  const { data, error } = await updateQuery.select('*').maybeSingle()
 
   if (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
@@ -187,7 +215,7 @@ export async function applyScheduledPostPatchBody(
 
   if (data.requires_approval || update.requires_approval) {
     try {
-      await ensureWorkflowAssignment(data.id, userId)
+      await ensureWorkflowAssignment(data.id, data.user_id)
     } catch (workflowError) {
       console.error('Failed to ensure workflow assignment for scheduled post update', workflowError)
     }

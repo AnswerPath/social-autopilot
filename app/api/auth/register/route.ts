@@ -120,7 +120,10 @@ export async function POST(request: NextRequest) {
     console.log('✅ Role automatically assigned by trigger')
 
     // Send verification email (soft verification; does not block registration)
-    await sendVerificationEmailForUser(data.user.id, email)
+    const verificationResult = await sendVerificationEmailForUser(data.user.id, email)
+    if (!verificationResult.success) {
+      console.error('Verification email failed during registration (non-blocking):', verificationResult.error)
+    }
 
     // Sign in the user to get a session
     const { data: signInData, error: signInError } = await getSupabaseAdmin().auth.signInWithPassword({

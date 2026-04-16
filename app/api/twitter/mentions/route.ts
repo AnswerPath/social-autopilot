@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         {
           success: false,
           mentions: [],
-          mock: true,
+          mock: false,
           requiresCredentials: true,
         },
         { status: 400 }
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
         {
           success: false,
           mentions: [],
-          mock: true,
+          mock: false,
           requiresCredentials: true,
         },
         { status: 400 }
