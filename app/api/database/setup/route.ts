@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const auth = await requireSessionUserId(request)
-    const userId = auth.ok ? auth.userId : targetUserIdFromBody
+    const userId = targetUserIdFromBody ?? (auth.ok ? auth.userId : undefined)
 
     console.log('🚀 Starting database setup via API...')
 

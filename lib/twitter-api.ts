@@ -310,17 +310,22 @@ export async function getUserProfile(
             note: 'Real Twitter profile data loaded successfully!'
           }
         } else {
-          const errorData = await response.json()
+          const errorData = await response.json().catch(() => ({}))
           console.warn('⚠️ Twitter API error:', response.status, errorData)
-          
-          if (response.status === 401) {
-            console.log('🔒 Bearer token authentication failed, using mock data')
-          } else if (response.status === 429) {
-            console.log('⏱️ Rate limit exceeded, using mock data')
-          }
+          const error =
+            response.status === 401 || response.status === 403
+              ? 'Bearer token authentication failed.'
+              : response.status === 429
+                ? 'Twitter rate limit exceeded. Try again later.'
+                : response.status >= 500
+                  ? 'Twitter service error. Try again later.'
+                  : `Twitter profile request failed (${response.status}).`
+          return { success: false, error }
         }
       } catch (apiError: any) {
-        console.warn('⚠️ Twitter API call failed:', apiError.message)
+        const msg = apiError?.message || 'Twitter API call failed'
+        console.warn('⚠️ Twitter API call failed:', msg)
+        return { success: false, error: msg }
       }
     }
     
