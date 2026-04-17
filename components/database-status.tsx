@@ -171,7 +171,7 @@ export function DatabaseStatus() {
               {error.includes('table') && (
                 <div className="mt-2">
                   <p className="text-sm">The database table may not exist yet. Please run the setup script:</p>
-                  <code className="text-xs bg-gray-100 px-2 py-1 rounded mt-1 block">
+                  <code className="text-xs bg-muted px-2 py-1 rounded mt-1 block">
                     scripts/setup-database.sql
                   </code>
                 </div>
@@ -187,7 +187,7 @@ export function DatabaseStatus() {
 
         {/* Database Health Status */}
         {health && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
             <div className="text-center">
               <div className="flex items-center justify-center mb-1">
                 {health.tableExists ? (
@@ -197,7 +197,7 @@ export function DatabaseStatus() {
                 )}
               </div>
               <p className="text-xs font-medium">Table Exists</p>
-              <p className="text-xs text-gray-600">{health.tableExists ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-muted-foreground">{health.tableExists ? 'Yes' : 'No'}</p>
             </div>
             
             <div className="text-center">
@@ -209,7 +209,7 @@ export function DatabaseStatus() {
                 )}
               </div>
               <p className="text-xs font-medium">Read Access</p>
-              <p className="text-xs text-gray-600">{health.canRead ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-muted-foreground">{health.canRead ? 'Yes' : 'No'}</p>
             </div>
             
             <div className="text-center">
@@ -221,7 +221,7 @@ export function DatabaseStatus() {
                 )}
               </div>
               <p className="text-xs font-medium">Write Access</p>
-              <p className="text-xs text-gray-600">{health.canWrite ? 'Yes' : 'No'}</p>
+              <p className="text-xs text-muted-foreground">{health.canWrite ? 'Yes' : 'No'}</p>
             </div>
             
             <div className="text-center">
@@ -229,7 +229,7 @@ export function DatabaseStatus() {
                 <Activity className="h-4 w-4 text-blue-600" />
               </div>
               <p className="text-xs font-medium">Records</p>
-              <p className="text-xs text-gray-600">{health.recordCount}</p>
+              <p className="text-xs text-muted-foreground">{health.recordCount}</p>
             </div>
           </div>
         )}
@@ -254,7 +254,7 @@ export function DatabaseStatus() {
                 <div className="w-2 h-2 bg-green-500 rounded-full" />
                 <div>
                   <p className="text-sm font-medium capitalize">{cred.credential_type}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Created: {new Date(cred.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -264,7 +264,7 @@ export function DatabaseStatus() {
                   {cred.is_valid ? "Valid" : "Unvalidated"}
                 </Badge>
                 {cred.last_validated && (
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-muted-foreground">
                     Validated: {new Date(cred.last_validated).toLocaleDateString()}
                   </span>
                 )}
@@ -273,7 +273,7 @@ export function DatabaseStatus() {
           ))}
           
           {credentials.length === 0 && !isLoading && !error && (
-            <div className="text-center py-4 text-gray-500">
+            <div className="text-center py-4 text-muted-foreground">
               <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm mb-3">No credentials stored in database</p>
               {health?.tableExists && health?.canWrite && (
@@ -345,7 +345,7 @@ export function DatabaseStatus() {
             <AlertDescription>
               <strong>Database Setup Required:</strong> The user_credentials table doesn't exist. 
               Please run the setup script in your Supabase SQL editor:
-              <code className="block mt-1 text-xs bg-gray-100 px-2 py-1 rounded">
+              <code className="block mt-1 text-xs bg-muted px-2 py-1 rounded">
                 scripts/setup-database.sql
               </code>
             </AlertDescription>

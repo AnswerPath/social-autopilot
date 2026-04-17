@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,7 @@ export function AutoReplyRules() {
   const [testText, setTestText] = useState('');
   const [testResult, setTestResult] = useState<any>(null);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
 
   // Form state
   const [formData, setFormData] = useState<Partial<AutoReplyRule>>({
@@ -57,17 +59,11 @@ export function AutoReplyRules() {
     sentiment_filter: [],
   });
 
-  useEffect(() => {
-    fetchRules();
-  }, []);
-
-  const fetchRules = async () => {
+  const fetchRules = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/auto-reply/rules', {
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -77,9 +73,7 @@ export function AutoReplyRules() {
             // Fetch match count for this rule
             try {
               const logsResponse = await fetch(`/api/auto-reply/analytics?type=metrics`, {
-                headers: {
-                  'x-user-id': 'demo-user',
-                },
+                credentials: 'include',
               });
               if (logsResponse.ok) {
                 const logsData = await logsResponse.json();
@@ -105,14 +99,22 @@ export function AutoReplyRules() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user?.id) {
+      setLoading(false);
+      setRules([]);
+      return;
+    }
+    void fetchRules();
+  }, [authLoading, user?.id, fetchRules]);
 
   const fetchRuleMatchCount = async (ruleId: string): Promise<number> => {
     try {
       const response = await fetch(`/api/auto-reply/logs?ruleId=${ruleId}`, {
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
@@ -129,9 +131,9 @@ export function AutoReplyRules() {
     try {
       const response = await fetch('/api/auto-reply/rules', {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'demo-user',
         },
         body: JSON.stringify({
           id: rule.id,
@@ -169,9 +171,9 @@ export function AutoReplyRules() {
 
       const response = await fetch(url, {
         method,
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'demo-user',
         },
         body: JSON.stringify(editingRule ? { id: editingRule.id, ...formData } : formData),
       });
@@ -207,9 +209,7 @@ export function AutoReplyRules() {
     try {
       const response = await fetch(`/api/auto-reply/rules?id=${ruleId}`, {
         method: 'DELETE',
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       });
 
       const data = await response.json();

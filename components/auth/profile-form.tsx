@@ -155,7 +155,7 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
               <img
                 src={getAvatarUrl(80)}
                 alt="Profile"
-                className="h-20 w-20 rounded-full object-cover border-2 border-gray-200"
+                className="h-20 w-20 rounded-full object-cover border-2 border-border"
               />
               <button
                 type="button"
@@ -172,7 +172,7 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
             </div>
             <div className="flex-1">
               <h4 className="font-medium">Profile Picture</h4>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Upload a new image or remove the current one
               </p>
               <div className="flex gap-2 mt-2">
@@ -286,7 +286,7 @@ export function ProfileForm({ onSuccess, onCancel }: ProfileFormProps) {
           <div className="flex items-center justify-between">
             <div>
               <Label htmlFor="email_notifications">Email Notifications</Label>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Receive email notifications for important updates
               </p>
             </div>

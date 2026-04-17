@@ -294,9 +294,9 @@ export function RoleManagementDashboard() {
       'Team Management': 'bg-indigo-100 text-indigo-800',
       'Automation': 'bg-pink-100 text-pink-800',
       'Billing & Subscription': 'bg-orange-100 text-orange-800',
-      'API Access': 'bg-gray-100 text-gray-800'
+      'API Access': 'bg-muted text-foreground'
     };
-    return colors[category] || 'bg-gray-100 text-gray-800';
+    return colors[category] || 'bg-muted text-foreground';
   };
 
   if (user?.role !== UserRole.ADMIN) {

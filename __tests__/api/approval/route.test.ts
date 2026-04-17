@@ -40,9 +40,15 @@ jest.mock('@/lib/approval/revisions', () => ({
   restoreRevision: jest.fn()
 }))
 
+jest.mock('@/lib/require-session-user', () => ({
+  requireSessionUserId: jest.fn().mockResolvedValue({ ok: true, userId: 'manager-user' }),
+}))
+
 describe('Approval API Route - CodeRabbit Fixes', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    const { requireSessionUserId } = require('@/lib/require-session-user')
+    ;(requireSessionUserId as jest.Mock).mockResolvedValue({ ok: true, userId: 'manager-user' })
   })
 
   describe('Comment 1: Bulk-approve decision validation', () => {

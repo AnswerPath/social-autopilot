@@ -97,7 +97,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, className }: Emoji
         <div className="px-6 pb-6 space-y-4">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search emojis..."
               value={searchQuery}
@@ -144,7 +144,7 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, className }: Emoji
                 variant="ghost"
                 size="sm"
                 onClick={() => handleEmojiSelect(emoji)}
-                className="h-10 w-10 p-0 text-lg hover:bg-gray-100"
+                className="h-10 w-10 p-0 text-lg hover:bg-muted"
                 title={emoji}
               >
                 {emoji}
@@ -154,8 +154,8 @@ export function EmojiPicker({ isOpen, onClose, onEmojiSelect, className }: Emoji
 
           {/* Empty state */}
           {filteredEmojis.length === 0 && searchQuery.trim() && (
-            <div className="text-center py-8 text-gray-500">
-              <Smile className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+            <div className="text-center py-8 text-muted-foreground">
+              <Smile className="h-12 w-12 mx-auto mb-2 text-muted-foreground/70" />
               <p>No emojis found for "{searchQuery}"</p>
             </div>
           )}

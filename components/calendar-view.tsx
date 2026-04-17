@@ -388,14 +388,14 @@ export function CalendarView() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-6">
+      <div className="animate-fade-up space-y-6">
         {/* Calendar Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="outline" size="sm" onClick={() => navigateMonth('prev')}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <h2 className="text-2xl font-bold">
+            <h2 className="font-heading text-2xl font-bold tracking-tight">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h2>
             <Button variant="outline" size="sm" onClick={() => navigateMonth('next')}>
@@ -408,7 +408,7 @@ export function CalendarView() {
               <select
                 value={statusFilter || ''}
                 onChange={(e) => setStatusFilter(e.target.value || null)}
-                className="px-3 py-2 border rounded-md text-sm"
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors duration-fast focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-2"
               >
                 <option value="">All Statuses</option>
                 <option value="draft">Draft</option>
@@ -426,12 +426,12 @@ export function CalendarView() {
         </div>
 
         {/* Calendar Grid */}
-        <Card>
+        <Card className="animate-fade-up delay-stagger-1">
           <CardContent className="p-6">
             <div className="grid grid-cols-7 gap-4">
               {/* Day headers */}
               {dayNames.map(day => (
-                <div key={day} className="text-center font-medium text-gray-500 py-2">
+                <div key={day} className="text-center font-medium text-muted-foreground py-2">
                   {day}
                 </div>
               ))}
@@ -463,7 +463,7 @@ export function CalendarView() {
         </Card>
 
         {/* Upcoming Posts Summary */}
-        <Card>
+        <Card className="animate-fade-up delay-stagger-2">
           <CardHeader>
             <CardTitle>Upcoming Posts</CardTitle>
           </CardHeader>
@@ -483,7 +483,7 @@ export function CalendarView() {
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium line-clamp-1">{post.content}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-muted-foreground">
                             {postDate.toLocaleDateString()} at {postDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -511,7 +511,7 @@ export function CalendarView() {
       <DragOverlay>
         {activePost ? (
           <div className="text-xs p-2 rounded border-l-2 bg-blue-50 border-blue-400 opacity-80 shadow-lg">
-            <p className="line-clamp-2 text-gray-700">{activePost.content}</p>
+            <p className="line-clamp-2 text-foreground">{activePost.content}</p>
           </div>
         ) : null}
       </DragOverlay>

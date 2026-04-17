@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertCircle, CheckCircle, XCircle, MessageSquare } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 
 interface FlaggedMention {
   id: string;
@@ -30,18 +31,23 @@ export function FlaggedMentions() {
   const [responseText, setResponseText] = useState('');
   const [responding, setResponding] = useState(false);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    fetchFlaggedMentions();
-  }, []);
+    if (authLoading) return;
+    if (!user?.id) {
+      setLoading(false);
+      setMentions([]);
+      return;
+    }
+    void fetchFlaggedMentions();
+  }, [authLoading, user?.id]);
 
   const fetchFlaggedMentions = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/mentions/flagged?limit=50', {
-        headers: {
-          'x-user-id': 'demo-user', // In production, get from auth context
-        },
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -74,9 +80,9 @@ export function FlaggedMentions() {
       setResponding(true);
       const response = await fetch(`/api/mentions/${mention.id}/respond`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'demo-user',
         },
         body: JSON.stringify({
           action: 'responded',
@@ -112,9 +118,9 @@ export function FlaggedMentions() {
     try {
       const response = await fetch(`/api/mentions/${mention.id}/respond`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': 'demo-user',
         },
         body: JSON.stringify({
           action: 'ignored',
@@ -143,9 +149,7 @@ export function FlaggedMentions() {
     try {
       const response = await fetch(`/api/mentions/${mention.id}/flag`, {
         method: 'DELETE',
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -199,7 +203,7 @@ export function FlaggedMentions() {
       case 'negative':
         return 'bg-red-500';
       default:
-        return 'bg-gray-500';
+        return 'bg-muted';
     }
   };
 

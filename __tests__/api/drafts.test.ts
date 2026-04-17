@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server'
 import { GET, POST } from '@/app/api/drafts/route'
 import { GET as GET_DRAFT, PUT, DELETE } from '@/app/api/drafts/[id]/route'
 
+jest.mock('@/lib/auth-utils', () => ({
+  getCurrentUser: jest.fn().mockResolvedValue({ id: 'demo-user' }),
+}))
+
 // Mock Supabase
 jest.mock('@/lib/supabase', () => ({
   supabaseAdmin: {

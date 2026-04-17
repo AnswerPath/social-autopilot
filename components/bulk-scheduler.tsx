@@ -278,7 +278,7 @@ export function BulkScheduler({ posts: initialPosts = [], onSuccess, onClose }: 
             {/* Post List */}
             <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
               {selectedPosts.map((post, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                   <span className="text-sm line-clamp-1 flex-1">{post.content}</span>
                   <Button
                     size="sm"

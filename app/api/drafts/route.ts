@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
-
-// Helper function to get user ID (placeholder for demo)
-function getUserId(): string {
-  // In a real app, this would extract from JWT token or session
-  return 'demo-user'
-}
 
 // GET /api/drafts - Get all drafts for the current user
 export async function GET(request: NextRequest) {
   try {
-    const userId = getUserId()
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
+    const rawLimit = parseInt(searchParams.get('limit') || '50', 10)
+    const rawOffset = parseInt(searchParams.get('offset') || '0', 10)
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50
+    const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0
 
     const { data, error } = await supabaseAdmin
       .from('scheduled_posts')
@@ -46,14 +45,19 @@ export async function GET(request: NextRequest) {
 // POST /api/drafts - Create a new draft
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const body = await request.json()
     const { content, mediaUrls, autoSave = false } = body
     
     if (!content && !mediaUrls?.length) {
-      return NextResponse.json({ error: 'Content or media is required' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Content or media is required' },
+        { status: 400 }
+      )
     }
-
-    const userId = getUserId()
 
     const { data, error } = await supabaseAdmin
       .from('scheduled_posts')

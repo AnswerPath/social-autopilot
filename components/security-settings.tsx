@@ -52,7 +52,7 @@ export function SecuritySettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Enable 2FA</Label>
-              <p className="text-sm text-gray-600">Require a verification code when signing in</p>
+              <p className="text-sm text-muted-foreground">Require a verification code when signing in</p>
             </div>
             <Switch />
           </div>
@@ -75,7 +75,7 @@ export function SecuritySettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Analytics tracking</Label>
-              <p className="text-sm text-gray-600">Allow us to collect usage analytics to improve the service</p>
+              <p className="text-sm text-muted-foreground">Allow us to collect usage analytics to improve the service</p>
             </div>
             <Switch defaultChecked />
           </div>
@@ -84,7 +84,7 @@ export function SecuritySettings() {
           
           <div className="space-y-3">
             <Label>Data Export</Label>
-            <p className="text-sm text-gray-600">Download all your data including posts, analytics, and settings</p>
+            <p className="text-sm text-muted-foreground">Download all your data including posts, analytics, and settings</p>
             <Button variant="outline">Export My Data</Button>
           </div>
           
@@ -92,7 +92,7 @@ export function SecuritySettings() {
           
           <div className="space-y-3">
             <Label className="text-red-600">Delete Account</Label>
-            <p className="text-sm text-gray-600">Permanently delete your account and all associated data</p>
+            <p className="text-sm text-muted-foreground">Permanently delete your account and all associated data</p>
             <Button variant="destructive">Delete Account</Button>
           </div>
         </CardContent>

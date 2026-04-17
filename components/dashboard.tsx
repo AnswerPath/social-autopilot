@@ -27,6 +27,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ContextualHelp } from "./help/contextual-help"
 import { HelpMenu } from "./help/help-menu"
 import { GettingStartedCard } from "./onboarding/getting-started-card"
+import { cn } from "@/lib/utils"
+
+const STAT_STAGGER = ["delay-stagger-1", "delay-stagger-2", "delay-stagger-3", "delay-stagger-4"] as const
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -38,10 +41,7 @@ export function Dashboard() {
   const [mentions, setMentions] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
-  const [dataSource, setDataSource] = useState<'real' | 'mock' | 'demo' | 'error'>('demo')
-  const [profileIsMock, setProfileIsMock] = useState<boolean | null>(null)
-  const [tweetsAreMock, setTweetsAreMock] = useState<boolean | null>(null)
-  const [mentionsAreMock, setMentionsAreMock] = useState<boolean | null>(null)
+  const [dataSource, setDataSource] = useState<'real' | 'error' | 'loading'>('loading')
   const [apiNotes, setApiNotes] = useState<string[]>([])
   const [followerTrendBadge, setFollowerTrendBadge] = useState<string | null>(null)
 
@@ -60,14 +60,14 @@ export function Dashboard() {
 
   const fetchTwitterData = async () => {
     setIsLoading(true)
+    setDataSource('loading')
     setApiNotes([])
     setFollowerTrendBadge(null)
     console.log('🔄 Dashboard: Starting data fetch...')
     
     try {
-      let hasRealData = false
-      let errors: string[] = []
-      let notes: string[] = []
+      const errors: string[] = []
+      const notes: string[] = []
 
       // Fetch user profile
       try {
@@ -78,24 +78,22 @@ export function Dashboard() {
         if (profileData.success && profileData.profile) {
           setTwitterProfile(profileData.profile)
           console.log('✅ Dashboard: Profile loaded:', profileData.profile.username)
-          
-          // Use API-provided mock flag when available
-          setProfileIsMock(!!profileData.mock)
-          if (profileData.mock === false) {
-            hasRealData = true
-          } else if (profileData.profile.username !== 'demo_user' && profileData.profile.username !== 'your_account') {
-            // Fallback heuristic if mock flag not provided
-            hasRealData = true
+
+          if (profileData.note) {
+            notes.push('Profile: ' + profileData.note)
           }
-          
+        } else if (profileData.success && profileData.requiresSetup) {
+          setTwitterProfile(null)
           if (profileData.note) {
             notes.push('Profile: ' + profileData.note)
           }
         } else {
+          setTwitterProfile(null)
           errors.push('Profile: ' + (profileData.error || 'Unknown error'))
         }
       } catch (error) {
         console.error('❌ Dashboard: Profile fetch error:', error)
+        setTwitterProfile(null)
         errors.push('Profile: Network error')
       }
 
@@ -105,23 +103,24 @@ export function Dashboard() {
         const tweetsResponse = await fetch('/api/twitter/tweets?maxResults=5', { credentials: 'include' })
         const tweetsData = await tweetsResponse.json()
         
-        if (tweetsData.success) {
+        if (tweetsData.success && !tweetsData.requiresSetup) {
           setRecentTweets(tweetsData.tweets || [])
           console.log('✅ Dashboard: Tweets loaded:', tweetsData.tweets?.length || 0, 'tweets')
-          
-          setTweetsAreMock(!!tweetsData.mock)
-          if (tweetsData.mock === false) {
-            hasRealData = true
-          }
 
           if (tweetsData.note) {
             notes.push('Tweets: ' + tweetsData.note)
           }
         } else {
-          errors.push('Tweets: ' + (tweetsData.error || 'Unknown error'))
+          setRecentTweets([])
+          errors.push(
+            'Tweets: ' +
+              (tweetsData.error ||
+                (tweetsData.requiresSetup ? 'Credentials not configured' : 'Unknown error'))
+          )
         }
       } catch (error) {
         console.error('❌ Dashboard: Tweets fetch error:', error)
+        setRecentTweets([])
         errors.push('Tweets: Network error')
       }
 
@@ -134,20 +133,17 @@ export function Dashboard() {
         if (mentionsData.success) {
           setMentions(mentionsData.mentions || [])
           console.log('✅ Dashboard: Mentions loaded:', mentionsData.mentions?.length || 0, 'mentions')
-          
-          setMentionsAreMock(!!mentionsData.mock)
-          if (mentionsData.mock === false) {
-            hasRealData = true
-          }
 
           if (mentionsData.note) {
             notes.push('Mentions: ' + mentionsData.note)
           }
         } else {
+          setMentions([])
           errors.push('Mentions: ' + (mentionsData.error || 'Unknown error'))
         }
       } catch (error) {
         console.error('❌ Dashboard: Mentions fetch error:', error)
+        setMentions([])
         errors.push('Mentions: Network error')
       }
 
@@ -174,23 +170,12 @@ export function Dashboard() {
         setFollowerTrendBadge(null)
       }
 
-      // Determine data source
       if (errors.length > 0) {
         setDataSource('error')
         console.warn('⚠️ Dashboard: Some data fetch errors:', errors)
-      } else if (hasRealData) {
-        setDataSource('real')
-        console.log('✅ Dashboard: Using real Twitter data')
-      } else if (profileIsMock === false || tweetsAreMock === false || mentionsAreMock === false) {
-        // Any real segment indicates partial real data
-        setDataSource('real')
-        console.log('✅ Dashboard: Using partially real Twitter data')
-      } else if (twitterProfile?.username === 'your_account') {
-        setDataSource('mock')
-        console.log('📊 Dashboard: Using realistic mock data (real credentials)')
       } else {
-        setDataSource('demo')
-        console.log('🎭 Dashboard: Using demo data')
+        setDataSource('real')
+        console.log('✅ Dashboard: Data fetch completed')
       }
 
       setApiNotes(notes)
@@ -204,7 +189,6 @@ export function Dashboard() {
   }
 
   const stats = useMemo(() => {
-    const tweetsMock = tweetsAreMock === true
     const avgPerTweet =
       recentTweets.length > 0
         ? Math.round(
@@ -243,18 +227,13 @@ export function Dashboard() {
       },
       {
         title: "Avg Engagement",
-        value:
-          tweetsMock || recentTweets.length === 0
-            ? tweetsMock
-              ? "—"
-              : "0"
-            : String(avgPerTweet),
-        description: tweetsMock ? "Sample data (posts API unavailable)" : "Likes + reposts per tweet",
+        value: recentTweets.length > 0 ? String(avgPerTweet) : "0",
+        description: "Likes + reposts per tweet",
         icon: TrendingUp,
-        trend: tweetsMock ? "Demo data" : null,
+        trend: null,
       },
     ]
-  }, [twitterProfile, recentTweets, mentions, tweetsAreMock, followerTrendBadge])
+  }, [twitterProfile, recentTweets, mentions, followerTrendBadge])
 
   const recentPostsData = recentTweets.map(tweet => ({
     id: tweet.id,
@@ -285,16 +264,16 @@ export function Dashboard() {
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen min-h-0 bg-transparent">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} showTooltips={showTooltips} />
       
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <header className="border-b border-border bg-card/85 px-6 py-4 shadow-sm-soft backdrop-blur-md">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="animate-fade-up font-heading text-2xl font-bold text-foreground">
                   {activeTab === "dashboard" && "Dashboard"}
                   {activeTab === "calendar" && "Content Calendar"}
                   {activeTab === "approvals" && "Approvals"}
@@ -305,7 +284,7 @@ export function Dashboard() {
                 </h1>
                 <ContextualHelp sectionId={activeTab} />
               </div>
-              <p className="text-gray-600">
+              <p className="animate-fade-up text-muted-foreground delay-stagger-2">
                 {activeTab === "dashboard" && "Overview of your social media performance"}
                 {activeTab === "calendar" && "Manage and schedule your content"}
                 {activeTab === "approvals" && "Manage multi-step approval workflows"}
@@ -348,8 +327,8 @@ export function Dashboard() {
           {activeTab === "dashboard" && (
             <div className="space-y-6">
               {/* User Info Card + Getting Started */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 space-y-4">
+              <div className="grid grid-cols-1 gap-6 animate-fade-up delay-stagger-1 lg:grid-cols-3">
+                <div className="space-y-4 lg:col-span-1">
                   <UserInfoCard />
                   <GettingStartedCard />
                 </div>
@@ -360,15 +339,13 @@ export function Dashboard() {
                   <Badge 
                     variant={
                       dataSource === 'real' ? 'default' : 
-                      dataSource === 'mock' ? 'secondary' : 
-                      dataSource === 'demo' ? 'outline' : 
+                      dataSource === 'loading' ? 'secondary' : 
                       'destructive'
                     }
                   >
-                    {dataSource === 'real' && '🔴 Live Data'}
-                    {dataSource === 'mock' && '📊 Enhanced Mock Data'}
-                    {dataSource === 'demo' && '🎭 Demo Data'}
-                    {dataSource === 'error' && '⚠️ Error'}
+                    {dataSource === 'real' && 'Live data'}
+                    {dataSource === 'loading' && 'Loading…'}
+                    {dataSource === 'error' && 'Some sources unavailable'}
                   </Badge>
                   {twitterProfile && (
                     <div className="flex items-center gap-2">
@@ -380,7 +357,7 @@ export function Dashboard() {
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-gray-500" suppressHydrationWarning>
+                <span className="text-xs text-muted-foreground" suppressHydrationWarning>
                   {lastRefresh ? `Last updated: ${lastRefresh.toLocaleTimeString()}` : ''}
                 </span>
               </div>
@@ -403,9 +380,15 @@ export function Dashboard() {
               )}
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {stats.map((stat, index) => (
-                  <Card key={index}>
+                  <Card
+                    key={index}
+                    className={cn(
+                      "animate-fade-up",
+                      STAT_STAGGER[Math.min(index, STAT_STAGGER.length - 1)]
+                    )}
+                  >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
                       <stat.icon className="h-4 w-4 text-muted-foreground" />
@@ -425,16 +408,13 @@ export function Dashboard() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 animate-fade-up delay-stagger-3 lg:grid-cols-2">
                 {/* Recent Posts */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Recent Posts</CardTitle>
                     <CardDescription>
                       Your latest content activity
-                      {dataSource === 'mock' && (
-                        <Badge variant="outline" className="ml-2">Enhanced Mock Data</Badge>
-                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -446,18 +426,18 @@ export function Dashboard() {
                             <AvatarFallback>{twitterProfile?.name?.[0] || 'SA'}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-900 line-clamp-2">{post.content}</p>
+                            <p className="line-clamp-2 text-sm text-foreground">{post.content}</p>
                             <div className="flex items-center gap-2 mt-2">
                               <Badge 
                                 variant={post.status === "published" ? "default" : post.status === "approved" ? "secondary" : "outline"}
                               >
                                 {post.status}
                               </Badge>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-muted-foreground">
                                 {post.publishedAt}
                               </span>
                             </div>
-                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                               <span>{post.engagement.likes} likes</span>
                               <span>{post.engagement.retweets} retweets</span>
                               <span>{post.engagement.replies} replies</span>
@@ -466,8 +446,8 @@ export function Dashboard() {
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <div className="py-8 text-center text-muted-foreground">
+                        <MessageSquare className="mx-auto mb-4 h-12 w-12 opacity-50" />
                         <p>No recent tweets found</p>
                         <p className="text-sm">Create your first post to get started!</p>
                       </div>
@@ -484,9 +464,6 @@ export function Dashboard() {
                     </CardTitle>
                     <CardDescription>
                       Mentions requiring immediate attention
-                      {dataSource === 'mock' && (
-                        <Badge variant="outline" className="ml-2">Enhanced Mock Data</Badge>
-                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -506,8 +483,8 @@ export function Dashboard() {
                                 {mention.sentiment}
                               </Badge>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{mention.content}</p>
-                            <span className="text-xs text-gray-500">{mention.time}</span>
+                            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{mention.content}</p>
+                            <span className="text-xs text-muted-foreground">{mention.time}</span>
                           </div>
                           <Button size="sm" variant="outline">
                             Reply
@@ -515,8 +492,8 @@ export function Dashboard() {
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <div className="py-8 text-center text-muted-foreground">
+                        <Bell className="mx-auto mb-4 h-12 w-12 opacity-50" />
                         <p>No urgent mentions</p>
                         <p className="text-sm">All caught up!</p>
                       </div>
@@ -532,7 +509,7 @@ export function Dashboard() {
           {activeTab === "analytics" && <AnalyticsDashboard />}
           {activeTab === "team" && <TeamManagement />}
           {activeTab === "engagement" && (
-            <div className="space-y-6">
+            <div className="animate-fade-up space-y-6 delay-stagger-1">
               <EngagementMonitor />
               <Tabs defaultValue="rules" className="w-full">
                 <TabsList>

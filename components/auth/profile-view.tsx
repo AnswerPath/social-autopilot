@@ -68,13 +68,13 @@ export function ProfileView({ onEdit }: ProfileViewProps) {
             <img
               src={getAvatarUrl(80)}
               alt="Profile"
-              className="h-20 w-20 rounded-full object-cover border-2 border-gray-200"
+              className="h-20 w-20 rounded-full object-cover border-2 border-border"
             />
             <div className="flex-1">
               <h3 className="text-xl font-semibold">
                 {profile?.display_name || 'No display name set'}
               </h3>
-              <p className="text-gray-600">
+              <p className="text-muted-foreground">
                 {profile?.first_name && profile?.last_name 
                   ? `${profile.first_name} ${profile.last_name}`
                   : 'Name not set'
@@ -93,21 +93,21 @@ export function ProfileView({ onEdit }: ProfileViewProps) {
 
           {/* Contact Information */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">Contact Information</h4>
+            <h4 className="font-medium text-foreground">Contact Information</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-center space-x-2">
-                <Mail className="h-4 w-4 text-gray-500" />
+                <Mail className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">Email</p>
-                  <p className="text-sm text-gray-600">{user?.email}</p>
+                  <p className="text-sm text-muted-foreground">{user?.email}</p>
                 </div>
               </div>
               {profile?.timezone && (
                 <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4 text-gray-500" />
+                  <Clock className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Timezone</p>
-                    <p className="text-sm text-gray-600">{profile.timezone}</p>
+                    <p className="text-sm text-muted-foreground">{profile.timezone}</p>
                   </div>
                 </div>
               )}
@@ -117,21 +117,21 @@ export function ProfileView({ onEdit }: ProfileViewProps) {
           {/* Bio */}
           {profile?.bio && (
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">Bio</h4>
-              <p className="text-gray-600 text-sm leading-relaxed">{profile.bio}</p>
+              <h4 className="font-medium text-foreground mb-2">Bio</h4>
+              <p className="text-muted-foreground text-sm leading-relaxed">{profile.bio}</p>
             </div>
           )}
 
           {/* Preferences */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">Preferences</h4>
+            <h4 className="font-medium text-foreground">Preferences</h4>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Bell className="h-4 w-4 text-gray-500" />
+                  <Bell className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Email Notifications</p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       Receive notifications for important updates
                     </p>
                   </div>
@@ -145,13 +145,13 @@ export function ProfileView({ onEdit }: ProfileViewProps) {
 
           {/* Account Information */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">Account Information</h4>
+            <h4 className="font-medium text-foreground">Account Information</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-gray-500" />
+                <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-sm font-medium">Member Since</p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {profile?.created_at 
                       ? new Date(profile.created_at).toLocaleDateString()
                       : 'Unknown'
@@ -161,10 +161,10 @@ export function ProfileView({ onEdit }: ProfileViewProps) {
               </div>
               {profile?.updated_at && (
                 <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Last Updated</p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {new Date(profile.updated_at).toLocaleDateString()}
                     </p>
                   </div>
@@ -175,7 +175,7 @@ export function ProfileView({ onEdit }: ProfileViewProps) {
 
           {/* Permissions Summary */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">Permissions</h4>
+            <h4 className="font-medium text-foreground">Permissions</h4>
             <div className="flex flex-wrap gap-2">
               {user?.permissions.slice(0, 6).map((permission) => (
                 <Badge key={permission} variant="outline" className="text-xs">

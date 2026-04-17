@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -47,18 +48,13 @@ export function AutoReplyAnalytics() {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [days]);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/auto-reply/analytics?type=all&days=${days}`, {
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -77,14 +73,28 @@ export function AutoReplyAnalytics() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [days, toast]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user?.id) {
+      setLoading(false);
+      setMetrics(null);
+      setPerformance([]);
+      setTimeSeries([]);
+      return;
+    }
+    void fetchAnalytics();
+  }, [authLoading, user?.id, fetchAnalytics]);
 
   const handleExport = async () => {
+    if (!user?.id) {
+      toast({ title: 'Sign in required', description: 'Please sign in to export analytics.', variant: 'destructive' });
+      return;
+    }
     try {
       const response = await fetch(`/api/auto-reply/analytics/export?format=csv&days=${days}`, {
-        headers: {
-          'x-user-id': 'demo-user',
-        },
+        credentials: 'include',
       });
 
       if (response.ok) {

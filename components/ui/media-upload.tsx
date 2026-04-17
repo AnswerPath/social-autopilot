@@ -158,7 +158,7 @@ export function MediaUpload({
           "border-2 border-dashed transition-colors cursor-pointer min-h-[120px] sm:min-h-[140px]",
           isDragOver && !disabled && "border-primary bg-primary/5",
           disabled && "opacity-50 cursor-not-allowed",
-          !isDragOver && !disabled && "border-gray-300 hover:border-gray-400"
+          !isDragOver && !disabled && "border-border/70 hover:border-border"
         )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -167,12 +167,12 @@ export function MediaUpload({
       >
         <div className="p-4 sm:p-6 text-center h-full flex items-center justify-center">
           <div className="flex flex-col items-center space-y-2">
-            <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400" />
-            <div className="text-sm text-gray-600">
+            <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+            <div className="text-sm text-muted-foreground">
               <span className="font-medium">Tap to upload</span>
               <span className="hidden sm:inline"> or drag and drop</span>
             </div>
-            <div className="text-xs text-gray-500 text-center px-2">
+            <div className="text-xs text-muted-foreground text-center px-2">
               <span className="block sm:inline">Images: JPG, PNG, GIF, WebP (max 5MB)</span>
               <span className="hidden sm:inline"> • </span>
               <span className="block sm:inline">Videos: MP4, MOV (max 512MB)</span>
@@ -216,8 +216,8 @@ export function MediaUpload({
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full bg-gray-100 flex items-center justify-center">
-                      <Video className="h-8 w-8 text-gray-400" />
+                    <div className="w-full h-full bg-muted flex items-center justify-center">
+                      <Video className="h-8 w-8 text-muted-foreground" />
                     </div>
                   )}
                   
@@ -240,11 +240,11 @@ export function MediaUpload({
                 <div className="p-2 space-y-1">
                   <div className="flex items-center space-x-1">
                     {attachment.type === 'image' ? (
-                      <Image className="h-3 w-3 text-gray-500" />
+                      <Image className="h-3 w-3 text-muted-foreground" />
                     ) : (
-                      <Video className="h-3 w-3 text-gray-500" />
+                      <Video className="h-3 w-3 text-muted-foreground" />
                     )}
-                    <span className="text-xs text-gray-600 truncate">
+                    <span className="text-xs text-muted-foreground truncate">
                       {attachment.name}
                     </span>
                   </div>

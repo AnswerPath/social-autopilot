@@ -132,13 +132,12 @@ export async function getUserTweets(
   try {
     const { client, credentials } = await getTwitterClient(userId)
     
-    // Check if using demo credentials
     if (credentials.apiKey.includes('demo_')) {
-      console.log('⚠️ Demo credentials detected - returning mock tweets')
+      console.log('⚠️ Demo credentials — no tweets returned')
       return {
-        success: true,
-        data: generateMockTweets(maxResults),
-        error: 'Using demo credentials - mock data returned'
+        success: false,
+        data: [],
+        error: 'Demo API keys cannot load tweets. Add real Twitter credentials in Settings.',
       }
     }
     
@@ -173,9 +172,9 @@ export async function getUserTweets(
   } catch (error: any) {
     console.error('❌ Error fetching tweets:', error)
     return {
-      success: true,
-      data: generateMockTweets(maxResults),
-      error: `API Error: ${error.message}. Returning mock data.`
+      success: false,
+      data: [],
+      error: error.message || 'Failed to fetch tweets',
     }
   }
 }
@@ -188,13 +187,12 @@ export async function getMentions(
   try {
     const { client, credentials } = await getTwitterClient(userId)
     
-    // Check if using demo credentials
     if (credentials.apiKey.includes('demo_')) {
-      console.log('⚠️ Demo credentials detected - returning mock mentions')
+      console.log('⚠️ Demo credentials — no mentions returned')
       return {
-        success: true,
-        data: generateMockMentions(maxResults),
-        error: 'Using demo credentials - mock data returned'
+        success: false,
+        data: [],
+        error: 'Demo API keys cannot load mentions. Add real Twitter credentials in Settings.',
       }
     }
     
@@ -237,9 +235,9 @@ export async function getMentions(
   } catch (error: any) {
     console.error('❌ Error fetching mentions:', error)
     return {
-      success: true,
-      data: generateMockMentions(maxResults),
-      error: `API Error: ${error.message}. Returning mock data.`
+      success: false,
+      data: [],
+      error: error.message || 'Failed to fetch mentions',
     }
   }
 }
@@ -251,23 +249,11 @@ export async function getUserProfile(
   try {
     const { client, credentials } = await getTwitterClient(userId)
     
-    // Check if using demo credentials
     if (credentials.apiKey.includes('demo_')) {
-      console.log('⚠️ Demo credentials detected - returning mock profile')
+      console.log('⚠️ Demo credentials — no profile returned')
       return {
-        success: true,
-        data: {
-          id: '123456789',
-          username: 'demo_user',
-          name: 'Demo User',
-          profile_image_url: '/placeholder.svg?height=100&width=100',
-          public_metrics: {
-            followers_count: 1000,
-            following_count: 500,
-            tweet_count: 250
-          }
-        },
-        error: 'Using demo credentials - mock data returned'
+        success: false,
+        error: 'Demo API keys cannot load a profile. Add real Twitter credentials in Settings.',
       }
     }
     
@@ -298,19 +284,8 @@ export async function getUserProfile(
   } catch (error: any) {
     console.error('❌ Error fetching user profile:', error)
     return {
-      success: true,
-      data: {
-        id: '987654321',
-        username: 'your_account',
-        name: 'Your Twitter Account',
-        profile_image_url: '/placeholder.svg?height=100&width=100',
-        public_metrics: {
-          followers_count: 0,
-          following_count: 0,
-          tweet_count: 0
-        }
-      },
-      error: `API Error: ${error.message}. Returning mock data.`
+      success: false,
+      error: error.message || 'Failed to fetch user profile',
     }
   }
 }
@@ -449,67 +424,4 @@ function analyzeSentiment(text: string): 'positive' | 'negative' | 'neutral' {
   if (positiveCount > negativeCount) return 'positive'
   if (negativeCount > positiveCount) return 'negative'
   return 'neutral'
-}
-
-// Generate mock tweets for fallback/demo
-function generateMockTweets(count: number): TwitterPost[] {
-  const mockTweets: TwitterPost[] = []
-  const now = Date.now()
-  
-  for (let i = 0; i < Math.min(count, 5); i++) {
-    mockTweets.push({
-      id: `mock_${i + 1}`,
-      text: [
-        'Just deployed a new feature to Social Autopilot! 🚀 #webdev #automation',
-        'The analytics dashboard is looking great with real-time data updates 📊',
-        'Working on scheduling improvements for better tweet timing ⏰',
-        'Thanks for all the feedback on the new UI! Your suggestions are being implemented 🙏',
-        'Social media automation doesn\'t have to be complicated. Keep it simple! 💡'
-      ][i] || `Mock tweet #${i + 1}`,
-      created_at: new Date(now - (i * 4 * 60 * 60 * 1000)).toISOString(),
-      public_metrics: {
-        retweet_count: Math.floor(Math.random() * 20),
-        like_count: Math.floor(Math.random() * 50),
-        reply_count: Math.floor(Math.random() * 10),
-        impression_count: Math.floor(Math.random() * 500)
-      },
-      author_id: 'mock_user_id'
-    })
-  }
-  
-  return mockTweets
-}
-
-// Generate mock mentions for fallback/demo
-function generateMockMentions(count: number): TwitterMention[] {
-  const mockMentions: TwitterMention[] = []
-  const now = Date.now()
-  
-  const templates = [
-    { text: 'Hey @you, love the new automation features!', sentiment: 'positive' as const },
-    { text: '@you Quick question about the API integration...', sentiment: 'neutral' as const },
-    { text: '@you This tool saved me hours of work! Thank you!', sentiment: 'positive' as const },
-    { text: '@you Having an issue with scheduling, can you help?', sentiment: 'negative' as const },
-    { text: '@you When will the analytics export feature be ready?', sentiment: 'neutral' as const }
-  ]
-  
-  for (let i = 0; i < Math.min(count, templates.length); i++) {
-    const template = templates[i]
-    mockMentions.push({
-      id: `mention_${i + 1}`,
-      text: template.text,
-      created_at: new Date(now - (i * 2 * 60 * 60 * 1000)).toISOString(),
-      author_id: `user_${i + 1}`,
-      username: `user_${i + 1}`,
-      name: `Mock User ${i + 1}`,
-      profile_image_url: '/placeholder.svg?height=40&width=40',
-      public_metrics: {
-        followers_count: Math.floor(Math.random() * 1000),
-        following_count: Math.floor(Math.random() * 500)
-      },
-      sentiment: template.sentiment
-    })
-  }
-  
-  return mockMentions
 }

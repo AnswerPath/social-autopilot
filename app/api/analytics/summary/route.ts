@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPostAnalyticsService } from '@/lib/analytics/post-analytics-service';
-import { getCurrentUser } from '@/lib/auth-utils';
+import { requireSessionUserId } from '@/lib/require-session-user';
 
 /**
  * GET /api/analytics/summary
@@ -8,8 +8,9 @@ import { getCurrentUser } from '@/lib/auth-utils';
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser(request);
-    const userId = user?.id || request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const { searchParams } = new URL(request.url);
     
     console.log(`📊 Analytics summary requested for userId: ${userId}`);

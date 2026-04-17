@@ -192,9 +192,9 @@ export function PostAnalyticsTable({ data, loading = false }: PostAnalyticsTable
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-12 bg-gray-200 rounded animate-pulse" />
+        <div className="h-12 bg-muted rounded animate-pulse" />
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-16 bg-gray-200 rounded animate-pulse" />
+          <div key={i} className="h-16 bg-muted rounded animate-pulse" />
         ))}
       </div>
     )

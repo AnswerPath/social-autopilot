@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRecommendationService } from '@/lib/analytics/recommendation-service';
+import { requireSessionUserId } from '@/lib/require-session-user';
 
 /**
  * GET /api/analytics/recommendations
@@ -11,7 +12,9 @@ import { createRecommendationService } from '@/lib/analytics/recommendation-serv
  */
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const { searchParams } = new URL(request.url);
     
     const dayOfWeek = searchParams.get('dayOfWeek');

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
 
@@ -44,8 +45,11 @@ export async function GET(request: NextRequest) {
 // POST /api/approval/comments - Add new comment
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+
     const body = await request.json()
-    const { postId, comment, commentType, userId } = body
+    const { postId, comment, commentType } = body
 
     if (!postId || !comment) {
       return NextResponse.json({ error: 'postId and comment are required' }, { status: 400 })
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
       .from('approval_comments')
       .insert({
         post_id: postId,
-        user_id: userId || 'demo-user',
+        user_id: auth.userId,
         comment,
         comment_type: commentType || 'feedback'
       })

@@ -87,9 +87,9 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="mx-auto w-full max-w-md border-border/80 bg-card/95 shadow-lg-soft backdrop-blur-md">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center">Create account</CardTitle>
+        <CardTitle className="text-center font-heading text-2xl font-bold tracking-tight">Create account</CardTitle>
         <CardDescription className="text-center">
           Enter your information to create a new account
         </CardDescription>
@@ -187,26 +187,26 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
             {/* Password strength indicator */}
             <div className="space-y-2 text-sm">
               <div className="flex items-center space-x-2">
-                <CheckCircle className={`h-4 w-4 ${passwordStrength.length ? 'text-green-500' : 'text-gray-300'}`} />
-                <span className={passwordStrength.length ? 'text-green-600' : 'text-gray-500'}>
+                <CheckCircle className={`h-4 w-4 ${passwordStrength.length ? 'text-green-500' : 'text-muted-foreground/70'}`} />
+                <span className={passwordStrength.length ? 'text-green-600' : 'text-muted-foreground'}>
                   At least 8 characters
                 </span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className={`h-4 w-4 ${passwordStrength.uppercase ? 'text-green-500' : 'text-gray-300'}`} />
-                <span className={passwordStrength.uppercase ? 'text-green-600' : 'text-gray-500'}>
+                <CheckCircle className={`h-4 w-4 ${passwordStrength.uppercase ? 'text-green-500' : 'text-muted-foreground/70'}`} />
+                <span className={passwordStrength.uppercase ? 'text-green-600' : 'text-muted-foreground'}>
                   One uppercase letter
                 </span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className={`h-4 w-4 ${passwordStrength.lowercase ? 'text-green-500' : 'text-gray-300'}`} />
-                <span className={passwordStrength.lowercase ? 'text-green-600' : 'text-gray-500'}>
+                <CheckCircle className={`h-4 w-4 ${passwordStrength.lowercase ? 'text-green-500' : 'text-muted-foreground/70'}`} />
+                <span className={passwordStrength.lowercase ? 'text-green-600' : 'text-muted-foreground'}>
                   One lowercase letter
                 </span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className={`h-4 w-4 ${passwordStrength.number ? 'text-green-500' : 'text-gray-300'}`} />
-                <span className={passwordStrength.number ? 'text-green-600' : 'text-gray-500'}>
+                <CheckCircle className={`h-4 w-4 ${passwordStrength.number ? 'text-green-500' : 'text-muted-foreground/70'}`} />
+                <span className={passwordStrength.number ? 'text-green-600' : 'text-muted-foreground'}>
                   One number
                 </span>
               </div>

@@ -54,9 +54,9 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="mx-auto w-full max-w-md border-border/80 bg-card/95 shadow-lg-soft backdrop-blur-md">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center">Welcome back</CardTitle>
+        <CardTitle className="text-center font-heading text-2xl font-bold tracking-tight">Welcome back</CardTitle>
         <CardDescription className="text-center">
           Enter your credentials to access your account
         </CardDescription>

@@ -173,7 +173,7 @@ SELECT 'Setup completed successfully!' as status;`
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-medium">Automatic Setup</h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   {supabaseConfig?.isV0Integrated 
                     ? "Use v0's integrated Supabase to set up the database automatically"
                     : "Try to set up the database automatically"
@@ -192,7 +192,7 @@ SELECT 'Setup completed successfully!' as status;`
             {isRunning && (
               <div className="space-y-2">
                 <Progress value={progress} className="w-full" />
-                <p className="text-sm text-gray-600">{currentStep}</p>
+                <p className="text-sm text-muted-foreground">{currentStep}</p>
               </div>
             )}
 
@@ -246,12 +246,12 @@ SELECT 'Setup completed successfully!' as status;`
                     <Terminal className="h-4 w-4" />
                     Manual Setup
                   </h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     If automatic setup fails, run this SQL script manually in Supabase
                   </p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="bg-muted/50 rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">SQL Setup Script</span>
                     <div className="flex gap-2">
@@ -266,7 +266,7 @@ SELECT 'Setup completed successfully!' as status;`
                     </div>
                   </div>
                   
-                  <pre className="text-xs bg-white p-3 rounded border overflow-x-auto max-h-40">
+                  <pre className="text-xs bg-background p-3 rounded border overflow-x-auto max-h-40">
                     <code>{sqlScript}</code>
                   </pre>
                 </div>

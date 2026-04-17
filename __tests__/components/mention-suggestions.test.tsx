@@ -1,6 +1,6 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MentionSuggestions } from '@/components/ui/mention-suggestions'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { MentionSuggestions, type User } from '@/components/ui/mention-suggestions'
 
 // Mock localStorage
 const localStorageMock = {
@@ -10,14 +10,13 @@ const localStorageMock = {
   clear: jest.fn(),
 }
 
-// Save original localStorage
 const originalLocalStorage = window.localStorage
 
 beforeAll(() => {
   Object.defineProperty(window, 'localStorage', {
     value: localStorageMock,
     configurable: true,
-    writable: true
+    writable: true,
   })
 })
 
@@ -25,12 +24,79 @@ afterAll(() => {
   Object.defineProperty(window, 'localStorage', {
     value: originalLocalStorage,
     configurable: true,
-    writable: true
+    writable: true,
   })
 })
 
+/** Test fixtures (production defaults are empty). */
+const FIXTURE_CONNECTIONS: User[] = [
+  {
+    id: '1',
+    username: 'john_doe',
+    displayName: 'John Doe',
+    avatar: '/placeholder-user.jpg',
+    verified: true,
+    followerCount: 125_000,
+    type: 'connection',
+  },
+  {
+    id: '5',
+    username: 'nobody_img',
+    displayName: 'Nobody Image',
+    verified: false,
+    followerCount: 12,
+    type: 'connection',
+  },
+]
+
+const FIXTURE_SUGGESTED: User[] = [
+  {
+    id: '2',
+    username: 'jane_smith',
+    displayName: 'Jane Smith',
+    avatar: '/jane.jpg',
+    verified: false,
+    followerCount: 45_000,
+    type: 'suggested',
+  },
+  {
+    id: '3',
+    username: 'tech_guru',
+    displayName: 'Tech Guru',
+    avatar: '/tech.jpg',
+    verified: true,
+    followerCount: 88_000,
+    type: 'suggested',
+  },
+  {
+    id: '4',
+    username: 'johnny_designer',
+    displayName: 'Johnny Designer',
+    avatar: '/jd.jpg',
+    verified: false,
+    followerCount: 46_000,
+    type: 'suggested',
+  },
+  ...Array.from({ length: 12 }, (_, i) => ({
+    id: `bulk-${i}`,
+    username: `user_${i}_bulk`,
+    displayName: `Bulk User ${i}`,
+    verified: false,
+    followerCount: 1000 + i,
+    type: 'suggested' as const,
+  })),
+]
+
 describe('MentionSuggestions', () => {
   const mockOnSelect = jest.fn()
+
+  const renderWithFixtures = (ui: React.ReactElement) =>
+    render(
+      React.cloneElement(ui, {
+        connections: FIXTURE_CONNECTIONS,
+        suggestedUsers: FIXTURE_SUGGESTED,
+      })
+    )
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -38,12 +104,8 @@ describe('MentionSuggestions', () => {
   })
 
   it('renders mention suggestions when visible', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="john" isVisible={true} onSelect={mockOnSelect} />
     )
 
     expect(screen.getByText('John Doe')).toBeInTheDocument()
@@ -51,24 +113,16 @@ describe('MentionSuggestions', () => {
   })
 
   it('does not render when not visible', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={false}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="john" isVisible={false} onSelect={mockOnSelect} />
     )
 
     expect(screen.queryByText('John Doe')).not.toBeInTheDocument()
   })
 
   it('filters users based on query', () => {
-    render(
-      <MentionSuggestions
-        query="tech"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="tech" isVisible={true} onSelect={mockOnSelect} />
     )
 
     expect(screen.getByText('Tech Guru')).toBeInTheDocument()
@@ -76,30 +130,20 @@ describe('MentionSuggestions', () => {
   })
 
   it('shows user avatars and verification badges', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="john" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Check for avatar
     const avatar = screen.getByAltText('John Doe')
     expect(avatar).toBeInTheDocument()
 
-    // Check for verification badge
     const verifiedBadge = screen.getByText('John Doe').closest('div')?.querySelector('[class*="text-blue-500"]')
     expect(verifiedBadge).toBeInTheDocument()
   })
 
   it('handles user selection', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="john" isVisible={true} onSelect={mockOnSelect} />
     )
 
     const userCard = screen.getByText('John Doe').closest('[class*="cursor-pointer"]')
@@ -112,7 +156,7 @@ describe('MentionSuggestions', () => {
       avatar: '/placeholder-user.jpg',
       verified: true,
       followerCount: 125000,
-      type: 'connection'
+      type: 'connection',
     })
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
       'recent-mentions',
@@ -123,12 +167,8 @@ describe('MentionSuggestions', () => {
   it('loads recent mentions from localStorage', () => {
     localStorageMock.getItem.mockReturnValue(JSON.stringify(['john_doe', 'jane_smith']))
 
-    render(
-      <MentionSuggestions
-        query=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="" isVisible={true} onSelect={mockOnSelect} />
     )
 
     expect(screen.getByText('Recent')).toBeInTheDocument()
@@ -137,100 +177,64 @@ describe('MentionSuggestions', () => {
   })
 
   it('shows follower counts', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="john" isVisible={true} onSelect={mockOnSelect} />
     )
 
     expect(screen.getByText('125K followers')).toBeInTheDocument()
   })
 
   it('shows different badge types', () => {
-    render(
-      <MentionSuggestions
-        query=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Should show "Following" badge for connections
-    expect(screen.getByText('Following')).toBeInTheDocument()
-    
-    // Should show "Suggested" badge for suggested users
-    expect(screen.getByText('Suggested')).toBeInTheDocument()
+    expect(screen.getAllByText(/Following/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Suggested/).length).toBeGreaterThan(0)
   })
 
   it('prioritizes connections over suggested users', () => {
-    render(
-      <MentionSuggestions
-        query=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Connections should appear first
-    const followingBadges = screen.getAllByText('Following')
-    const suggestedBadges = screen.getAllByText('Suggested')
-    
+    const followingBadges = screen.getAllByText(/Following/)
+    const suggestedBadges = screen.getAllByText(/Suggested/)
+
     expect(followingBadges.length).toBeGreaterThan(0)
     expect(suggestedBadges.length).toBeGreaterThan(0)
   })
 
   it('shows avatar fallback when no image', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="nobody" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Should show initials fallback
-    expect(screen.getByText('JD')).toBeInTheDocument()
+    expect(screen.getByText('NI')).toBeInTheDocument()
   })
 
   it('limits suggestions to reasonable number', () => {
-    render(
-      <MentionSuggestions
-        query=""
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Should not show too many suggestions
     const userCards = screen.getAllByText(/@\w+/)
     expect(userCards.length).toBeLessThanOrEqual(8)
   })
 
   it('shows empty state when no matches', () => {
     render(
-      <MentionSuggestions
-        query="nonexistent"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+      <MentionSuggestions query="nonexistent" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Should not show any users
     expect(screen.queryByText(/@\w+/)).not.toBeInTheDocument()
   })
 
   it('formats follower counts correctly', () => {
-    render(
-      <MentionSuggestions
-        query="john"
-        isVisible={true}
-        onSelect={mockOnSelect}
-      />
+    renderWithFixtures(
+      <MentionSuggestions query="john" isVisible={true} onSelect={mockOnSelect} />
     )
 
-    // Test different follower count formats
     expect(screen.getByText('125K followers')).toBeInTheDocument()
     expect(screen.getByText('45K followers')).toBeInTheDocument()
   })

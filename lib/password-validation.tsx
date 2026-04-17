@@ -292,7 +292,7 @@ export function getPasswordStrengthColor(strength: PasswordStrength): string {
     case PasswordStrength.STRONG:
       return 'text-green-600';
     default:
-      return 'text-gray-600';
+      return 'text-muted-foreground';
   }
 }
 
@@ -312,7 +312,7 @@ export function getPasswordStrengthBgColor(strength: PasswordStrength): string {
     case PasswordStrength.STRONG:
       return 'bg-green-500';
     default:
-      return 'bg-gray-500';
+      return 'bg-muted';
   }
 }
 
@@ -324,7 +324,7 @@ export function getPasswordStrengthBar(strength: PasswordStrength): JSX.Element 
   const color = getPasswordStrengthBgColor(strength);
 
   return (
-    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+    <div className="w-full bg-muted rounded-full h-2 dark:bg-muted">
       <div
         className={`h-2 rounded-full transition-all duration-300 ${color}`}
         style={{ width: `${percentage}%` }}

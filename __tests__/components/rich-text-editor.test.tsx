@@ -153,7 +153,7 @@ describe('RichTextEditor', () => {
     
     expect(screen.getByText('0/280')).toBeInTheDocument()
     // Check for progress bar container by looking for the specific class
-    const progressBarContainer = document.querySelector('.w-full.bg-gray-200.rounded-full.h-2.mb-1')
+    const progressBarContainer = document.querySelector('.w-full.bg-muted.rounded-full.h-2.mb-1')
     expect(progressBarContainer).toBeInTheDocument()
   })
 

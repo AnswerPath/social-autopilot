@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
 
@@ -9,6 +10,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const { id: postId } = await params
 
     // Get post with approval details
@@ -35,7 +40,18 @@ export async function GET(
       .single()
 
     if (postError) {
+      if (postError.code === 'PGRST116') {
+        return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
+      }
       return NextResponse.json({ success: false, error: postError.message }, { status: 500 })
+    }
+
+    if (!post) {
+      return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
+    }
+
+    if (post.user_id !== userId) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
     return NextResponse.json({ success: true, post })
@@ -51,11 +67,32 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const { id: postId } = await params
     const body = await request.json()
     const { status, comment, commentType, resolveComment } = body
 
-    const userId = 'demo-user' // In real app, get from auth
+    const { data: owned, error: ownedError } = await supabaseAdmin
+      .from('scheduled_posts')
+      .select('id, user_id')
+      .eq('id', postId)
+      .single()
+
+    if (ownedError) {
+      if (ownedError.code === 'PGRST116') {
+        return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
+      }
+      return NextResponse.json({ success: false, error: ownedError.message }, { status: 500 })
+    }
+    if (!owned) {
+      return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
+    }
+    if (owned.user_id !== userId) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     // Update post status if provided
     if (status) {
@@ -63,6 +100,7 @@ export async function PATCH(
         .from('scheduled_posts')
         .update({ status })
         .eq('id', postId)
+        .eq('user_id', userId)
 
       if (updateError) {
         return NextResponse.json({ success: false, error: updateError.message }, { status: 500 })
@@ -95,6 +133,7 @@ export async function PATCH(
           resolved_by: userId
         })
         .eq('id', resolveComment)
+        .eq('post_id', postId)
 
       if (resolveError) {
         return NextResponse.json({ success: false, error: resolveError.message }, { status: 500 })

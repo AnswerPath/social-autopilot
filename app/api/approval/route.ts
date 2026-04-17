@@ -15,21 +15,19 @@ import {
   resolveApprovalComment
 } from '@/lib/approval/comments'
 import { listRevisions, recordRevision, restoreRevision } from '@/lib/approval/revisions'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
 
-function getUserId(): string {
-  // Default author identity for demo data
-  return 'demo-user'
-}
-
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const sessionUserId = auth.userId
+
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
-    // For dashboard/notifications we operate as the reviewer/manager,
-    // for other reads we stay as content author.
-    const userId = type === 'dashboard' || type === 'notifications' ? 'manager-user' : getUserId()
+    const userId = sessionUserId
 
     switch (type) {
       case 'pending': {
@@ -80,13 +78,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const body = await request.json()
     const { postId, action } = body
-    // Submit/comment are authored actions; approvals are reviewer actions
-    const userId =
-      action === 'submit' || action === 'comment'
-        ? getUserId()
-        : 'manager-user'
 
     switch (action) {
       case 'submit':

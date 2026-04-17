@@ -18,7 +18,7 @@ export function NotificationSettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>New mentions</Label>
-              <p className="text-sm text-gray-600">Get notified when someone mentions your brand</p>
+              <p className="text-sm text-muted-foreground">Get notified when someone mentions your brand</p>
             </div>
             <Switch defaultChecked />
           </div>
@@ -28,7 +28,7 @@ export function NotificationSettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Post performance</Label>
-              <p className="text-sm text-gray-600">Weekly summary of your post performance</p>
+              <p className="text-sm text-muted-foreground">Weekly summary of your post performance</p>
             </div>
             <Switch defaultChecked />
           </div>
@@ -38,7 +38,7 @@ export function NotificationSettings() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <Label>Team activity</Label>
-              <p className="text-sm text-gray-600">Updates about team member actions and approvals</p>
+              <p className="text-sm text-muted-foreground">Updates about team member actions and approvals</p>
             </div>
             <Switch />
           </div>

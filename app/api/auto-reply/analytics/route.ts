@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createEngagementAnalyticsService } from '@/lib/analytics/engagement-analytics';
+import { requireSessionUserId } from '@/lib/require-session-user';
 
 export const runtime = 'nodejs';
 
 // GET - Get analytics data
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.headers.get('x-user-id') || 'demo-user';
+    const auth = await requireSessionUserId(request);
+    if (!auth.ok) return auth.response;
+    const userId = auth.userId;
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'metrics';
     const days = parseInt(searchParams.get('days') || '30', 10);

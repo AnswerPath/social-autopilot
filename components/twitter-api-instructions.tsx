@@ -105,7 +105,7 @@ export function TwitterApiInstructions() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{step.title}</h3>
-                  <p className="text-gray-600 mb-3">{step.description}</p>
+                  <p className="text-muted-foreground mb-3">{step.description}</p>
                   
                   {step.url && (
                     <Button variant="outline" size="sm" asChild className="mb-3">
@@ -145,7 +145,7 @@ export function TwitterApiInstructions() {
                 <Badge variant="default">Required</Badge>
                 <h4 className="font-medium">API Key & Secret</h4>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Identifies your application to Twitter. Think of this as your app's username and password.
               </p>
             </div>
@@ -155,7 +155,7 @@ export function TwitterApiInstructions() {
                 <Badge variant="default">Required</Badge>
                 <h4 className="font-medium">Access Token & Secret</h4>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Allows your app to act on behalf of your Twitter account. Required for posting tweets.
               </p>
             </div>
@@ -165,7 +165,7 @@ export function TwitterApiInstructions() {
                 <Badge variant="secondary">Optional</Badge>
                 <h4 className="font-medium">Bearer Token</h4>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Provides read-only access to public Twitter data. Useful for searching tweets and accessing public metrics.
               </p>
             </div>

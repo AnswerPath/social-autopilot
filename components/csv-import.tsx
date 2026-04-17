@@ -170,7 +170,7 @@ export function CSVImport({ onSuccess, onClose }: CSVImportProps) {
         <CardContent className="space-y-6">
           {/* Template Download */}
           <div className="space-y-2">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Download the CSV template to see the required format, then fill it with your posts.
             </p>
             <Button onClick={handleDownloadTemplate} variant="outline">
@@ -202,7 +202,7 @@ export function CSVImport({ onSuccess, onClose }: CSVImportProps) {
                 {isUploading ? 'Parsing...' : file ? 'Change File' : 'Select File'}
               </Button>
               {file && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>{file.name}</span>
                   <Button
                     variant="ghost"
@@ -264,7 +264,7 @@ export function CSVImport({ onSuccess, onClose }: CSVImportProps) {
                 {parsedData.map((post, index) => (
                   <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded text-sm">
                     <span className="flex-1 line-clamp-1">{post.content}</span>
-                    <span className="text-gray-600 ml-2">
+                    <span className="text-muted-foreground ml-2">
                       {post.scheduledDate} {post.scheduledTime}
                     </span>
                   </div>

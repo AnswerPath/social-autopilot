@@ -172,7 +172,7 @@ export function AccountDeletionForm() {
           </div>
 
           {/* What Will Be Deleted */}
-          <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+          <div className="rounded-lg bg-muted/50 p-4 dark:bg-muted">
             <h4 className="font-medium mb-2">What will be deleted:</h4>
             <ul className="space-y-1 text-sm text-muted-foreground">
               <li>• Your account and profile information</li>

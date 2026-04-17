@@ -20,40 +20,36 @@ interface MentionSuggestionsProps {
   isVisible: boolean
   onSelect: (user: User) => void
   className?: string
+  /** Optional directory lists (defaults empty in production; tests may pass fixtures). */
+  connections?: User[]
+  suggestedUsers?: User[]
 }
 
-// Mock user data (in real app, this would come from API)
-const CONNECTIONS: User[] = [
-  { id: '1', username: 'john_doe', displayName: 'John Doe', avatar: '/placeholder-user.jpg', verified: true, followerCount: 125000, type: 'connection' },
-  { id: '2', username: 'jane_smith', displayName: 'Jane Smith', avatar: '/placeholder-user.jpg', verified: false, followerCount: 45000, type: 'connection' },
-  { id: '3', username: 'tech_guru', displayName: 'Tech Guru', avatar: '/placeholder-user.jpg', verified: true, followerCount: 89000, type: 'connection' },
-  { id: '4', username: 'startup_founder', displayName: 'Startup Founder', avatar: '/placeholder-user.jpg', verified: false, followerCount: 23000, type: 'connection' },
-  { id: '5', username: 'dev_lead', displayName: 'Dev Lead', avatar: '/placeholder-user.jpg', verified: false, followerCount: 15600, type: 'connection' }
-]
+const EMPTY_CONNECTIONS: User[] = []
+const EMPTY_SUGGESTED: User[] = []
 
-const SUGGESTED_USERS: User[] = [
-  { id: '6', username: 'ai_researcher', displayName: 'AI Researcher', avatar: '/placeholder-user.jpg', verified: true, followerCount: 67000, type: 'suggested' },
-  { id: '7', username: 'design_expert', displayName: 'Design Expert', avatar: '/placeholder-user.jpg', verified: false, followerCount: 34000, type: 'suggested' },
-  { id: '8', username: 'marketing_pro', displayName: 'Marketing Pro', avatar: '/placeholder-user.jpg', verified: false, followerCount: 28000, type: 'suggested' }
-]
-
-// Get recent mentions from localStorage
-const getRecentMentions = (): User[] => {
+function getRecentMentions(allUsers: User[]): User[] {
   const saved = localStorage.getItem('recent-mentions')
-  if (saved) {
-    const recentUsernames = JSON.parse(saved)
-    return recentUsernames.map((username: string) => {
-      const user = [...CONNECTIONS, ...SUGGESTED_USERS].find(u => u.username === username)
-      return user ? { ...user, type: 'recent' as const } : null
-    }).filter(Boolean) as User[]
+  if (!saved) return []
+  let recentUsernames: unknown
+  try {
+    recentUsernames = JSON.parse(saved)
+  } catch {
+    return []
   }
-  return []
+  if (!Array.isArray(recentUsernames)) return []
+  return recentUsernames
+    .filter((u): u is string => typeof u === 'string')
+    .map((username) => {
+      const user = allUsers.find((u) => u.username === username)
+      return user ? { ...user, type: 'recent' as const } : null
+    })
+    .filter(Boolean) as User[]
 }
 
-// Save mention to recent
-const saveRecentMention = (username: string) => {
-  const recent = getRecentMentions().map(u => u.username)
-  const newRecent = [username, ...recent.filter(u => u !== username)].slice(0, 5)
+function saveRecentMention(username: string, allUsers: User[]) {
+  const recent = getRecentMentions(allUsers).map((u) => u.username)
+  const newRecent = [username, ...recent.filter((u) => u !== username)].slice(0, 5)
   localStorage.setItem('recent-mentions', JSON.stringify(newRecent))
 }
 
@@ -81,15 +77,25 @@ const formatFollowerCount = (count?: number): string => {
   return count.toString()
 }
 
-export function MentionSuggestions({ query, isVisible, onSelect, className }: MentionSuggestionsProps) {
+export function MentionSuggestions({
+  query,
+  isVisible,
+  onSelect,
+  className,
+  connections: connectionsProp,
+  suggestedUsers: suggestedUsersProp,
+}: MentionSuggestionsProps) {
   const [suggestions, setSuggestions] = useState<User[]>([])
+  const connections = connectionsProp ?? EMPTY_CONNECTIONS
+  const suggestedUsers = suggestedUsersProp ?? EMPTY_SUGGESTED
+  const allDirectoryUsers = useMemo(() => [...connections, ...suggestedUsers], [connections, suggestedUsers])
 
   // Filter users based on query
   const filteredUsers = useMemo(() => {
     if (!query.trim()) return []
 
     const lowercaseQuery = query.toLowerCase()
-    const allUsers = [...CONNECTIONS, ...SUGGESTED_USERS]
+    const allUsers = allDirectoryUsers
     
     return allUsers.filter(user => {
       const username = user.username.toLowerCase()
@@ -101,7 +107,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
         displayName.startsWith(lowercaseQuery[0])
       )
     })
-  }, [query])
+  }, [query, allDirectoryUsers])
 
   // Generate suggestions with priority
   useEffect(() => {
@@ -110,9 +116,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       return
     }
 
-    const recent = getRecentMentions()
-    const connections = CONNECTIONS
-    const suggested = SUGGESTED_USERS
+    const recent = getRecentMentions(allDirectoryUsers)
     const filtered = filteredUsers
 
     const ensureUnique = (users: User[]) => {
@@ -133,7 +137,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
         connections.some(c => c.id === u.id)
       )
       const filteredSuggested = filtered.filter(u =>
-        suggested.some(s => s.id === u.id)
+        suggestedUsers.some(s => s.id === u.id)
       )
       const remaining = filtered.filter(
         u =>
@@ -152,7 +156,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       const connectionsWithoutRecent = connections.filter(
         c => !recentIds.has(c.id)
       )
-      const suggestedWithoutRecentOrConnections = suggested.filter(
+      const suggestedWithoutRecentOrConnections = suggestedUsers.filter(
         s => !recentIds.has(s.id) && !connectionsWithoutRecent.some(c => c.id === s.id)
       )
 
@@ -164,7 +168,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
     }
 
     setSuggestions(combined.slice(0, 8)) // Limit to 8 suggestions
-  }, [query, isVisible, filteredUsers])
+  }, [query, isVisible, filteredUsers, allDirectoryUsers, connections, suggestedUsers])
 
   // Handle user selection
   const handleSelect = (user: User) => {
@@ -173,7 +177,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       avatar: user.avatar ?? '/placeholder-user.jpg'
     }
 
-    saveRecentMention(normalizedUser.username)
+    saveRecentMention(normalizedUser.username, allDirectoryUsers)
     onSelect(normalizedUser)
   }
 
@@ -224,14 +228,14 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
   }
 
   return (
-    <div className={cn("absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1", className)}>
+    <div className={cn("absolute top-full left-0 right-0 bg-background border border-border rounded-lg shadow-lg z-50 mt-1", className)}>
       <div className="p-2">
         {suggestionsWithMeta.map((entry, index) => {
           if (entry.kind === 'header') {
             return (
               <div
                 key={`header-${entry.type}-${index}`}
-                className="px-2 py-1 text-xs font-semibold text-gray-500"
+                className="px-2 py-1 text-xs font-semibold text-muted-foreground"
               >
                 {headerLabels[entry.type]}
               </div>
@@ -255,7 +259,7 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
           return (
           <div
             key={`${user.id}-${index}`}
-            className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
             onClick={() => handleSelect(user)}
           >
             <div className="relative flex shrink-0 overflow-hidden rounded-full h-8 w-8 bg-muted items-center justify-center">
@@ -289,11 +293,11 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500 truncate">
+                <span className="text-sm text-muted-foreground truncate">
                   @{user.username}
                 </span>
                 {user.followerCount && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {formatFollowerCount(user.followerCount)} followers
                   </span>
                 )}
@@ -331,8 +335,8 @@ export function MentionSuggestions({ query, isVisible, onSelect, className }: Me
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2 border-t border-gray-100">
-        <p className="text-xs text-gray-500">
+      <div className="px-3 py-2 border-t border-border/80">
+        <p className="text-xs text-muted-foreground">
           Click a user to mention them in your post
         </p>
       </div>

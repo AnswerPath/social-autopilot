@@ -30,7 +30,7 @@ function ProfileContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-muted/50 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -40,8 +40,8 @@ function ProfileContent() {
               Back to Dashboard
             </Button>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
-              <p className="text-gray-600">Manage your account information and preferences</p>
+              <h1 className="text-3xl font-bold text-foreground">Profile</h1>
+              <p className="text-muted-foreground">Manage your account information and preferences</p>
             </div>
           </div>
         </div>

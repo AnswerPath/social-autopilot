@@ -97,7 +97,7 @@ export function PasswordChangeForm() {
     if (passwordStrength.score >= 5) color = 'bg-green-500';
 
     return (
-      <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+      <div className="w-full bg-muted rounded-full h-2 dark:bg-muted">
         <div
           className={`h-2 rounded-full transition-all duration-300 ${color}`}
           style={{ width: `${percentage}%` }}

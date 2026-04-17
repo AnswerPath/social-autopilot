@@ -84,7 +84,7 @@ export function SupabaseStatus() {
                   {instructions.instructions.map((instruction: string, index: number) => (
                     <div key={index} className="text-sm">
                       {instruction.startsWith('  ') ? (
-                        <code className="bg-gray-100 px-1 rounded text-xs">{instruction.trim()}</code>
+                        <code className="bg-muted px-1 rounded text-xs">{instruction.trim()}</code>
                       ) : (
                         instruction
                       )}

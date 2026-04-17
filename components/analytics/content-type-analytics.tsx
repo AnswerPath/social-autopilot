@@ -155,11 +155,11 @@ export function ContentTypeAnalytics({ data, loading = false }: ContentTypeAnaly
         {[1, 2].map((i) => (
           <Card key={i}>
             <CardHeader>
-              <div className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
-              <div className="h-4 w-48 bg-gray-200 rounded animate-pulse mt-2" />
+              <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+              <div className="h-4 w-48 bg-muted rounded animate-pulse mt-2" />
             </CardHeader>
             <CardContent>
-              <div className="h-[300px] bg-gray-200 rounded animate-pulse" />
+              <div className="h-[300px] bg-muted rounded animate-pulse" />
             </CardContent>
           </Card>
         ))}

@@ -125,9 +125,9 @@ export function RoleManagement() {
       case UserRole.EDITOR:
         return 'bg-blue-100 text-blue-800 border-blue-200'
       case UserRole.VIEWER:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
+        return 'bg-muted text-foreground border-border'
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
+        return 'bg-muted text-foreground border-border'
     }
   }
 
@@ -206,13 +206,13 @@ export function RoleManagement() {
                        `${userItem.profile?.first_name || ''} ${userItem.profile?.last_name || ''}`.trim() || 
                        userItem.email}
                     </p>
-                    <p className="text-sm text-gray-500">{userItem.email}</p>
+                    <p className="text-sm text-muted-foreground">{userItem.email}</p>
                   </div>
                   <Badge className={getRoleBadgeColor(userItem.role)}>
                     {userItem.role}
                   </Badge>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {getRoleDescription(userItem.role)}
                 </p>
               </div>
@@ -249,7 +249,7 @@ export function RoleManagement() {
           ))}
         </div>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+        <div className="mt-6 p-4 bg-muted/50 rounded-lg">
           <h4 className="font-medium mb-2">Role Descriptions</h4>
           <div className="space-y-2 text-sm">
             {roles.map((role) => (
@@ -257,7 +257,7 @@ export function RoleManagement() {
                 <Badge className={getRoleBadgeColor(role.value)}>
                   {role.label}
                 </Badge>
-                <span className="text-gray-600">{role.description}</span>
+                <span className="text-muted-foreground">{role.description}</span>
               </div>
             ))}
           </div>

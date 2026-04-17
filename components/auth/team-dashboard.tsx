@@ -243,11 +243,11 @@ export function TeamDashboard() {
       case TeamRole.EDITOR:
         return <Edit className="h-4 w-4 text-green-500" />;
       case TeamRole.MEMBER:
-        return <Users className="h-4 w-4 text-gray-500" />;
+        return <Users className="h-4 w-4 text-muted-foreground" />;
       case TeamRole.VIEWER:
-        return <Eye className="h-4 w-4 text-gray-400" />;
+        return <Eye className="h-4 w-4 text-muted-foreground" />;
       default:
-        return <Users className="h-4 w-4 text-gray-500" />;
+        return <Users className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
@@ -292,7 +292,7 @@ export function TeamDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Team Collaboration</h2>
-          <p className="text-gray-600">Manage your teams and collaborate with members</p>
+          <p className="text-muted-foreground">Manage your teams and collaborate with members</p>
         </div>
         <Dialog open={showCreateTeam} onOpenChange={setShowCreateTeam}>
           <DialogTrigger asChild>
@@ -400,9 +400,9 @@ export function TeamDashboard() {
                     <Building2 className="h-8 w-8 text-blue-500" />
                     <div>
                       <h4 className="font-medium">{invitation.team?.name}</h4>
-                      <p className="text-sm text-gray-600">Invited as {invitation.role}</p>
+                      <p className="text-sm text-muted-foreground">Invited as {invitation.role}</p>
                       {invitation.message && (
-                        <p className="text-sm text-gray-500 mt-1">"{invitation.message}"</p>
+                        <p className="text-sm text-muted-foreground mt-1">"{invitation.message}"</p>
                       )}
                     </div>
                   </div>
@@ -460,9 +460,9 @@ export function TeamDashboard() {
             </CardHeader>
             <CardContent>
               {team.description && (
-                <p className="text-sm text-gray-600 mb-3">{team.description}</p>
+                <p className="text-sm text-muted-foreground mb-3">{team.description}</p>
               )}
-              <div className="flex items-center justify-between text-sm text-gray-500">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <span>Created {formatDate(team.created_at)}</span>
                 <Badge variant="outline">{team.size_category || 'Unknown'}</Badge>
               </div>
@@ -701,12 +701,12 @@ export function TeamDashboard() {
                       <TableRow key={member.id}>
                         <TableCell>
                           <div className="flex items-center space-x-3">
-                            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
                               <Users className="h-4 w-4" />
                             </div>
                             <div>
                               <p className="font-medium">{member.user?.display_name || 'Unknown User'}</p>
-                              <p className="text-sm text-gray-500">{member.user?.email}</p>
+                              <p className="text-sm text-muted-foreground">{member.user?.email}</p>
                             </div>
                           </div>
                         </TableCell>
@@ -750,7 +750,7 @@ export function TeamDashboard() {
                               <p className="font-medium">
                                 {content.content_type} - {content.content_id}
                               </p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm text-muted-foreground">
                                 Shared by {content.sharer?.display_name || 'Unknown'}
                               </p>
                             </div>
@@ -759,7 +759,7 @@ export function TeamDashboard() {
                             {content.is_public && (
                               <Badge variant="secondary">Public</Badge>
                             )}
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-muted-foreground">
                               {formatDate(content.created_at)}
                             </span>
                           </div>
@@ -768,7 +768,7 @@ export function TeamDashboard() {
                     </Card>
                   ))}
                   {teamContent.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-muted-foreground">
                       No shared content yet
                     </div>
                   )}
@@ -822,9 +822,9 @@ export function TeamDashboard() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-center py-8">
-              <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">No teams yet</h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Create your first team to start collaborating with others
               </p>
               <Button onClick={() => setShowCreateTeam(true)}>

@@ -5,17 +5,18 @@ import { ensureWorkflowAssignment } from '@/lib/approval/workflow'
 import { recordRevision } from '@/lib/approval/revisions'
 import { createLogger } from '@/lib/logger'
 import { withApiErrorHandler } from '@/lib/api-error-wrapper'
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export const runtime = 'nodejs'
-
-function getUserId(): string {
-  return 'demo-user'
-}
 
 async function postHandler(request: NextRequest) {
   const requestId = request.headers.get('x-request-id') ?? undefined
   const log = createLogger({ requestId, service: 'api/twitter/post' })
   try {
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
+
     const body = await request.json()
     const { text, mediaIds, scheduledTime, requiresApproval } = body
 
@@ -43,7 +44,6 @@ async function postHandler(request: NextRequest) {
       const hours = String(scheduledDate.getHours()).padStart(2, '0')
       const minutes = String(scheduledDate.getMinutes()).padStart(2, '0')
 
-      const userId = getUserId()
       const schedulingService = new SchedulingService()
       
       // Save to scheduled_posts table
@@ -71,7 +71,7 @@ async function postHandler(request: NextRequest) {
       }
 
       // Also call the twitter API scheduling (for backwards compatibility)
-      result = await scheduleTweet(text, scheduledDate, mediaIds, userId)
+      result = await scheduleTweet(text, scheduledDate, mediaIds, auth.userId)
       
       // Return the scheduled post data
       return NextResponse.json({
@@ -83,7 +83,6 @@ async function postHandler(request: NextRequest) {
     } else {
       // Post immediately or route into approval workflow if required
       if (requiresApproval === true) {
-        const userId = getUserId()
         // Nudge scheduled time slightly into the future to satisfy schedule validation
         const scheduled = new Date(Date.now() + 2 * 60 * 1000)
         const year = scheduled.getFullYear()
@@ -98,7 +97,7 @@ async function postHandler(request: NextRequest) {
           mediaUrls: mediaIds,
           scheduledDate: `${year}-${month}-${day}`,
           scheduledTime: `${hours}:${minutes}`,
-          userId,
+          userId: auth.userId,
           status: 'pending_approval',
           requiresApproval: true
         })
@@ -111,7 +110,7 @@ async function postHandler(request: NextRequest) {
         }
 
         try {
-          await ensureWorkflowAssignment((scheduleResult.post as any).id, userId)
+          await ensureWorkflowAssignment((scheduleResult.post as any).id, auth.userId)
         } catch (err) {
           log.warn({ err }, 'Failed to ensure workflow assignment for immediate post')
         }
@@ -119,7 +118,7 @@ async function postHandler(request: NextRequest) {
         try {
           await recordRevision(
             (scheduleResult.post as any).id,
-            userId,
+            auth.userId,
             {
               content: (scheduleResult.post as any).content,
               media_urls: (scheduleResult.post as any).media_urls,
@@ -139,7 +138,7 @@ async function postHandler(request: NextRequest) {
           message: 'Post submitted for approval'
         })
       } else {
-        result = await postTweet(text, mediaIds)
+        result = await postTweet(text, mediaIds, auth.userId)
       }
     }
 

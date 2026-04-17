@@ -11,7 +11,7 @@ import Link from 'next/link'
 
 function AnalyticsContent() {
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="min-h-screen bg-muted/50 p-4">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -23,8 +23,8 @@ function AnalyticsContent() {
                 </Button>
               </Link>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-gray-600">Insights and performance metrics for your social media</p>
+            <h1 className="text-3xl font-bold text-foreground">Analytics</h1>
+            <p className="text-muted-foreground">Insights and performance metrics for your social media</p>
           </div>
         </div>
 
@@ -32,8 +32,8 @@ function AnalyticsContent() {
           fallback={
             <div className="text-center py-12">
               <div className="max-w-md mx-auto">
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">Access Restricted</h2>
-                <p className="text-gray-600">
+                <h2 className="text-xl font-semibold text-foreground mb-2">Access Restricted</h2>
+                <p className="text-muted-foreground">
                   You don't have permission to view analytics. Contact your administrator to request access.
                 </p>
                 <Link href="/dashboard" className="mt-4 inline-block">

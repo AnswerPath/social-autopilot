@@ -304,7 +304,7 @@ export function RichTextEditor({
         <div className="flex items-center justify-between">
           <div className="flex-1">
             {/* Progress bar */}
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+            <div className="w-full bg-muted rounded-full h-2 mb-1">
               <div 
                 className={cn(
                   "h-2 rounded-full transition-all duration-200",

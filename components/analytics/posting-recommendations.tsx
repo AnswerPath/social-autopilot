@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Clock, TrendingUp, Loader2, Calendar } from "lucide-react"
+import { Clock, TrendingUp, Calendar } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/use-auth"
 import { PostingTimeHeatmap } from "./posting-time-heatmap"
@@ -26,21 +27,16 @@ export function PostingRecommendations() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  const { user } = useAuth()
-  const userId = user?.id || 'demo-user'
+  const { user, loading: authLoading } = useAuth()
 
-  React.useEffect(() => {
-    fetchRecommendations()
-    fetchHeatmap()
-  }, [])
-
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = React.useCallback(async () => {
+    if (!user?.id) return
     try {
       setLoading(true)
       setError(null)
 
       const response = await fetch('/api/analytics/recommendations', {
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
       })
 
       const result = await response.json()
@@ -62,12 +58,13 @@ export function PostingRecommendations() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
 
-  const fetchHeatmap = async () => {
+  const fetchHeatmap = React.useCallback(async () => {
+    if (!user?.id) return
     try {
       const response = await fetch('/api/analytics/recommendations/heatmap', {
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
       })
 
       const result = await response.json()
@@ -79,7 +76,20 @@ export function PostingRecommendations() {
       console.error('Error fetching heatmap:', err)
       // Don't set error state for heatmap failures, it's optional
     }
-  }
+  }, [user?.id])
+
+  React.useEffect(() => {
+    if (authLoading) return
+    if (!user?.id) {
+      setLoading(false)
+      setError('Sign in to see posting recommendations.')
+      setRecommendations([])
+      setHeatmapData(null)
+      return
+    }
+    void fetchRecommendations()
+    void fetchHeatmap()
+  }, [authLoading, user?.id, fetchRecommendations, fetchHeatmap])
 
   const formatTime = (hour: number): string => {
     const period = hour >= 12 ? 'PM' : 'AM'
@@ -90,7 +100,7 @@ export function PostingRecommendations() {
   const getConfidenceColor = (confidence: number): string => {
     if (confidence >= 0.7) return 'bg-green-100 text-green-800'
     if (confidence >= 0.4) return 'bg-yellow-100 text-yellow-800'
-    return 'bg-gray-100 text-gray-800'
+    return 'bg-muted text-foreground'
   }
 
   const getConfidenceLabel = (confidence: number): string => {
@@ -118,6 +128,24 @@ export function PostingRecommendations() {
   }
 
   if (error) {
+    if (!user?.id) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Posting Time Recommendations</CardTitle>
+            <CardDescription>AI-powered suggestions for optimal posting times</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center text-muted-foreground py-4">
+              <p className="text-sm">{error}</p>
+              <Button asChild className="mt-4" size="sm">
+                <Link href="/auth">Sign in</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    }
     return (
       <Card>
         <CardHeader>
@@ -191,8 +219,8 @@ export function PostingRecommendations() {
                 key={`${rec.dayOfWeek}-${rec.hour}`}
                 className="flex items-start gap-4 p-4 border rounded-lg hover:bg-accent transition-colors"
               >
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-bold text-blue-600">#{index + 1}</span>
+                <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-bold text-primary">#{index + 1}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
@@ -232,7 +260,7 @@ export function PostingRecommendations() {
           <div className="mt-6 p-4 bg-muted rounded-lg">
             <p className="text-sm text-muted-foreground">
               <strong>Note:</strong> Recommendations are based on your historical post performance.
-              They improve as you collect more analytics data. Consider your audience's timezone
+              They improve as you collect more analytics data. Consider your audience&apos;s timezone
               when scheduling posts.
             </p>
           </div>

@@ -26,23 +26,12 @@ export async function validateTwitterCredentials(
   try {
     console.log('🔍 Starting Twitter credentials validation...')
     
-    // For demo credentials, return a mock successful validation
+    // Demo / placeholder keys are not valid for production X API
     if (credentials.apiKey.includes('demo_')) {
-      console.log('🎭 Using demo credentials - returning mock validation')
+      console.log('⚠️ Demo credentials are not valid for Twitter API')
       return {
-        isValid: true,
-        userInfo: {
-          id: '123456789',
-          username: 'demo_user',
-          name: 'Demo User',
-          verified: false,
-          followers_count: 1000
-        },
-        permissions: {
-          canRead: true,
-          canWrite: true,
-          canUploadMedia: true
-        }
+        isValid: false,
+        error: 'Demo API keys cannot be used. Add real Twitter API credentials in Settings.',
       }
     }
     

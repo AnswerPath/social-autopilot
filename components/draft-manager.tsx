@@ -159,10 +159,10 @@ export function DraftManagerComponent({ onSelectDraft, onClose }: DraftManagerPr
       {loading && (
         <div className="flex items-center justify-center p-8">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading drafts...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading drafts...</p>
             {!isOnline && (
-              <p className="text-gray-500 mt-2">Offline</p>
+              <p className="text-muted-foreground mt-2">Offline</p>
             )}
           </div>
         </div>
@@ -207,23 +207,23 @@ export function DraftManagerComponent({ onSelectDraft, onClose }: DraftManagerPr
                   {drafts.map((draft) => (
                     <Card
                       key={draft.id}
-                      className="p-3 hover:bg-gray-50 cursor-pointer"
+                      className="p-3 hover:bg-muted/50 cursor-pointer"
                       onClick={() => handleSelectDraft(draft)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <FileText className="h-4 w-4 text-gray-500" />
+                            <FileText className="h-4 w-4 text-muted-foreground" />
                             {draft.auto_saved && (
                               <Badge variant="secondary" className="text-xs">
                                 Auto-saved
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-900 mb-2">
+                          <p className="text-sm text-foreground mb-2">
                             {truncateContent(draft.content)}
                           </p>
-                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
                               {formatDate(draft.updated_at)}
@@ -296,21 +296,21 @@ export function DraftManagerComponent({ onSelectDraft, onClose }: DraftManagerPr
                   {localDrafts.map((localDraft) => (
                     <Card
                       key={localDraft.key}
-                      className="p-3 hover:bg-gray-50 cursor-pointer"
+                      className="p-3 hover:bg-muted/50 cursor-pointer"
                       onClick={() => handleSelectLocalDraft(localDraft)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <FileText className="h-4 w-4 text-gray-500" />
+                            <FileText className="h-4 w-4 text-muted-foreground" />
                             <Badge variant="secondary" className="text-xs">
                               Local
                             </Badge>
                           </div>
-                          <p className="text-sm text-gray-900 mb-2">
+                          <p className="text-sm text-foreground mb-2">
                             {truncateContent(localDraft.data.content || '')}
                           </p>
-                          <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
                               {formatDate(new Date(localDraft.timestamp).toISOString())}
@@ -369,9 +369,9 @@ export function DraftManagerComponent({ onSelectDraft, onClose }: DraftManagerPr
           {/* Empty State */}
           {drafts.length === 0 && localDrafts.length === 0 && (
             <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No drafts found</h3>
-              <p className="text-gray-600">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">No drafts found</h3>
+              <p className="text-muted-foreground">
                 Start writing a post to create your first draft. Drafts will be automatically saved as you type.
               </p>
             </div>

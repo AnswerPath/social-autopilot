@@ -66,112 +66,6 @@ async function getCredentialsForUser(userId: string = 'demo-user') {
   return result.credentials
 }
 
-// Create realistic mock data based on real credentials
-function createRealisticMockData(credentials: any) {
-  const isDemo = credentials.apiKey.includes('demo_')
-  const username = isDemo ? 'demo_user' : 'your_account'
-  const name = isDemo ? 'Demo User' : 'Your Twitter Account'
-  
-  return {
-    user: {
-      id: isDemo ? '123456789' : '987654321',
-      username: username,
-      name: name,
-      profile_image_url: '/placeholder.svg?height=40&width=40',
-      public_metrics: {
-        followers_count: isDemo ? 1000 : 2500,
-        following_count: isDemo ? 500 : 800,
-        tweet_count: isDemo ? 250 : 450
-      }
-    },
-    tweets: [
-      {
-        id: '1',
-        text: isDemo 
-          ? 'This is a demo tweet to show how the Social Autopilot dashboard works! 🚀 #demo'
-          : 'Just set up Social Autopilot for my Twitter automation! Excited to streamline my social media workflow. 🚀 #productivity',
-        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        public_metrics: { 
-          retweet_count: isDemo ? 5 : 12, 
-          like_count: isDemo ? 12 : 28, 
-          reply_count: isDemo ? 3 : 7, 
-          impression_count: isDemo ? 150 : 380 
-        },
-        author_id: isDemo ? '123456789' : '987654321'
-      },
-      {
-        id: '2',
-        text: isDemo 
-          ? 'Another demo tweet showing analytics and engagement tracking features.'
-          : 'The analytics dashboard in Social Autopilot is incredibly detailed. Love seeing the engagement metrics in real-time! 📊',
-        created_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-        public_metrics: { 
-          retweet_count: isDemo ? 2 : 8, 
-          like_count: isDemo ? 8 : 19, 
-          reply_count: isDemo ? 1 : 4, 
-          impression_count: isDemo ? 95 : 245 
-        },
-        author_id: isDemo ? '123456789' : '987654321'
-      },
-      {
-        id: '3',
-        text: isDemo 
-          ? 'Testing the scheduling feature - this should appear at the perfect time! ⏰'
-          : 'Scheduled posting is a game-changer. Set it and forget it! Thanks @SocialAutopilot for making this so easy. ⏰',
-        created_at: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-        public_metrics: { 
-          retweet_count: isDemo ? 3 : 15, 
-          like_count: isDemo ? 15 : 42, 
-          reply_count: isDemo ? 2 : 6, 
-          impression_count: isDemo ? 120 : 520 
-        },
-        author_id: isDemo ? '123456789' : '987654321'
-      }
-    ],
-    mentions: [
-      {
-        id: '1',
-        text: isDemo 
-          ? 'Hey @demo_user, love the new features! Great work on the automation.'
-          : `Hey @${username}, your recent tweets about social media automation are spot on! 💯`,
-        created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        author_id: '987654321',
-        username: 'happy_customer',
-        name: 'Happy Customer',
-        profile_image_url: '/placeholder.svg?height=40&width=40',
-        public_metrics: { followers_count: 250, following_count: 180 },
-        sentiment: 'positive' as const
-      },
-      {
-        id: '2',
-        text: isDemo 
-          ? '@demo_user having some issues with the login process, can you help?'
-          : `@${username} quick question about your automation setup - which tools do you recommend for beginners?`,
-        created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        author_id: '456789123',
-        username: 'curious_user',
-        name: 'Curious User',
-        profile_image_url: '/placeholder.svg?height=40&width=40',
-        public_metrics: { followers_count: 150, following_count: 200 },
-        sentiment: 'neutral' as const
-      },
-      {
-        id: '3',
-        text: isDemo 
-          ? '@demo_user This automation tool looks amazing! When will it be available?'
-          : `@${username} Just saw your Social Autopilot setup - this is exactly what I've been looking for! 🔥`,
-        created_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-        author_id: '789123456',
-        username: 'excited_follower',
-        name: 'Excited Follower',
-        profile_image_url: '/placeholder.svg?height=40&width=40',
-        public_metrics: { followers_count: 500, following_count: 300 },
-        sentiment: 'positive' as const
-      }
-    ]
-  }
-}
-
 // Post a tweet
 export async function postTweet(
   text: string, 
@@ -237,31 +131,104 @@ export async function getUserTweets(
 ): Promise<{ success: boolean; data?: TwitterPost[]; error?: string }> {
   try {
     const credentials = await getCredentialsForUser(userId)
-    
+
     console.log('🔍 Getting user tweets for:', userId)
-    console.log('🔑 Credentials type:', credentials.apiKey.includes('demo_') ? 'demo' : 'real')
-    
-    // In edge runtime, we'll use enhanced mock data that reflects the credential type
-    console.log('📊 Edge Runtime: Using enhanced mock data (real API calls require Node.js environment)')
-    
-    const mockData = createRealisticMockData(credentials)
-    return {
-      success: true,
-      data: mockData.tweets,
-      note: credentials.apiKey.includes('demo_') 
-        ? 'Using demo data' 
-        : 'Using realistic mock data based on your credentials. Deploy to Node.js for real Twitter API calls.'
+
+    if (credentials.apiKey.includes('demo_')) {
+      return {
+        success: false,
+        data: [],
+        error: 'Configure real Twitter credentials to load tweets.',
+      }
     }
-    
+
+    if (credentials.bearerToken && !credentials.bearerToken.includes('demo_')) {
+      try {
+        const meResp = await fetch('https://api.twitter.com/2/users/me?user.fields=public_metrics', {
+          headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+        })
+        if (!meResp.ok) {
+          const body = await meResp.text().catch(() => '')
+          console.warn('⚠️ Twitter /users/me failed:', meResp.status, body)
+          const error =
+            meResp.status === 401 || meResp.status === 403
+              ? 'Invalid or expired Twitter credentials.'
+              : meResp.status === 429
+                ? 'Twitter rate limit exceeded. Try again later.'
+                : meResp.status >= 500
+                  ? 'Twitter service error. Try again later.'
+                  : `Twitter request failed (${meResp.status}).`
+          return { success: false, data: [], error }
+        }
+
+        const meData = await meResp.json()
+        const params = new URLSearchParams({
+          'tweet.fields': 'created_at,public_metrics',
+          max_results: String(Math.min(100, Math.max(5, maxResults))),
+        })
+        const tlResp = await fetch(
+          `https://api.twitter.com/2/users/${meData.data.id}/tweets?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${credentials.bearerToken}` } }
+        )
+        if (!tlResp.ok) {
+          const body = await tlResp.text().catch(() => '')
+          console.warn('⚠️ Twitter timeline fetch failed:', tlResp.status, body)
+          const error =
+            tlResp.status === 401 || tlResp.status === 403
+              ? 'Invalid or expired Twitter credentials.'
+              : tlResp.status === 429
+                ? 'Twitter rate limit exceeded. Try again later.'
+                : tlResp.status >= 500
+                  ? 'Twitter service error. Try again later.'
+                  : `Twitter timeline fetch failed (${tlResp.status}).`
+          return { success: false, data: [], error }
+        }
+
+        const tl = (await tlResp.json()) as {
+          data?: Array<{
+            id: string
+            text: string
+            created_at?: string
+            author_id?: string
+            public_metrics?: TwitterPost['public_metrics']
+          }>
+        }
+        const items: TwitterPost[] = (tl.data || []).map((tweet) => ({
+          id: tweet.id,
+          text: tweet.text,
+          created_at: tweet.created_at || new Date().toISOString(),
+          public_metrics: tweet.public_metrics || {
+            retweet_count: 0,
+            like_count: 0,
+            reply_count: 0,
+            impression_count: 0,
+          },
+          author_id: tweet.author_id || meData.data.id,
+        }))
+        return { success: true, data: items.slice(0, maxResults) }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to fetch tweets'
+        console.warn('⚠️ Bearer tweet fetch failed:', msg)
+        return {
+          success: false,
+          data: [],
+          error: msg,
+        }
+      }
+    }
+
+    return {
+      success: false,
+      data: [],
+      error:
+        'Tweet timeline is not available in this environment. Use the app dashboard or a Node.js API route.',
+    }
   } catch (error: any) {
     console.error('❌ Error fetching tweets:', error)
-    
-    // Return basic mock data as fallback
-    const mockData = createRealisticMockData({ apiKey: 'demo_fallback' })
     return {
-      success: true,
-      data: mockData.tweets,
-      error: 'Using fallback data due to error: ' + error.message
+      success: false,
+      data: [],
+      error: error.message || 'Failed to fetch tweets',
     }
   }
 }
@@ -273,30 +240,30 @@ export async function getMentions(
 ): Promise<{ success: boolean; data?: TwitterMention[]; error?: string }> {
   try {
     const credentials = await getCredentialsForUser(userId)
-    
+
     console.log('🔍 Getting mentions for:', userId)
-    console.log('🔑 Credentials type:', credentials.apiKey.includes('demo_') ? 'demo' : 'real')
-    
-    // In edge runtime, use enhanced mock data
-    console.log('📊 Edge Runtime: Using enhanced mock data (real mentions require Node.js environment)')
-    
-    const mockData = createRealisticMockData(credentials)
-    return {
-      success: true,
-      data: mockData.mentions,
-      note: credentials.apiKey.includes('demo_') 
-        ? 'Using demo data' 
-        : 'Using realistic mock data. Real mentions require OAuth 1.0a (Node.js environment).'
+
+    if (credentials.apiKey.includes('demo_')) {
+      return {
+        success: false,
+        data: [],
+        error: 'Configure real Twitter credentials to load mentions.',
+      }
     }
-    
+
+    // Mention timeline requires OAuth 1.0a signing (Node.js routes); no fake data in edge
+    return {
+      success: false,
+      data: [],
+      error:
+        'Mentions are loaded via server API routes with OAuth. No data available from this context.',
+    }
   } catch (error: any) {
     console.error('❌ Error fetching mentions:', error)
-    
-    const mockData = createRealisticMockData({ apiKey: 'demo_fallback' })
     return {
-      success: true,
-      data: mockData.mentions,
-      error: 'Using fallback data due to error: ' + error.message
+      success: false,
+      data: [],
+      error: error.message || 'Failed to fetch mentions',
     }
   }
 }
@@ -343,39 +310,37 @@ export async function getUserProfile(
             note: 'Real Twitter profile data loaded successfully!'
           }
         } else {
-          const errorData = await response.json()
+          const errorData = await response.json().catch(() => ({}))
           console.warn('⚠️ Twitter API error:', response.status, errorData)
-          
-          if (response.status === 401) {
-            console.log('🔒 Bearer token authentication failed, using mock data')
-          } else if (response.status === 429) {
-            console.log('⏱️ Rate limit exceeded, using mock data')
-          }
+          const error =
+            response.status === 401 || response.status === 403
+              ? 'Bearer token authentication failed.'
+              : response.status === 429
+                ? 'Twitter rate limit exceeded. Try again later.'
+                : response.status >= 500
+                  ? 'Twitter service error. Try again later.'
+                  : `Twitter profile request failed (${response.status}).`
+          return { success: false, error }
         }
       } catch (apiError: any) {
-        console.warn('⚠️ Twitter API call failed:', apiError.message)
+        const msg = apiError?.message || 'Twitter API call failed'
+        console.warn('⚠️ Twitter API call failed:', msg)
+        return { success: false, error: msg }
       }
     }
     
-    // Fallback to enhanced mock data
-    console.log('📊 Using enhanced mock data based on credential type')
-    const mockData = createRealisticMockData(credentials)
+    console.log('📊 Profile unavailable without successful Twitter API response')
     return {
-      success: true,
-      data: mockData.user,
-      note: credentials.apiKey.includes('demo_') 
-        ? 'Using demo profile data' 
-        : 'Using mock data. Real API call failed or not available in edge runtime.'
+      success: false,
+      error: credentials.apiKey.includes('demo_')
+        ? 'Demo credentials cannot load a profile. Add real Twitter API credentials in Settings.'
+        : 'Could not load profile. Check credentials or use a Node.js API route for full OAuth.',
     }
-    
   } catch (error: any) {
     console.error('❌ Error fetching user profile:', error)
-    
-    const mockData = createRealisticMockData({ apiKey: 'demo_fallback' })
     return {
-      success: true,
-      data: mockData.user,
-      error: 'Using fallback data due to error: ' + error.message
+      success: false,
+      error: error.message || 'Failed to fetch user profile',
     }
   }
 }

@@ -559,7 +559,7 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
             <div className="space-y-4">
               <div className="text-center">
                 <h3 className="text-lg font-semibold mb-2">Post Preview</h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   How your post will appear on X
                 </p>
               </div>
@@ -594,7 +594,7 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
                 
                 {/* Display already uploaded media when editing */}
                 {editingPost && uploadedMediaIds && uploadedMediaIds.length > 0 && (
-                  <div className="mb-3 p-3 bg-gray-50 rounded-lg border">
+                  <div className="mb-3 p-3 bg-muted/50 rounded-lg border">
                     <p className="text-sm font-medium mb-2">Already uploaded media:</p>
                     <div className="flex flex-wrap gap-2">
                       {uploadedMediaIds.map((mediaId, index) => (
@@ -663,7 +663,7 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0">
                 <div className="space-y-1">
                   <Label>Require Approval</Label>
-                  <p className="text-sm text-gray-600">Send to manager for review before posting</p>
+                  <p className="text-sm text-muted-foreground">Send to manager for review before posting</p>
                 </div>
                 <Switch
                   checked={requiresApproval}
@@ -679,7 +679,7 @@ export function PostComposer({ onClose, initialDraft, editingPost }: PostCompose
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <Label className="text-sm">Current Status</Label>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {formatApprovalStatus(editingPost.status)}
                   </p>
                 </div>

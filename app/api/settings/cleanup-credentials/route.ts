@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanupInvalidCredentials } from '@/lib/database-storage'
-
-function getUserId(request: NextRequest): string {
-  return 'demo-user'
-}
+import { requireSessionUserId } from '@/lib/require-session-user'
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = getUserId(request)
+    const auth = await requireSessionUserId(request)
+    if (!auth.ok) return auth.response
+    const userId = auth.userId
     const result = await cleanupInvalidCredentials(userId)
     
     if (result.success) {
