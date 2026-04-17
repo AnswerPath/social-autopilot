@@ -219,8 +219,8 @@ export function PostingRecommendations() {
                 key={`${rec.dayOfWeek}-${rec.hour}`}
                 className="flex items-start gap-4 p-4 border rounded-lg hover:bg-accent transition-colors"
               >
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-bold text-blue-600">#{index + 1}</span>
+                <div className="flex-shrink-0 w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-bold text-primary">#{index + 1}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">

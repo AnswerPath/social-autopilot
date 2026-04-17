@@ -164,7 +164,7 @@ export async function getUserTweets(
         const meData = await meResp.json()
         const params = new URLSearchParams({
           'tweet.fields': 'created_at,public_metrics',
-          max_results: String(Math.min(100, Math.max(1, maxResults))),
+          max_results: String(Math.min(100, Math.max(5, maxResults))),
         })
         const tlResp = await fetch(
           `https://api.twitter.com/2/users/${meData.data.id}/tweets?${params.toString()}`,
@@ -196,7 +196,7 @@ export async function getUserTweets(
         const items: TwitterPost[] = (tl.data || []).map((tweet) => ({
           id: tweet.id,
           text: tweet.text,
-          created_at: tweet.created_at,
+          created_at: tweet.created_at || new Date().toISOString(),
           public_metrics: tweet.public_metrics || {
             retweet_count: 0,
             like_count: 0,

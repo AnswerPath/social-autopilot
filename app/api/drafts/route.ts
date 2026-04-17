@@ -53,7 +53,10 @@ export async function POST(request: NextRequest) {
     const { content, mediaUrls, autoSave = false } = body
     
     if (!content && !mediaUrls?.length) {
-      return NextResponse.json({ error: 'Content or media is required' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Content or media is required' },
+        { status: 400 }
+      )
     }
 
     const { data, error } = await supabaseAdmin
