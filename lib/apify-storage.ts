@@ -1,5 +1,5 @@
 import { encrypt, decrypt } from './encryption';
-import { supabaseAdmin } from './supabase';
+import { getSupabaseServiceRoleJwtRole, supabaseAdmin } from './supabase';
 import { ApifyCredentials } from './apify-service';
 
 export interface StoredApifyCredentials extends ApifyCredentials {
@@ -51,6 +51,40 @@ export async function storeApifyCredentials(
       (encryptedData as any).x_username = existing.x_username;
     }
 
+    // #region agent log
+    {
+      const jwtRole = getSupabaseServiceRoleJwtRole()
+      let hasClientSession = false
+      try {
+        const { data: sess } = await supabaseAdmin.auth.getSession()
+        hasClientSession = !!sess?.session
+      } catch {
+        hasClientSession = false
+      }
+      const userIdLooksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        userId
+      )
+      fetch('http://127.0.0.1:7242/ingest/02db0ba7-e7e9-4c3a-b6c8-00220ae7f134', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '62a58b' },
+        body: JSON.stringify({
+          sessionId: '62a58b',
+          runId: 'pre-fix',
+          hypothesisId: 'H1_H2_H3',
+          location: 'lib/apify-storage.ts:storeApifyCredentials:preUpsert',
+          message: 'context before user_credentials upsert (apify)',
+          data: {
+            jwtRole: jwtRole ?? 'missing_or_undecodable',
+            hasClientSession,
+            userIdLen: userId.length,
+            userIdLooksUuid,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+    }
+    // #endregion
+
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
       .upsert(encryptedData, {
@@ -60,6 +94,28 @@ export async function storeApifyCredentials(
       .single();
 
     if (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/02db0ba7-e7e9-4c3a-b6c8-00220ae7f134', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '62a58b' },
+        body: JSON.stringify({
+          sessionId: '62a58b',
+          runId: 'pre-fix',
+          hypothesisId: 'H4_H5',
+          location: 'lib/apify-storage.ts:storeApifyCredentials:upsertError',
+          message: 'user_credentials upsert failed (apify)',
+          data: {
+            code: error.code,
+            hint: error.hint,
+            rlsLikely:
+              (error.message || '').toLowerCase().includes('row-level security') ||
+              (error.message || '').toLowerCase().includes('rls'),
+            messageSnippet: (error.message || '').slice(0, 220),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion
       console.error('❌ Failed to store Apify credentials:', error);
       return {
         success: false,
