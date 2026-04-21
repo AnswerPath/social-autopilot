@@ -1,3 +1,5 @@
+// Posting today uses OAuth 1.0a user context via twitter-api-v2. If X consoles drop OAuth 1.0a for your tier,
+// add OAuth 2.0 user-context (PKCE) with tweet.write — keep behind an explicit settings mode when implemented.
 import { TwitterApi } from 'twitter-api-v2';
 import { ApiErrorHandler, ErrorType, CircuitBreaker, CircuitBreakerRegistry } from './error-handling';
 import { createLogger } from '@/lib/logger';
@@ -10,6 +12,8 @@ export interface XApiCredentials {
   accessToken: string;
   accessTokenSecret: string;
   userId: string;
+  /** App-only Bearer from the developer portal; optional read/validation — not used for posting (user context required). */
+  bearerToken?: string;
 }
 
 export interface XPostResult {

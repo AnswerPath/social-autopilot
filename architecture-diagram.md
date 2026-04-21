@@ -46,7 +46,8 @@ graph TB
         end
         
         subgraph "Settings & Management"
-            SET_CRED["/api/settings/twitter-credentials"]
+            SET_XAPI["/api/settings/x-api-credentials"]
+            SET_CRED["/api/settings/twitter-credentials<br/>(deprecated shim → x-api)"]
             SET_CONN["/api/settings/test-connection"]
             SET_HEALTH["/api/settings/database-health"]
             SET_CLEAN["/api/settings/cleanup-credentials"]

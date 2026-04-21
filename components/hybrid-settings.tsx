@@ -38,6 +38,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   const [xApiKeySecret, setXApiKeySecret] = useState('');
   const [xAccessToken, setXAccessToken] = useState('');
   const [xAccessTokenSecret, setXAccessTokenSecret] = useState('');
+  const [xBearerToken, setXBearerToken] = useState('');
   const [hasXApiCredentials, setHasXApiCredentials] = useState(false);
   const [xApiMessage, setXApiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isXApiTesting, setIsXApiTesting] = useState(false);
@@ -248,6 +249,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
             apiKeySecret: xApiKeySecret.trim(),
             accessToken: xAccessToken.trim(),
             accessTokenSecret: xAccessTokenSecret.trim(),
+            ...(xBearerToken.trim() ? { bearerToken: xBearerToken.trim() } : {}),
           }),
         });
       } else if (hasXApiCredentials) {
@@ -306,6 +308,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
           apiKeySecret: xApiKeySecret.trim(),
           accessToken: xAccessToken.trim(),
           accessTokenSecret: xAccessTokenSecret.trim(),
+          ...(xBearerToken.trim() ? { bearerToken: xBearerToken.trim() } : {}),
         }),
       });
 
@@ -318,6 +321,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
         setXApiKeySecret('');
         setXAccessToken('');
         setXAccessTokenSecret('');
+        setXBearerToken('');
         setXApiTestResult(null);
       } else {
         setXApiMessage({ type: 'error', text: data.error });
@@ -508,7 +512,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
             X API Integration (Posting)
           </CardTitle>
           <CardDescription>
-            Configure your X API credentials for posting content and managing your X account.
+            Use <strong>OAuth 1.0a user context</strong> from the X developer portal: API Key, API Key Secret, Access Token, and Access Token Secret. These are required to post on behalf of your account. An optional <strong>Bearer token</strong> (app-only) can help with some read checks; it does not replace the access token pair for posting.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -579,6 +583,17 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
                 placeholder="Enter your X access token secret"
                 value={xAccessTokenSecret}
                 onChange={(e) => setXAccessTokenSecret(e.target.value)}
+                disabled={isXApiLoading}
+              />
+            </div>
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="x-bearer-token">Bearer token (optional)</Label>
+              <Input
+                id="x-bearer-token"
+                type="password"
+                placeholder="App-only Bearer token from the developer portal, if you use it"
+                value={xBearerToken}
+                onChange={(e) => setXBearerToken(e.target.value)}
                 disabled={isXApiLoading}
               />
             </div>

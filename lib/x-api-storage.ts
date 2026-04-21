@@ -140,6 +140,10 @@ export async function storeXApiCredentials(
     const encryptedApiKeySecret = await encrypt(credentials.apiKeySecret);
     const encryptedAccessToken = await encrypt(credentials.accessToken);
     const encryptedAccessTokenSecret = await encrypt(credentials.accessTokenSecret);
+    const encryptedBearer =
+      credentials.bearerToken?.trim()
+        ? await encrypt(credentials.bearerToken.trim())
+        : null;
 
     const encryptedData = {
       user_id: userId,
@@ -148,7 +152,7 @@ export async function storeXApiCredentials(
       encrypted_api_secret: encryptedApiKeySecret,
       encrypted_access_token: encryptedAccessToken,
       encrypted_access_secret: encryptedAccessTokenSecret,
-      encrypted_bearer_token: null, // X API doesn't use bearer token
+      encrypted_bearer_token: encryptedBearer,
       encryption_version: 1,
       is_valid: false, // Will be validated separately
     };
@@ -296,12 +300,22 @@ export async function getXApiCredentials(
       const decryptedAccessToken = await decrypt(data.encrypted_access_token);
       const decryptedAccessTokenSecret = await decrypt(data.encrypted_access_secret);
 
+      let bearerToken: string | undefined;
+      if (data.encrypted_bearer_token) {
+        try {
+          bearerToken = await decrypt(data.encrypted_bearer_token);
+        } catch {
+          bearerToken = undefined;
+        }
+      }
+
       const credentials: XApiCredentials = {
         apiKey: decryptedApiKey,
         apiKeySecret: decryptedApiKeySecret,
         accessToken: decryptedAccessToken,
         accessTokenSecret: decryptedAccessTokenSecret,
         userId: userId,
+        ...(bearerToken ? { bearerToken } : {}),
       };
 
       console.log('✅ X API credentials retrieved successfully');
@@ -376,17 +390,28 @@ export async function updateXApiCredentials(
     const encryptedApiKeySecret = await encrypt(credentials.apiKeySecret);
     const encryptedAccessToken = await encrypt(credentials.accessToken);
     const encryptedAccessTokenSecret = await encrypt(credentials.accessTokenSecret);
+    const encryptedBearerUpdate =
+      credentials.bearerToken !== undefined
+        ? credentials.bearerToken.trim()
+          ? await encrypt(credentials.bearerToken.trim())
+          : null
+        : undefined;
+
+    const updatePayload: Record<string, unknown> = {
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: encryptedApiKeySecret,
+      encrypted_access_token: encryptedAccessToken,
+      encrypted_access_secret: encryptedAccessTokenSecret,
+      encryption_version: 1,
+      is_valid: false, // Will be validated separately
+    };
+    if (encryptedBearerUpdate !== undefined) {
+      updatePayload.encrypted_bearer_token = encryptedBearerUpdate;
+    }
 
     const { error } = await supabaseAdmin
       .from('user_credentials')
-      .update({
-        encrypted_api_key: encryptedApiKey,
-        encrypted_api_secret: encryptedApiKeySecret,
-        encrypted_access_token: encryptedAccessToken,
-        encrypted_access_secret: encryptedAccessTokenSecret,
-        encryption_version: 1,
-        is_valid: false, // Will be validated separately
-      })
+      .update(updatePayload)
       .eq('user_id', userId)
       .eq('credential_type', 'x-api');
 

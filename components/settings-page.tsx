@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TwitterApiSettings } from "./twitter-api-settings"
 import { GeneralSettings } from "./general-settings"
 import { NotificationSettings } from "./notification-settings"
 import { SecuritySettings } from "./security-settings"
@@ -11,7 +10,7 @@ import { HybridSettings } from "./hybrid-settings"
 import { TokenManagement } from "./token-management"
 import { ErrorMonitoring } from "./error-monitoring"
 import { ComplianceManagement } from "./compliance-management"
-import { Settings, Twitter, Bell, Shield, User, Bot } from 'lucide-react'
+import { Settings, Bell, Shield, User, Bot } from 'lucide-react'
 import { useAuth } from "@/hooks/use-auth"
 
 export function SettingsPage() {
@@ -54,14 +53,10 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue="integrations" className="animate-fade-up space-y-6 delay-stagger-2">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="integrations" className="flex items-center gap-2">
             <Bot className="h-4 w-4" />
             Integrations
-          </TabsTrigger>
-          <TabsTrigger value="twitter" className="flex items-center gap-2">
-            <Twitter className="h-4 w-4" />
-            Twitter API
           </TabsTrigger>
           <TabsTrigger value="general" className="flex items-center gap-2">
             <User className="h-4 w-4" />
@@ -79,10 +74,6 @@ export function SettingsPage() {
 
         <TabsContent value="integrations">
           <HybridSettings userId={userId} />
-        </TabsContent>
-
-        <TabsContent value="twitter">
-          <TwitterApiSettings />
         </TabsContent>
 
         <TabsContent value="general">

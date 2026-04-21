@@ -48,7 +48,7 @@ Use the integrated settings page to configure both services:
 
 1. Go to Settings → Integrations
 2. Configure your Apify API key
-3. Configure your X API credentials (API Key, API Key Secret, Access Token, Access Token Secret)
+3. Configure your X API credentials in the same screen (OAuth 1.0a: API Key, API Key Secret, Access Token, Access Token Secret; optional app-only Bearer token for reads)
 4. Test both connections
 
 ### 3. Environment Variables (Optional)

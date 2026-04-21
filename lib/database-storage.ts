@@ -2,6 +2,7 @@
 
 import { getSupabaseServiceRoleJwtRole, supabaseAdmin, DatabaseCredential } from './supabase'
 import { encrypt, decrypt, testEncryption } from './encryption'
+import { deleteXApiCredentials, getXApiCredentials } from './x-api-storage'
 
 export interface TwitterCredentials {
   apiKey: string
@@ -848,9 +849,19 @@ export async function cleanupInvalidCredentials(userId: string): Promise<{ succe
     // Try to get credentials - if decryption fails, delete them
     const result = await getTwitterCredentials(userId)
     if (!result.success && result.error?.includes('decrypt')) {
-      console.log('🧹 Cleaning up invalid credentials for user:', userId)
+      console.log('🧹 Cleaning up invalid Twitter credentials for user:', userId)
       await deleteTwitterCredentials(userId)
-      return { success: true }
+    }
+
+    const xResult = await getXApiCredentials(userId)
+    if (
+      !xResult.success &&
+      (xResult.error?.includes('decrypt') ||
+        xResult.error?.includes('corrupted') ||
+        xResult.error?.includes('Invalid encrypted'))
+    ) {
+      console.log('🧹 Cleaning up invalid X API credentials for user:', userId)
+      await deleteXApiCredentials(userId)
     }
 
     return { success: true }

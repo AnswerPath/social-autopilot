@@ -545,14 +545,14 @@ Configure how long to keep audit logs:
 
 ### Managing Integrations
 
-**Twitter/X API Configuration**:
-1. Go to **Settings** → **Integrations** → **Twitter**
-2. Enter API credentials:
-   - API Key
-   - API Secret
-   - Bearer Token
-3. Test connection
-4. Save settings
+**X (Twitter) API configuration**:
+1. Go to **Settings** → **Integrations**
+2. Under **X API Integration**, enter **OAuth 1.0a user context** credentials from the X developer portal:
+   - API Key and API Key Secret (consumer key / secret)
+   - Access Token and Access Token Secret (user context; required for posting)
+3. Optionally add the **app-only Bearer token** for some read paths; it does not replace the access token pair for writes.
+4. Test connection, then save.
+5. The legacy **Settings → Twitter API** tab was removed; `/api/settings/twitter-credentials` remains only as a compatibility shim and stores into the same **X API** credential row.
 
 **Other Integrations**:
 - Apify (for web scraping)

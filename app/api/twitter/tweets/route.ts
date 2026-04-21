@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTwitterCredentials } from '@/lib/database-storage'
+import { getUnifiedCredentials } from '@/lib/unified-credentials'
 import { TwitterApi } from 'twitter-api-v2'
 import { getCurrentUser } from '@/lib/auth-utils'
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const result = await getTwitterCredentials(user.id)
+    const result = await getUnifiedCredentials(user.id)
 
     if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         mock: false,
         tweets: [] as unknown[],
         requiresSetup: true,
-        error: 'Twitter credentials not configured',
+        error: 'X API credentials not configured',
       })
     }
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const cache = (globalThis as any).__tweets_cache as { [k: string]: { ts: number; data: any[] } } | undefined
 
     // Prefer Bearer token
-    if (credentials.bearerToken && !credentials.bearerToken.includes('demo_')) {
+    if (credentials.bearerToken?.trim() && !credentials.bearerToken.includes('demo_')) {
       try {
         const meResp = await fetch('https://api.twitter.com/2/users/me?user.fields=public_metrics', {
           headers: { Authorization: `Bearer ${credentials.bearerToken}` },
@@ -96,9 +96,9 @@ export async function GET(request: NextRequest) {
     try {
       const client = new TwitterApi({
         appKey: credentials.apiKey,
-        appSecret: credentials.apiSecret,
+        appSecret: credentials.apiKeySecret,
         accessToken: credentials.accessToken,
-        accessSecret: credentials.accessSecret,
+        accessSecret: credentials.accessTokenSecret,
       })
 
       const me = await client.v2.me()

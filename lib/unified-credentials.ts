@@ -2,9 +2,12 @@
  * Unified credential management - consolidates Twitter and X API credentials
  * This module provides a single interface for credential management, using X API credentials
  * and automatically migrating from legacy Twitter credentials when needed.
+ *
+ * Posting requires OAuth 1.0a user context (four secrets) or OAuth 2.0 user tokens (future).
  */
 
-import { getXApiCredentials, storeXApiCredentials, XApiCredentials } from './x-api-storage';
+import { getXApiCredentials, storeXApiCredentials } from './x-api-storage';
+import type { XApiCredentials } from './x-api-service';
 import { getTwitterCredentials, storeTwitterCredentials, deleteTwitterCredentials, TwitterCredentials } from './database-storage';
 
 export interface UnifiedCredentials extends XApiCredentials {}
@@ -52,13 +55,15 @@ export async function getUnifiedCredentials(
         };
       }
 
-      // Migrate to X API credentials
+      // Migrate to X API credentials (preserve optional app Bearer for read paths)
+      const bearer = twitterResult.credentials.bearerToken?.trim();
       const xApiCredentials: XApiCredentials = {
         apiKey,
         apiKeySecret: apiSecret,
         accessToken,
         accessTokenSecret: accessSecret,
-        userId
+        userId,
+        ...(bearer ? { bearerToken: bearer } : {}),
       };
 
       const storeResult = await storeXApiCredentials(userId, xApiCredentials);

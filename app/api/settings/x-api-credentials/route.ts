@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  storeXApiCredentials,
   getXApiCredentials,
   deleteXApiCredentials,
   updateXApiCredentials,
   cleanupDemoMentions,
 } from '@/lib/x-api-storage';
+import { storeUnifiedCredentials } from '@/lib/unified-credentials';
+import { deleteTwitterCredentials } from '@/lib/database-storage';
 import { validateXApiCredentials } from '@/lib/x-api-storage';
 import { XApiCredentials } from '@/lib/x-api-service';
 import { activeMonitors } from '@/app/api/mentions/stream/route';
@@ -23,9 +24,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
+    const { apiKey, apiKeySecret, accessToken, accessTokenSecret, bearerToken } = body;
 
-    if (!apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+    const ak = typeof apiKey === 'string' ? apiKey.trim() : '';
+    const aks = typeof apiKeySecret === 'string' ? apiKeySecret.trim() : '';
+    const at = typeof accessToken === 'string' ? accessToken.trim() : '';
+    const ats = typeof accessTokenSecret === 'string' ? accessTokenSecret.trim() : '';
+    const bt =
+      typeof bearerToken === 'string' && bearerToken.trim() ? bearerToken.trim() : undefined;
+
+    if (!ak || !aks || !at || !ats) {
       return NextResponse.json(
         { error: 'Missing required fields: apiKey, apiKeySecret, accessToken, accessTokenSecret' },
         { status: 400 }
@@ -34,20 +42,13 @@ export async function POST(request: NextRequest) {
 
     const userId = user.id;
 
-    // Validate the API key format (basic validation)
-    if (typeof apiKey !== 'string' || apiKey.length < 10) {
-      return NextResponse.json(
-        { error: 'Invalid API key format' },
-        { status: 400 }
-      );
-    }
-
     const credentials: XApiCredentials = {
-      apiKey,
-      apiKeySecret,
-      accessToken,
-      accessTokenSecret,
+      apiKey: ak,
+      apiKeySecret: aks,
+      accessToken: at,
+      accessTokenSecret: ats,
       userId,
+      ...(bt ? { bearerToken: bt } : {}),
     };
 
     // Validate credentials with X API
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store the validated credentials
-    const storeResult = await storeXApiCredentials(userId, credentials);
+    // Store the validated credentials (clears legacy `twitter` row if present)
+    const storeResult = await storeUnifiedCredentials(userId, credentials);
     if (!storeResult.success) {
       return NextResponse.json(
         { error: storeResult.error },
@@ -154,9 +155,17 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
+    const { apiKey, apiKeySecret, accessToken, accessTokenSecret, bearerToken } = body;
 
-    if (!apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+    const ak = typeof apiKey === 'string' ? apiKey.trim() : '';
+    const aks = typeof apiKeySecret === 'string' ? apiKeySecret.trim() : '';
+    const at = typeof accessToken === 'string' ? accessToken.trim() : '';
+    const ats = typeof accessTokenSecret === 'string' ? accessTokenSecret.trim() : '';
+    const bearerKeyPresent = Object.prototype.hasOwnProperty.call(body, 'bearerToken');
+    const bearerVal =
+      typeof bearerToken === 'string' ? bearerToken.trim() : bearerKeyPresent ? '' : undefined;
+
+    if (!ak || !aks || !at || !ats) {
       return NextResponse.json(
         { error: 'Missing required fields: apiKey, apiKeySecret, accessToken, accessTokenSecret' },
         { status: 400 }
@@ -166,11 +175,12 @@ export async function PUT(request: NextRequest) {
     const userId = user.id;
 
     const credentials: XApiCredentials = {
-      apiKey,
-      apiKeySecret,
-      accessToken,
-      accessTokenSecret,
+      apiKey: ak,
+      apiKeySecret: aks,
+      accessToken: at,
+      accessTokenSecret: ats,
       userId,
+      ...(bearerKeyPresent ? { bearerToken: bearerVal || '' } : {}),
     };
 
     // Validate the new credentials
@@ -181,6 +191,8 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    await deleteTwitterCredentials(userId);
 
     // Update the credentials
     const updateResult = await updateXApiCredentials(userId, credentials);
@@ -240,6 +252,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     const userId = user.id;
+
+    await deleteTwitterCredentials(userId);
 
     const result = await deleteXApiCredentials(userId);
     if (!result.success) {
