@@ -1,47 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { TwitterApi } from 'twitter-api-v2'
+import { getCurrentUser } from '@/lib/auth-utils'
+import { completeXApiOAuth, getXApiConsumerKeysForOAuth } from '@/lib/x-api-storage'
+import {
+  getXOAuthAppBaseUrl,
+  X_OAUTH_COOKIE_NAMES,
+  xOAuthCookieOptions,
+} from '@/lib/x-oauth-config'
+
+function clearOAuthCookies(response: NextResponse) {
+  const cleared = { ...xOAuthCookieOptions(0), maxAge: 0 }
+  response.cookies.set(X_OAUTH_COOKIE_NAMES.tokenSecret, '', cleared)
+  response.cookies.set(X_OAUTH_COOKIE_NAMES.token, '', cleared)
+  response.cookies.set(X_OAUTH_COOKIE_NAMES.returnTo, '', cleared)
+}
 
 export async function GET(request: NextRequest) {
+  const base = getXOAuthAppBaseUrl()
+
   try {
+    const user = await getCurrentUser(request)
+    if (!user) {
+      const r = NextResponse.redirect(`${base}/auth/error?error=session_required`)
+      clearOAuthCookies(r)
+      return r
+    }
+
     const { searchParams } = new URL(request.url)
     const oauth_token = searchParams.get('oauth_token')
     const oauth_verifier = searchParams.get('oauth_verifier')
-    const oauth_token_secret = request.cookies.get('oauth_token_secret')?.value
+    const denied = searchParams.get('denied')
 
-    if (!oauth_token || !oauth_verifier || !oauth_token_secret) {
-      return NextResponse.redirect('/auth/error?error=missing_oauth_params')
+    if (denied) {
+      const r = NextResponse.redirect(`${base}/account-settings?x_error=denied`)
+      clearOAuthCookies(r)
+      return r
     }
 
-    // Initialize client with temporary credentials
+    const cookieSecret = request.cookies.get(X_OAUTH_COOKIE_NAMES.tokenSecret)?.value
+    const cookieToken = request.cookies.get(X_OAUTH_COOKIE_NAMES.token)?.value
+    const returnTo =
+      request.cookies.get(X_OAUTH_COOKIE_NAMES.returnTo)?.value || '/account-settings'
+
+    if (!oauth_token || !oauth_verifier || !cookieToken || !cookieSecret) {
+      const r = NextResponse.redirect(`${base}/account-settings?x_error=missing_oauth_params`)
+      clearOAuthCookies(r)
+      return r
+    }
+
+    if (oauth_token !== cookieToken) {
+      const r = NextResponse.redirect(`${base}/account-settings?x_error=oauth_token_mismatch`)
+      clearOAuthCookies(r)
+      return r
+    }
+
+    const consumer = await getXApiConsumerKeysForOAuth(user.id)
+    if (!consumer.success || !consumer.apiKey || !consumer.apiKeySecret) {
+      const r = NextResponse.redirect(`${base}/account-settings?x_error=no_consumer_keys`)
+      clearOAuthCookies(r)
+      return r
+    }
+
     const client = new TwitterApi({
-      appKey: process.env.TWITTER_API_KEY!,
-      appSecret: process.env.TWITTER_API_SECRET!,
+      appKey: consumer.apiKey,
+      appSecret: consumer.apiKeySecret,
       accessToken: oauth_token,
-      accessSecret: oauth_token_secret,
+      accessSecret: cookieSecret,
     })
 
-    // Get access tokens
-    const { accessToken, accessSecret, screenName, userId } = await client.login(oauth_verifier)
+    const { accessToken, accessSecret, screenName } = await client.login(oauth_verifier)
 
-    // Store tokens securely (in production, use encrypted database storage)
-    // For demo purposes, we'll set them as environment variables
-    // In a real app, you'd store these per-user in your database
-    
-    const response = NextResponse.redirect('/')
-    response.cookies.set('twitter_access_token', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
-    })
-    response.cookies.set('twitter_access_secret', accessSecret, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
+    const persist = await completeXApiOAuth(user.id, {
+      accessToken,
+      accessSecret,
+      xUsername: screenName,
     })
 
+    if (!persist.success) {
+      const r = NextResponse.redirect(
+        `${base}/account-settings?x_error=${encodeURIComponent(persist.error || 'persist_failed')}`
+      )
+      clearOAuthCookies(r)
+      return r
+    }
+
+    const target = returnTo.includes('?')
+      ? `${returnTo}&x_connected=1`
+      : `${returnTo}?x_connected=1`
+    const response = NextResponse.redirect(new URL(target, base).toString())
+    clearOAuthCookies(response)
     return response
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Twitter OAuth callback error:', error)
-    return NextResponse.redirect('/auth/error?error=twitter_callback_failed')
+    const r = NextResponse.redirect(`${base}/account-settings?x_error=callback_failed`)
+    clearOAuthCookies(r)
+    return r
   }
 }

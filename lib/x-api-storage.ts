@@ -125,6 +125,267 @@ export interface StoredXApiCredentials extends XApiCredentials {
   credential_type: string;
 }
 
+/** Non-secret status for settings UI and OAuth gating */
+export interface XApiCredentialsMetadata {
+  hasRow: boolean;
+  hasConsumerKeys: boolean;
+  hasAccessTokens: boolean;
+  /** From OAuth callback (X screen name); distinct from optional manual x_username in settings */
+  connectedXUsername: string | null;
+  isValid: boolean;
+}
+
+/**
+ * Read credential row flags without decrypting secrets (for GET settings / UI).
+ */
+export async function getXApiCredentialsMetadata(
+  userId: string
+): Promise<{ success: boolean; metadata?: XApiCredentialsMetadata; error?: string }> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .select(
+        'encrypted_api_key, encrypted_api_secret, encrypted_access_token, encrypted_access_secret, x_username, is_valid'
+      )
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .maybeSingle();
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    if (!data) {
+      return {
+        success: true,
+        metadata: {
+          hasRow: false,
+          hasConsumerKeys: false,
+          hasAccessTokens: false,
+          connectedXUsername: null,
+          isValid: false,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      metadata: {
+        hasRow: true,
+        hasConsumerKeys: !!(data.encrypted_api_key && data.encrypted_api_secret),
+        hasAccessTokens: !!(data.encrypted_access_token && data.encrypted_access_secret),
+        connectedXUsername: data.x_username ?? null,
+        isValid: !!data.is_valid,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Decrypt consumer key/secret for OAuth 1.0a initiate/callback (server-only).
+ */
+export async function getXApiConsumerKeysForOAuth(
+  userId: string
+): Promise<{ success: boolean; apiKey?: string; apiKeySecret?: string; error?: string }> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .select('encrypted_api_key, encrypted_api_secret')
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .maybeSingle();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (!data?.encrypted_api_key || !data?.encrypted_api_secret) {
+      return {
+        success: false,
+        error: 'Save your X API Key and API Key Secret in Settings before connecting.',
+      };
+    }
+
+    const apiKey = await decrypt(data.encrypted_api_key);
+    const apiKeySecret = await decrypt(data.encrypted_api_secret);
+    return { success: true, apiKey, apiKeySecret };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Failed to read consumer keys',
+    };
+  }
+}
+
+/**
+ * Store only consumer credentials; clears access tokens so the user must complete OAuth.
+ */
+export async function storeXApiConsumerCredentials(
+  userId: string,
+  params: { apiKey: string; apiKeySecret: string; bearerToken?: string }
+): Promise<{ success: boolean; error?: string; id?: string }> {
+  try {
+    const encryptedApiKey = await encrypt(params.apiKey);
+    const encryptedApiKeySecret = await encrypt(params.apiKeySecret);
+
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('user_credentials')
+      .select('id, encrypted_bearer_token')
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .maybeSingle();
+
+    if (fetchError) {
+      return { success: false, error: fetchError.message };
+    }
+
+    let encryptedBearer: string | null;
+    if (params.bearerToken !== undefined) {
+      encryptedBearer = params.bearerToken.trim()
+        ? await encrypt(params.bearerToken.trim())
+        : null;
+    } else {
+      encryptedBearer = existing?.encrypted_bearer_token ?? null;
+    }
+
+    const insertPayload = {
+      user_id: userId,
+      credential_type: 'x-api' as const,
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: encryptedApiKeySecret,
+      encrypted_access_token: null as string | null,
+      encrypted_access_secret: null as string | null,
+      encrypted_bearer_token: encryptedBearer,
+      encryption_version: 1,
+      is_valid: false,
+    };
+
+    const updatePayload = {
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: encryptedApiKeySecret,
+      encrypted_access_token: null as string | null,
+      encrypted_access_secret: null as string | null,
+      encrypted_bearer_token: encryptedBearer,
+      encryption_version: 1,
+      is_valid: false,
+    };
+
+    if (existing?.id) {
+      const { error } = await supabaseAdmin
+        .from('user_credentials')
+        .update(updatePayload)
+        .eq('id', existing.id);
+
+      if (error) {
+        console.error('❌ Failed to update X API consumer credentials:', error);
+        return { success: false, error: error.message };
+      }
+      console.log('✅ X API consumer credentials updated (OAuth pending)');
+      return { success: true, id: existing.id };
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .insert(insertPayload)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('❌ Failed to insert X API consumer credentials:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ X API consumer credentials stored (OAuth pending)');
+    return { success: true, id: data.id };
+  } catch (error) {
+    console.error('❌ Error storing X API consumer credentials:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * After OAuth 1.0a callback: persist user access token/secret and X username.
+ */
+export async function completeXApiOAuth(
+  userId: string,
+  tokens: { accessToken: string; accessSecret: string; xUsername: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const encryptedAccessToken = await encrypt(tokens.accessToken);
+    const encryptedAccessSecret = await encrypt(tokens.accessSecret);
+
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
+      .update({
+        encrypted_access_token: encryptedAccessToken,
+        encrypted_access_secret: encryptedAccessSecret,
+        x_username: tokens.xUsername,
+        is_valid: true,
+        last_validated: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api');
+
+    if (error) {
+      console.error('❌ completeXApiOAuth update failed:', error);
+      return { success: false, error: error.message };
+    }
+
+    const isRealCredentials =
+      !tokens.accessToken.includes('demo_') && !tokens.accessSecret.includes('demo_');
+    if (isRealCredentials) {
+      await cleanupDemoMentions(userId);
+    }
+
+    console.log('✅ X API OAuth completed for user:', userId);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ completeXApiOAuth error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * Remove user access token/secret only (keep consumer keys and optional bearer).
+ */
+export async function clearXApiAccessTokens(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabaseAdmin
+      .from('user_credentials')
+      .update({
+        encrypted_access_token: null,
+        encrypted_access_secret: null,
+        is_valid: false,
+        last_validated: null,
+      })
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api');
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
 /**
  * Store X API credentials securely in the database
  */

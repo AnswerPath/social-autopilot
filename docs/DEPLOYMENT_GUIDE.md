@@ -97,9 +97,10 @@ EMAIL_FROM_NAME=Social Autopilot
 # ============================================
 # Third-Party Integrations
 # ============================================
-TWITTER_CLIENT_ID=your-twitter-client-id
-TWITTER_CLIENT_SECRET=your-twitter-client-secret
-TWITTER_CALLBACK_URL=https://your-domain.com/api/auth/twitter/callback
+# X (Twitter): OAuth 1.0a — each user saves consumer key/secret in-app, then /api/auth/twitter.
+# Use the same origin as NEXT_PUBLIC_APP_URL above. X developer portal callback URL:
+#   {NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback
+# Optional if NEXT_PUBLIC_APP_URL unset: NEXTAUTH_URL=https://your-domain.com
 
 # Apify (for web scraping)
 APIFY_API_TOKEN=your-apify-token

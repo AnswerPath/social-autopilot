@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getXApiCredentials,
+  getXApiCredentialsMetadata,
   deleteXApiCredentials,
   updateXApiCredentials,
   cleanupDemoMentions,
+  storeXApiConsumerCredentials,
+  clearXApiAccessTokens,
 } from '@/lib/x-api-storage';
 import { storeUnifiedCredentials } from '@/lib/unified-credentials';
 import { deleteTwitterCredentials } from '@/lib/database-storage';
@@ -30,17 +32,48 @@ export async function POST(request: NextRequest) {
     const aks = typeof apiKeySecret === 'string' ? apiKeySecret.trim() : '';
     const at = typeof accessToken === 'string' ? accessToken.trim() : '';
     const ats = typeof accessTokenSecret === 'string' ? accessTokenSecret.trim() : '';
+    const bearerKeyPresent = Object.prototype.hasOwnProperty.call(body, 'bearerToken');
     const bt =
       typeof bearerToken === 'string' && bearerToken.trim() ? bearerToken.trim() : undefined;
 
-    if (!ak || !aks || !at || !ats) {
+    if (!ak || !aks) {
       return NextResponse.json(
-        { error: 'Missing required fields: apiKey, apiKeySecret, accessToken, accessTokenSecret' },
+        { error: 'Missing required fields: apiKey, apiKeySecret' },
         { status: 400 }
       );
     }
 
     const userId = user.id;
+
+    // Consumer keys only → store then user completes OAuth via /api/auth/twitter
+    const hasManualAccess = !!(at && ats);
+    if (!hasManualAccess) {
+      await deleteTwitterCredentials(userId);
+
+      const bearerForStore = bearerKeyPresent
+        ? typeof bearerToken === 'string'
+          ? bearerToken
+          : ''
+        : undefined;
+
+      const storeConsumer = await storeXApiConsumerCredentials(userId, {
+        apiKey: ak,
+        apiKeySecret: aks,
+        ...(bearerKeyPresent ? { bearerToken: bearerForStore } : {}),
+      });
+
+      if (!storeConsumer.success) {
+        return NextResponse.json({ error: storeConsumer.error }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message:
+          'Consumer keys saved. Use “Connect with X” to authorize and obtain access tokens.',
+        needsOAuth: true,
+        id: storeConsumer.id,
+      });
+    }
 
     const credentials: XApiCredentials = {
       apiKey: ak,
@@ -51,7 +84,7 @@ export async function POST(request: NextRequest) {
       ...(bt ? { bearerToken: bt } : {}),
     };
 
-    // Validate credentials with X API
+    // Legacy: all four secrets — validate then store
     const validation = await validateXApiCredentials(credentials);
     if (!validation.success) {
       return NextResponse.json(
@@ -60,16 +93,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store the validated credentials (clears legacy `twitter` row if present)
     const storeResult = await storeUnifiedCredentials(userId, credentials);
     if (!storeResult.success) {
-      return NextResponse.json(
-        { error: storeResult.error },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: storeResult.error }, { status: 500 });
     }
 
-    // Stop any active demo monitoring and clean up demo mentions
     const monitor = activeMonitors.get(userId);
     if (monitor && monitor.type === 'demo') {
       console.log('🛑 Stopping demo monitoring after credentials configured');
@@ -79,12 +107,13 @@ export async function POST(request: NextRequest) {
       activeMonitors.delete(userId);
     }
 
-    // Clean up demo mentions (this is also done in storeXApiCredentials, but we'll do it here too for immediate effect)
     console.log('🧹 [CREDENTIALS] Triggering demo mentions cleanup after storing credentials');
     const cleanupResult = await cleanupDemoMentions(userId);
     if (cleanupResult.success) {
       if (cleanupResult.deletedCount && cleanupResult.deletedCount > 0) {
-        console.log(`✅ [CREDENTIALS] Cleaned up ${cleanupResult.deletedCount} demo mentions after storing credentials`);
+        console.log(
+          `✅ [CREDENTIALS] Cleaned up ${cleanupResult.deletedCount} demo mentions after storing credentials`
+        );
       } else {
         console.log('ℹ️ [CREDENTIALS] No demo mentions found to clean up (may have been cleaned already)');
       }
@@ -95,6 +124,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'X API credentials stored successfully',
+      needsOAuth: false,
       id: storeResult.id,
       user: validation.user,
       demoMentionsCleaned: cleanupResult.deletedCount || 0,
@@ -120,20 +150,27 @@ export async function GET(request: NextRequest) {
 
     const userId = user.id;
 
-    const result = await getXApiCredentials(userId);
-    if (!result.success) {
+    const metaResult = await getXApiCredentialsMetadata(userId);
+    if (!metaResult.success || !metaResult.metadata) {
       return NextResponse.json(
-        { error: result.error },
-        { status: 404 }
+        { error: metaResult.error || 'Failed to read credential status' },
+        { status: 500 }
       );
     }
 
-    // Don't return the actual credentials in the response
+    const m = metaResult.metadata;
+    const hasCredentials = m.hasRow && (m.hasConsumerKeys || m.hasAccessTokens);
+
     return NextResponse.json({
       success: true,
-      hasCredentials: true,
-      userId: result.credentials?.userId,
-      // Note: API keys are not returned for security
+      hasCredentials,
+      hasConsumerKeys: m.hasConsumerKeys,
+      hasAccessTokens: m.hasAccessTokens,
+      /** True when consumer keys exist but OAuth access tokens are still missing */
+      needsOAuth: m.hasConsumerKeys && !m.hasAccessTokens,
+      connectedXUsername: m.connectedXUsername,
+      isValid: m.isValid,
+      userId,
     });
   } catch (error) {
     console.error('Error retrieving X API credentials:', error);
@@ -252,6 +289,19 @@ export async function DELETE(request: NextRequest) {
     }
 
     const userId = user.id;
+    const scope = request.nextUrl.searchParams.get('scope');
+
+    if (scope === 'access') {
+      await deleteTwitterCredentials(userId);
+      const partial = await clearXApiAccessTokens(userId);
+      if (!partial.success) {
+        return NextResponse.json({ error: partial.error }, { status: 500 });
+      }
+      return NextResponse.json({
+        success: true,
+        message: 'X access tokens removed. Consumer keys kept — use Connect with X again to re-authorize.',
+      });
+    }
 
     await deleteTwitterCredentials(userId);
 

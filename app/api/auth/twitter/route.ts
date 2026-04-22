@@ -1,31 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { TwitterApi } from 'twitter-api-v2'
+import { getCurrentUser } from '@/lib/auth-utils'
+import { getXApiConsumerKeysForOAuth } from '@/lib/x-api-storage'
+import {
+  getXOAuthCallbackUrl,
+  sanitizeXOAuthReturnTo,
+  X_OAUTH_COOKIE_NAMES,
+  xOAuthCookieOptions,
+} from '@/lib/x-oauth-config'
 
 export async function GET(request: NextRequest) {
   try {
-    // Initialize Twitter client for OAuth
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+
+    const consumer = await getXApiConsumerKeysForOAuth(user.id)
+    if (!consumer.success || !consumer.apiKey || !consumer.apiKeySecret) {
+      return NextResponse.json(
+        { error: consumer.error || 'Save your X API Key and API Key Secret in Settings first.' },
+        { status: 400 }
+      )
+    }
+
     const client = new TwitterApi({
-      appKey: process.env.TWITTER_API_KEY!,
-      appSecret: process.env.TWITTER_API_SECRET!,
+      appKey: consumer.apiKey,
+      appSecret: consumer.apiKeySecret,
     })
 
-    // Generate OAuth URL
-    const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/auth/twitter/callback`
-    )
+    const callbackUrl = getXOAuthCallbackUrl()
+    const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(callbackUrl)
 
-    // Store oauth_token_secret in session/database for callback
-    // For now, we'll use a simple approach (in production, use proper session management)
+    const returnTo = sanitizeXOAuthReturnTo(request.nextUrl.searchParams.get('returnTo'))
+
     const response = NextResponse.redirect(url)
-    response.cookies.set('oauth_token_secret', oauth_token_secret, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 15 // 15 minutes
-    })
+    const cookieOpts = xOAuthCookieOptions(60 * 15)
+
+    response.cookies.set(X_OAUTH_COOKIE_NAMES.tokenSecret, oauth_token_secret, cookieOpts)
+    response.cookies.set(X_OAUTH_COOKIE_NAMES.token, oauth_token, cookieOpts)
+    response.cookies.set(X_OAUTH_COOKIE_NAMES.returnTo, returnTo, cookieOpts)
 
     return response
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Twitter OAuth error:', error)
-    return NextResponse.redirect('/auth/error?error=twitter_oauth_failed')
+    return NextResponse.redirect(new URL('/auth/error?error=twitter_oauth_failed', request.url))
   }
 }

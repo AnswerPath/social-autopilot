@@ -90,9 +90,8 @@ NODE_ENV=development
 RESEND_API_KEY=re_your_resend_api_key
 # RESEND_FROM=Social Autopilot <notifications@yourdomain.com>
 
-# Optional: Third-party Integrations
-TWITTER_CLIENT_ID=your-twitter-client-id
-TWITTER_CLIENT_SECRET=your-twitter-client-secret
+# X posting: per-user OAuth 1.0a — users add consumer keys in Settings → Integrations, then "Connect with X".
+# Set NEXT_PUBLIC_APP_URL (or NEXTAUTH_URL) so the OAuth callback URL matches the X developer portal.
 ```
 
 4. **Set up the database**
