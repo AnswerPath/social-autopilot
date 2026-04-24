@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       appSecret: consumer.apiKeySecret,
     })
 
-    const callbackUrl = getXOAuthCallbackUrl()
+    const callbackUrl = getXOAuthCallbackUrl(request)
     // twitter-api-v2 defaults to /oauth/authenticate ("Sign in with Twitter"); X often
     // rejects that for posting/API apps — /oauth/authorize is the standard 3-legged flow.
     const { url, oauth_token, oauth_token_secret } = await client.generateAuthLink(callbackUrl, {

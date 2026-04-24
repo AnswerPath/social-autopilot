@@ -2,18 +2,37 @@
  * OAuth 1.0a redirect helpers for X (Twitter) user-context flow.
  */
 
+import type { NextRequest } from 'next/server';
+
 const ALLOWED_RETURN_PREFIXES = ['/settings', '/account-settings', '/onboarding'] as const;
 
-export function getXOAuthAppBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXTAUTH_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
+/** Trimmed env base URL, or null if unset / not an absolute http(s) URL. */
+function readPreferredOAuthAppBase(): string | null {
+  const raw = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '')
+    .trim()
+    .replace(/\/$/, '');
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  return null;
 }
 
-export function getXOAuthCallbackUrl(): string {
-  return `${getXOAuthAppBaseUrl()}/api/auth/twitter/callback`;
+/**
+ * Base URL from env (for non-request code paths). Falls back to localhost in dev only.
+ */
+export function getXOAuthAppBaseUrl(): string {
+  return readPreferredOAuthAppBase() ?? 'http://localhost:3000';
+}
+
+/**
+ * Absolute origin for redirects and callback URLs. Prefer env (must match X app callback);
+ * otherwise use the incoming request origin so NextResponse.redirect always gets absolute URLs.
+ */
+export function resolveXOAuthAppOrigin(request: NextRequest): string {
+  return readPreferredOAuthAppBase() ?? request.nextUrl.origin.replace(/\/$/, '');
+}
+
+export function getXOAuthCallbackUrl(request?: NextRequest): string {
+  const base = request ? resolveXOAuthAppOrigin(request) : getXOAuthAppBaseUrl();
+  return `${base}/api/auth/twitter/callback`;
 }
 
 /**

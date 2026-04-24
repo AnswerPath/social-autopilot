@@ -3,10 +3,15 @@ import { TwitterApi } from 'twitter-api-v2'
 import { getCurrentUser } from '@/lib/auth-utils'
 import { completeXApiOAuth, getXApiConsumerKeysForOAuth } from '@/lib/x-api-storage'
 import {
-  getXOAuthAppBaseUrl,
+  resolveXOAuthAppOrigin,
   X_OAUTH_COOKIE_NAMES,
   xOAuthCookieOptions,
 } from '@/lib/x-oauth-config'
+
+function absoluteRedirect(request: NextRequest, pathnameWithQuery: string) {
+  const base = resolveXOAuthAppOrigin(request)
+  return NextResponse.redirect(new URL(pathnameWithQuery, `${base}/`).toString())
+}
 
 function clearOAuthCookies(response: NextResponse) {
   const cleared = { ...xOAuthCookieOptions(0), maxAge: 0 }
@@ -16,12 +21,10 @@ function clearOAuthCookies(response: NextResponse) {
 }
 
 export async function GET(request: NextRequest) {
-  const base = getXOAuthAppBaseUrl()
-
   try {
     const user = await getCurrentUser(request)
     if (!user) {
-      const r = NextResponse.redirect(`${base}/auth/error?error=session_required`)
+      const r = absoluteRedirect(request, '/auth/error?error=session_required')
       clearOAuthCookies(r)
       return r
     }
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
     const denied = searchParams.get('denied')
 
     if (denied) {
-      const r = NextResponse.redirect(`${base}/account-settings?x_error=denied`)
+      const r = absoluteRedirect(request, '/account-settings?x_error=denied')
       clearOAuthCookies(r)
       return r
     }
@@ -43,20 +46,20 @@ export async function GET(request: NextRequest) {
       request.cookies.get(X_OAUTH_COOKIE_NAMES.returnTo)?.value || '/account-settings'
 
     if (!oauth_token || !oauth_verifier || !cookieToken || !cookieSecret) {
-      const r = NextResponse.redirect(`${base}/account-settings?x_error=missing_oauth_params`)
+      const r = absoluteRedirect(request, '/account-settings?x_error=missing_oauth_params')
       clearOAuthCookies(r)
       return r
     }
 
     if (oauth_token !== cookieToken) {
-      const r = NextResponse.redirect(`${base}/account-settings?x_error=oauth_token_mismatch`)
+      const r = absoluteRedirect(request, '/account-settings?x_error=oauth_token_mismatch')
       clearOAuthCookies(r)
       return r
     }
 
     const consumer = await getXApiConsumerKeysForOAuth(user.id)
     if (!consumer.success || !consumer.apiKey || !consumer.apiKeySecret) {
-      const r = NextResponse.redirect(`${base}/account-settings?x_error=no_consumer_keys`)
+      const r = absoluteRedirect(request, '/account-settings?x_error=no_consumer_keys')
       clearOAuthCookies(r)
       return r
     }
@@ -77,8 +80,9 @@ export async function GET(request: NextRequest) {
     })
 
     if (!persist.success) {
-      const r = NextResponse.redirect(
-        `${base}/account-settings?x_error=${encodeURIComponent(persist.error || 'persist_failed')}`
+      const r = absoluteRedirect(
+        request,
+        `/account-settings?x_error=${encodeURIComponent(persist.error || 'persist_failed')}`
       )
       clearOAuthCookies(r)
       return r
@@ -87,12 +91,13 @@ export async function GET(request: NextRequest) {
     const target = returnTo.includes('?')
       ? `${returnTo}&x_connected=1`
       : `${returnTo}?x_connected=1`
-    const response = NextResponse.redirect(new URL(target, base).toString())
+    const base = resolveXOAuthAppOrigin(request)
+    const response = NextResponse.redirect(new URL(target, `${base}/`).toString())
     clearOAuthCookies(response)
     return response
   } catch (error: unknown) {
     console.error('Twitter OAuth callback error:', error)
-    const r = NextResponse.redirect(`${base}/account-settings?x_error=callback_failed`)
+    const r = absoluteRedirect(request, '/account-settings?x_error=callback_failed')
     clearOAuthCookies(r)
     return r
   }
