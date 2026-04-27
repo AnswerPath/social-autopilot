@@ -11,8 +11,16 @@ function readPreferredOAuthAppBase(): string | null {
   const raw = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || '')
     .trim()
     .replace(/\/$/, '');
-  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-  return null;
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
 }
 
 /**
