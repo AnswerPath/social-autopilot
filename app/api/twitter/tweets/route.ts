@@ -5,6 +5,9 @@ import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
+type CachedTweetsEntry = { ts: number; data: any[] }
+const tweetsResponseCache = new Map<string, CachedTweetsEntry>()
+
 export async function GET(request: NextRequest) {
   const searchParams = new URL(request.url).searchParams
   const maxResultsRaw = searchParams.get('maxResults')
@@ -40,16 +43,16 @@ export async function GET(request: NextRequest) {
     const credentials = result.credentials
     const start = searchParams.get('start')
     const end = searchParams.get('end')
+    const bearer = credentials.bearerToken?.trim()
 
     const CACHE_TTL_MS = 15 * 60 * 1000
-    const cacheKey = `tweets:${start || 'none'}:${end || 'none'}:${maxResults}`
-    const cache = (globalThis as any).__tweets_cache as { [k: string]: { ts: number; data: any[] } } | undefined
+    const cacheKey = `${user.id}:tweets:${start || 'none'}:${end || 'none'}:${maxResults}`
 
     // Prefer Bearer token
-    if (credentials.bearerToken?.trim() && !credentials.bearerToken.includes('demo_')) {
+    if (bearer && !bearer.includes('demo_')) {
       try {
         const meResp = await fetch('https://api.twitter.com/2/users/me?user.fields=public_metrics', {
-          headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+          headers: { Authorization: `Bearer ${bearer}` },
         })
         if (meResp.ok) {
           const meData = await meResp.json()
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
           if (end) params.set('end_time', end)
           params.set('max_results', '100')
           const tlResp = await fetch(`https://api.twitter.com/2/users/${meData.data.id}/tweets?${params.toString()}`, {
-            headers: { Authorization: `Bearer ${credentials.bearerToken}` },
+            headers: { Authorization: `Bearer ${bearer}` },
           })
           if (tlResp.ok) {
             const tl = await tlResp.json()
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
                 public_metrics: tweet.public_metrics || { retweet_count: 0, like_count: 0, reply_count: 0, impression_count: 0 },
               }))
               .slice(0, maxResults)
-            ;(globalThis as any).__tweets_cache = { ...(cache || {}), [cacheKey]: { ts: Date.now(), data: items } }
+            tweetsResponseCache.set(cacheKey, { ts: Date.now(), data: items })
             console.log('✅ Real tweets fetched (Bearer)')
             return NextResponse.json({ success: true, mock: false, tweets: items })
           } else {
@@ -130,7 +133,7 @@ export async function GET(request: NextRequest) {
           return true
         })
         .slice(0, maxResults)
-      ;(globalThis as any).__tweets_cache = { ...(cache || {}), [cacheKey]: { ts: Date.now(), data: filtered } }
+      tweetsResponseCache.set(cacheKey, { ts: Date.now(), data: filtered })
       return NextResponse.json({ success: true, mock: false, tweets: filtered })
     } catch (apiError: any) {
       const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
@@ -139,10 +142,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Try cached tweets (rate limit/backoff)
-    const fresh = cache && cache[cacheKey] && Date.now() - cache[cacheKey].ts < CACHE_TTL_MS
-    if (fresh) {
+    const cached = tweetsResponseCache.get(cacheKey)
+    const fresh = cached && Date.now() - cached.ts < CACHE_TTL_MS
+    if (fresh && cached) {
       console.log('♻️ Serving cached tweets due to API failure/rate limit')
-      const sliced = cache![cacheKey].data.slice(0, maxResults)
+      const sliced = cached.data.slice(0, maxResults)
       return NextResponse.json({ success: true, mock: false, cached: true, tweets: sliced, note: 'Served cached tweets due to rate limit or error' })
     }
 

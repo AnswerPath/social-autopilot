@@ -43,6 +43,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const hasAccessTokenValue = typeof accessToken === 'string' && accessToken.trim().length > 0;
+    const hasAccessSecretValue = typeof accessTokenSecret === 'string' && accessTokenSecret.trim().length > 0;
+    if (hasAccessTokenValue !== hasAccessSecretValue) {
+      return NextResponse.json(
+        { error: 'Missing required fields: accessToken and accessTokenSecret' },
+        { status: 400 }
+      );
+    }
+
     const userId = user.id;
 
     // Consumer keys only → store then user completes OAuth via /api/auth/twitter
@@ -50,11 +59,10 @@ export async function POST(request: NextRequest) {
     if (!hasManualAccess) {
       await deleteTwitterCredentials(userId);
 
-      const bearerForStore = bearerKeyPresent
-        ? typeof bearerToken === 'string'
-          ? bearerToken
-          : ''
-        : undefined;
+      let bearerForStore: string | undefined;
+      if (bearerKeyPresent) {
+        bearerForStore = typeof bearerToken === 'string' ? bearerToken.trim() : '';
+      }
 
       const storeConsumer = await storeXApiConsumerCredentials(userId, {
         apiKey: ak,

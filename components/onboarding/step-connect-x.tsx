@@ -27,11 +27,12 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
   const [isTesting, setIsTesting] = useState(false)
   const [hasXConsumerKeys, setHasXConsumerKeys] = useState(false)
 
-  const refreshXStatus = useCallback(async () => {
+  const refreshXStatus = useCallback(async (): Promise<Record<string, unknown> | null> => {
     const r = await fetch('/api/settings/x-api-credentials')
-    if (!r.ok) return
-    const d = await r.json()
+    if (!r.ok) return null
+    const d = (await r.json()) as Record<string, unknown>
     setHasXConsumerKeys(!!d.hasConsumerKeys)
+    return d
   }, [])
 
   useEffect(() => {
@@ -76,6 +77,8 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
 
     setIsSaving(true)
     try {
+      let credJson: Record<string, unknown> = {}
+
       if (hasApify) {
         const r = await fetch('/api/settings/apify-credentials', {
           method: 'POST',
@@ -106,12 +109,14 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           setIsSaving(false)
           return
         }
-        await refreshXStatus()
+        credJson = (await refreshXStatus()) ?? {}
+        if (Object.keys(credJson).length === 0) {
+          const credRes = await fetch('/api/settings/x-api-credentials')
+          credJson = credRes.ok ? ((await credRes.json()) as Record<string, unknown>) : {}
+        }
       }
 
       setIsTesting(true)
-      const credRes = await fetch('/api/settings/x-api-credentials')
-      const credJson = credRes.ok ? await credRes.json() : {}
 
       if (hasApify) {
         const testRes = await fetch('/api/settings/test-apify-connection', {

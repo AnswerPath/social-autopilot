@@ -3,6 +3,8 @@
 import { getSupabaseServiceRoleJwtRole, supabaseAdmin, DatabaseCredential } from './supabase'
 import { encrypt, decrypt, testEncryption } from './encryption'
 import { deleteXApiCredentials, getXApiCredentials } from './x-api-storage'
+import { sendDebugIngest } from './debug-ingest'
+import type { CredentialErrorCode } from './credential-error-codes'
 
 export interface TwitterCredentials {
   apiKey: string
@@ -166,24 +168,20 @@ export async function storeTwitterCredentials(
       const userIdLooksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         userId
       )
-      fetch('http://127.0.0.1:7242/ingest/02db0ba7-e7e9-4c3a-b6c8-00220ae7f134', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '62a58b' },
-        body: JSON.stringify({
-          sessionId: '62a58b',
-          runId: 'pre-fix',
-          hypothesisId: 'H1_H2_H3',
-          location: 'lib/database-storage.ts:storeTwitterCredentials:preUpsert',
-          message: 'context before user_credentials upsert (twitter)',
-          data: {
-            jwtRole: jwtRole ?? 'missing_or_undecodable',
-            hasClientSession,
-            userIdLen: userId.length,
-            userIdLooksUuid,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
+      await sendDebugIngest({
+        sessionId: '62a58b',
+        runId: 'pre-fix',
+        hypothesisId: 'H1_H2_H3',
+        location: 'lib/database-storage.ts:storeTwitterCredentials:preUpsert',
+        message: 'context before user_credentials upsert (twitter)',
+        data: {
+          jwtRole: jwtRole ?? 'missing_or_undecodable',
+          hasClientSession,
+          userIdLen: userId.length,
+          userIdLooksUuid,
+        },
+        timestamp: Date.now(),
+      })
     }
     // #endregion
     
@@ -198,26 +196,22 @@ export async function storeTwitterCredentials(
     
     if (error) {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/02db0ba7-e7e9-4c3a-b6c8-00220ae7f134', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '62a58b' },
-        body: JSON.stringify({
-          sessionId: '62a58b',
-          runId: 'pre-fix',
-          hypothesisId: 'H4_H5',
-          location: 'lib/database-storage.ts:storeTwitterCredentials:upsertError',
-          message: 'user_credentials upsert failed (twitter)',
-          data: {
-            code: error.code,
-            hint: error.hint,
-            rlsLikely:
-              (error.message || '').toLowerCase().includes('row-level security') ||
-              (error.message || '').toLowerCase().includes('rls'),
-            messageSnippet: (error.message || '').slice(0, 220),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
+      await sendDebugIngest({
+        sessionId: '62a58b',
+        runId: 'pre-fix',
+        hypothesisId: 'H4_H5',
+        location: 'lib/database-storage.ts:storeTwitterCredentials:upsertError',
+        message: 'user_credentials upsert failed (twitter)',
+        data: {
+          code: error.code,
+          hint: error.hint,
+          rlsLikely:
+            (error.message || '').toLowerCase().includes('row-level security') ||
+            (error.message || '').toLowerCase().includes('rls'),
+          messageSnippet: (error.message || '').slice(0, 220),
+        },
+        timestamp: Date.now(),
+      })
       // #endregion
       console.error('❌ Database error storing credentials:', error)
       return { 
@@ -320,14 +314,19 @@ export async function storeTwitterCredentials(
 
 export async function getTwitterCredentials(
   userId: string
-): Promise<{ success: boolean; credentials?: StoredCredentials; error?: string }> {
+): Promise<{
+  success: boolean
+  credentials?: StoredCredentials
+  error?: string
+  errorCode?: CredentialErrorCode
+}> {
   try {
     console.log('🔍 Retrieving Twitter credentials for user:', userId)
     
     // Test database connection first
     const connectionTest = await testDatabaseConnection()
     if (!connectionTest.success) {
-      return { success: false, error: connectionTest.error }
+      return { success: false, error: connectionTest.error, errorCode: 'database_error' }
     }
 
     const { data, error } = await supabaseAdmin
@@ -340,12 +339,13 @@ export async function getTwitterCredentials(
     if (error) {
       if (error.code === 'PGRST116') {
         // No rows returned
-        return { success: false, error: 'No credentials found' }
+        return { success: false, error: 'No credentials found', errorCode: 'not_found' }
       }
       console.error('❌ Database error retrieving credentials:', error)
       return { 
         success: false, 
-        error: `Failed to retrieve credentials: ${error.message}` 
+        error: `Failed to retrieve credentials: ${error.message}`,
+        errorCode: 'database_error',
       }
     }
     
@@ -354,7 +354,8 @@ export async function getTwitterCredentials(
       console.error('❌ Invalid encrypted data detected for user:', userId)
       return { 
         success: false, 
-        error: 'Invalid encrypted credentials found. Please re-add your Twitter API keys.' 
+        error: 'Invalid encrypted credentials found. Please re-add your Twitter API keys.',
+        errorCode: 'invalid_encrypted',
       }
     }
     
@@ -384,14 +385,16 @@ export async function getTwitterCredentials(
       // If decryption fails, the data might be corrupted or use old encryption
       return { 
         success: false, 
-        error: 'Failed to decrypt credentials. The data may be corrupted. Please re-add your Twitter API keys in Settings.' 
+        error: 'Failed to decrypt credentials. The data may be corrupted. Please re-add your Twitter API keys in Settings.',
+        errorCode: 'decryption_failed',
       }
     }
   } catch (error: any) {
     console.error('❌ Error retrieving credentials:', error)
     return { 
       success: false, 
-      error: `Database error: ${error.message}` 
+      error: `Database error: ${error.message}`,
+      errorCode: 'database_error',
     }
   }
 }
@@ -848,7 +851,7 @@ export async function cleanupInvalidCredentials(userId: string): Promise<{ succe
 
     // Try to get credentials - if decryption fails, delete them
     const result = await getTwitterCredentials(userId)
-    if (!result.success && result.error?.includes('decrypt')) {
+    if (!result.success && result.errorCode === 'decryption_failed') {
       console.log('🧹 Cleaning up invalid Twitter credentials for user:', userId)
       await deleteTwitterCredentials(userId)
     }
@@ -856,9 +859,7 @@ export async function cleanupInvalidCredentials(userId: string): Promise<{ succe
     const xResult = await getXApiCredentials(userId)
     if (
       !xResult.success &&
-      (xResult.error?.includes('decrypt') ||
-        xResult.error?.includes('corrupted') ||
-        xResult.error?.includes('Invalid encrypted'))
+      (xResult.errorCode === 'decryption_failed' || xResult.errorCode === 'invalid_encrypted')
     ) {
       console.log('🧹 Cleaning up invalid X API credentials for user:', userId)
       await deleteXApiCredentials(userId)

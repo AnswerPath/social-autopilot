@@ -48,7 +48,7 @@ Use the integrated settings page to configure both services:
 
 1. Go to Settings → Integrations
 2. Configure your Apify API key
-3. Configure your X API credentials in the same screen (OAuth 1.0a: API Key, API Key Secret, Access Token, Access Token Secret; optional app-only Bearer token for reads)
+3. Configure **X** credentials: save **Consumer Key** + **Consumer Secret**, then use **Connect with X** for the OAuth access token pair. (Optional legacy: paste all four tokens at once; **Access Token** and **Access Token Secret** must both be sent or both omitted—sending only one returns **400**.) Optional app-only **Bearer** token for some reads.
 4. Test both connections
 
 ### 3. Environment Variables (Optional)
@@ -162,6 +162,9 @@ if (credentialsResult.success) {
 - `PUT /api/settings/x-api-credentials` - Update credentials
 - `DELETE /api/settings/x-api-credentials?userId={id}` - Delete credentials
 - `POST /api/settings/test-x-api-connection` - Test credentials validity
+
+### Credentials list (UI / health)
+- `GET /api/settings/credentials-list` - Lists credential rows for the session user; includes **`has_xapi_row`**, **`is_xapi_valid`**, and **`pending_oauth`** (consumer keys saved but OAuth access tokens not yet present) for X API status indicators.
 
 ## Apify Actor Configuration
 

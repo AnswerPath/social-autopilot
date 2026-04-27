@@ -18,9 +18,8 @@ export async function GET(request: NextRequest) {
 
     const consumer = await getXApiConsumerKeysForOAuth(user.id)
     if (!consumer.success || !consumer.apiKey || !consumer.apiKeySecret) {
-      return NextResponse.json(
-        { error: consumer.error || 'Save your X API Key and API Key Secret in Settings first.' },
-        { status: 400 }
+      return NextResponse.redirect(
+        new URL('/auth/error?error=missing_consumer_keys', request.url)
       )
     }
 

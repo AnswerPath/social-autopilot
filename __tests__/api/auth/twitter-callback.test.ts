@@ -4,7 +4,7 @@
 
 import { resolveXOAuthAppOrigin } from '@/lib/x-oauth-config'
 
-describe('Twitter OAuth callback route', () => {
+describe('resolveXOAuthAppOrigin', () => {
   const originalNextPublicAppUrl = process.env.NEXT_PUBLIC_APP_URL
   const originalNextAuthUrl = process.env.NEXTAUTH_URL
 

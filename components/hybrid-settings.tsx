@@ -735,7 +735,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               <div className="flex items-center gap-2">
                 <Twitter className="h-4 w-4" />
                 <span>X API (Posting):</span>
-                <Badge variant={hasXAccessTokens ? 'default' : hasXConsumerKeys ? 'secondary' : 'secondary'}>
+                <Badge variant={hasXAccessTokens ? 'default' : 'secondary'}>
                   {hasXAccessTokens ? 'Connected' : hasXConsumerKeys ? 'OAuth pending' : 'Not configured'}
                 </Badge>
               </div>

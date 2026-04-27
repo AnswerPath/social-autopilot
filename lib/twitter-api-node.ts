@@ -3,7 +3,6 @@
 import { TwitterApi } from 'twitter-api-v2'
 import { cleanupInvalidCredentials } from './database-storage'
 import { getUnifiedCredentials } from './unified-credentials'
-import type { XApiCredentials } from './x-api-service'
 
 export interface TwitterPost {
   id: string
@@ -49,7 +48,11 @@ export interface TwitterUser {
 async function getTwitterClient(userId: string = 'demo-user') {
   const result = await getUnifiedCredentials(userId)
   if (!result.success || !result.credentials) {
-    if (result.error?.includes('decrypt')) {
+    if (
+      result.errorCode === 'decryption_failed' ||
+      result.errorCode === 'invalid_encrypted' ||
+      result.error?.includes('decrypt')
+    ) {
       console.log('Attempting to cleanup corrupted credentials for user:', userId)
       await cleanupInvalidCredentials(userId)
     }
@@ -66,7 +69,7 @@ async function getTwitterClient(userId: string = 'demo-user') {
     )
   }
 
-  const credentials = result.credentials as XApiCredentials
+  const credentials = result.credentials
 
   const client = new TwitterApi({
     appKey: credentials.apiKey,
@@ -108,7 +111,10 @@ export async function postTweet(
       ? { media: { media_ids: mediaIds } }
       : undefined
     
-    const tweet = await client.tweet(text, mediaOptions as never)
+    const tweet =
+      mediaOptions !== undefined
+        ? await client.tweet(text, mediaOptions)
+        : await client.tweet(text)
     
     console.log('✅ Tweet posted successfully:', tweet.data.id)
     

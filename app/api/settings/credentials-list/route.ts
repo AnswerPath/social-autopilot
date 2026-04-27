@@ -18,6 +18,10 @@ export async function GET(request: NextRequest) {
       
       const xMeta = await getXApiCredentialsMetadata(userId)
       const hasXApi = xMeta.success && !!xMeta.metadata?.hasRow
+      const m = xMeta.metadata
+      const has_xapi_row = !!(m?.hasRow)
+      const is_xapi_valid = !!(m?.hasRow && m.isValid)
+      const pending_oauth = !!(m?.hasRow && m.hasConsumerKeys && !m.hasAccessTokens)
       
       // Filter out Twitter credentials if X API credentials exist
       // If no X API credentials, show Twitter credentials (they'll be migrated on next use)
@@ -37,7 +41,10 @@ export async function GET(request: NextRequest) {
       
       return NextResponse.json({
         success: true,
-        credentials: filteredCredentials
+        credentials: filteredCredentials,
+        has_xapi_row,
+        is_xapi_valid,
+        pending_oauth,
       })
     } else {
       return NextResponse.json(

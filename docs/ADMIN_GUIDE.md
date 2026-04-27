@@ -547,12 +547,12 @@ Configure how long to keep audit logs:
 
 **X (Twitter) API configuration**:
 1. Go to **Settings** → **Integrations**
-2. Under **X API Integration**, enter **OAuth 1.0a user context** credentials from the X developer portal:
-   - API Key and API Key Secret (consumer key / secret)
-   - Access Token and Access Token Secret (user context; required for posting)
-3. Optionally add the **app-only Bearer token** for some read paths; it does not replace the access token pair for writes.
-4. Test connection, then save.
-5. The legacy **Settings → Twitter API** tab was removed; `/api/settings/twitter-credentials` remains only as a compatibility shim and stores into the same **X API** credential row.
+2. Under **X API Integration**, enter **Consumer Key** (API Key) and **Consumer Secret** (API Key Secret) from the X developer portal.
+3. In the X app settings, set **Callback URL / Redirect URI** to `{your app origin}/api/auth/twitter/callback` (same origin as `NEXT_PUBLIC_APP_URL`, or `NEXTAUTH_URL` if that is the only base URL set).
+4. Use **Connect with X** in the app to complete OAuth 1.0a and obtain the access token pair (required for posting). Visiting `/api/auth/twitter` without saved consumer keys redirects to `/auth/error?error=missing_consumer_keys`.
+5. **Legacy path**: users may paste all four secrets (consumer + access token + access secret) in one save; both access token fields must be provided together or the API returns 400.
+6. Optionally add the **app-only Bearer token** for some read paths; it does not replace the access token pair for writes.
+7. The legacy **Settings → Twitter API** tab was removed; `/api/settings/twitter-credentials` remains only as a compatibility shim and stores into the same **X API** credential row.
 
 **Other Integrations**:
 - Apify (for web scraping)

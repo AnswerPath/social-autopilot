@@ -35,12 +35,13 @@ export async function GET(request: NextRequest) {
     }
 
     const credentials = result.credentials
+    const bearer = credentials.bearerToken?.trim()
 
     // Prefer Bearer token (usually higher limits), else OAuth 1.0a
-    if (credentials.bearerToken?.trim() && !credentials.bearerToken.includes('demo_')) {
+    if (bearer && !bearer.includes('demo_')) {
       try {
         const resp = await fetch('https://api.twitter.com/2/users/me?user.fields=description,public_metrics,profile_image_url', {
-          headers: { Authorization: `Bearer ${credentials.bearerToken}` }
+          headers: { Authorization: `Bearer ${bearer}` }
         })
         if (resp.ok) {
           const data = await resp.json()

@@ -41,12 +41,13 @@ graph TB
         end
         
         subgraph "Authentication"
-            AUTH_TW["/api/auth/twitter"]
+            AUTH_TW["/api/auth/twitter<br/>→ /auth/error if no consumer keys"]
             AUTH_CB["/api/auth/twitter/callback"]
         end
         
         subgraph "Settings & Management"
             SET_XAPI["/api/settings/x-api-credentials"]
+            SET_CRED_LIST["/api/settings/credentials-list<br/>(x-api flags)"]
             SET_CRED["/api/settings/twitter-credentials<br/>(deprecated shim → x-api)"]
             SET_CONN["/api/settings/test-connection"]
             SET_HEALTH["/api/settings/database-health"]
@@ -99,6 +100,8 @@ graph TB
     HOOKS --> TW_TWEETS
     HOOKS --> TW_MENT
     FORM_COMP --> SET_CRED
+    FORM_COMP --> SET_XAPI
+    FORM_COMP --> SET_CRED_LIST
     FORM_COMP --> SET_CONN
     
     %% Twitter API Integration
@@ -119,6 +122,8 @@ graph TB
     TW_API --> DB_STOR
     DB_STOR --> CRED_TBL
     SET_CRED --> API_STOR
+    SET_XAPI --> API_STOR
+    SET_CRED_LIST --> DB_STOR
     API_STOR --> CRED_TBL
     SCH_POST --> POSTS_TBL
     SCH_DISP --> POSTS_TBL

@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 const ERROR_COPY: Record<string, string> = {
   twitter_oauth_failed:
     'Starting X authorization failed. Check that your X API Key and API Key Secret are correct, then try Connect with X again.',
+  missing_consumer_keys:
+    'Save your X API Key and API Key Secret in Settings → Integrations, then try Connect with X again.',
   session_required:
     'Your sign-in session ended before X authorization finished. Sign in again, then retry Connect with X.',
 }
