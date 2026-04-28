@@ -5,8 +5,61 @@ import { getCurrentUser } from '@/lib/auth-utils'
 
 export const runtime = 'nodejs'
 
-type CachedTweetsEntry = { ts: number; data: any[] }
+type TweetPublicMetrics = {
+  retweet_count: number
+  like_count: number
+  reply_count: number
+  impression_count: number
+}
+
+type CachedTweet = {
+  id: string
+  text: string
+  created_at?: string
+  public_metrics: TweetPublicMetrics
+}
+
+type CachedTweetsEntry = { ts: number; data: CachedTweet[] }
+
+const CACHE_TTL_MS = 15 * 60 * 1000
+const MAX_TWEETS_CACHE_ENTRIES = 500
+
 const tweetsResponseCache = new Map<string, CachedTweetsEntry>()
+
+function pruneTweetsResponseCache(now: number): void {
+  for (const [key, entry] of tweetsResponseCache) {
+    if (now - entry.ts >= CACHE_TTL_MS) {
+      tweetsResponseCache.delete(key)
+    }
+  }
+}
+
+function setTweetsCacheEntry(key: string, data: CachedTweet[], now: number): void {
+  pruneTweetsResponseCache(now)
+  if (tweetsResponseCache.has(key)) {
+    tweetsResponseCache.delete(key)
+  }
+  tweetsResponseCache.set(key, { ts: now, data })
+  while (tweetsResponseCache.size > MAX_TWEETS_CACHE_ENTRIES) {
+    const oldestKey = tweetsResponseCache.keys().next().value
+    if (oldestKey === undefined) break
+    tweetsResponseCache.delete(oldestKey)
+  }
+}
+
+function getFreshTweetsCacheEntry(key: string, now: number): CachedTweetsEntry | undefined {
+  pruneTweetsResponseCache(now)
+  const entry = tweetsResponseCache.get(key)
+  if (!entry) return undefined
+  if (now - entry.ts >= CACHE_TTL_MS) {
+    tweetsResponseCache.delete(key)
+    return undefined
+  }
+  // Refresh recency for LRU-style eviction.
+  tweetsResponseCache.delete(key)
+  tweetsResponseCache.set(key, entry)
+  return entry
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = new URL(request.url).searchParams
@@ -45,7 +98,6 @@ export async function GET(request: NextRequest) {
     const end = searchParams.get('end')
     const bearer = credentials.bearerToken?.trim()
 
-    const CACHE_TTL_MS = 15 * 60 * 1000
     const cacheKey = `${user.id}:tweets:${start || 'none'}:${end || 'none'}:${maxResults}`
 
     // Prefer Bearer token
@@ -65,15 +117,20 @@ export async function GET(request: NextRequest) {
           })
           if (tlResp.ok) {
             const tl = await tlResp.json()
-            const items = (tl.data || [])
-              .map((tweet: any) => ({
+            const items: CachedTweet[] = (tl.data || [])
+              .map((tweet: any): CachedTweet => ({
                 id: tweet.id,
                 text: tweet.text,
                 created_at: tweet.created_at,
-                public_metrics: tweet.public_metrics || { retweet_count: 0, like_count: 0, reply_count: 0, impression_count: 0 },
+                public_metrics: tweet.public_metrics || {
+                  retweet_count: 0,
+                  like_count: 0,
+                  reply_count: 0,
+                  impression_count: 0,
+                },
               }))
               .slice(0, maxResults)
-            tweetsResponseCache.set(cacheKey, { ts: Date.now(), data: items })
+            setTweetsCacheEntry(cacheKey, items, Date.now())
             console.log('✅ Real tweets fetched (Bearer)')
             return NextResponse.json({ success: true, mock: false, tweets: items })
           } else {
@@ -111,7 +168,7 @@ export async function GET(request: NextRequest) {
       })
 
       console.log('✅ Real tweets fetched (OAuth 1.0a)')
-      const items = tweets.data.data?.map(tweet => ({
+      const items: CachedTweet[] = tweets.data.data?.map((tweet): CachedTweet => ({
         id: tweet.id,
         text: tweet.text,
         created_at: tweet.created_at,
@@ -133,7 +190,7 @@ export async function GET(request: NextRequest) {
           return true
         })
         .slice(0, maxResults)
-      tweetsResponseCache.set(cacheKey, { ts: Date.now(), data: filtered })
+      setTweetsCacheEntry(cacheKey, filtered, Date.now())
       return NextResponse.json({ success: true, mock: false, tweets: filtered })
     } catch (apiError: any) {
       const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
@@ -142,9 +199,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Try cached tweets (rate limit/backoff)
-    const cached = tweetsResponseCache.get(cacheKey)
-    const fresh = cached && Date.now() - cached.ts < CACHE_TTL_MS
-    if (fresh && cached) {
+    const cached = getFreshTweetsCacheEntry(cacheKey, Date.now())
+    if (cached) {
       console.log('♻️ Serving cached tweets due to API failure/rate limit')
       const sliced = cached.data.slice(0, maxResults)
       return NextResponse.json({ success: true, mock: false, cached: true, tweets: sliced, note: 'Served cached tweets due to rate limit or error' })

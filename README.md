@@ -119,7 +119,6 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes |
 | `NEXT_PUBLIC_APP_URL` | Your application URL | Yes |
 | `NEXTAUTH_URL` | Alternate public base URL (e.g. prod canonical URL). Used for X OAuth callback when `NEXT_PUBLIC_APP_URL` is unset. | No |
-| `DEBUG_RLS_INGEST` | Set to `true` to enable debug RLS ingest `fetch` calls in storage helpers (development only). | No |
 | `NODE_ENV` | Environment (development/production) | Yes |
 | `RESEND_API_KEY` | Resend API key for email notifications | No (email notifications disabled if missing) |
 | `RESEND_FROM` | Sender address (e.g. `App <notifications@yourdomain.com>`). Defaults to Resend onboarding domain for testing. | No |

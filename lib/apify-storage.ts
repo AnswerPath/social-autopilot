@@ -1,7 +1,6 @@
 import { encrypt, decrypt } from './encryption';
-import { getSupabaseServiceRoleJwtRole, supabaseAdmin } from './supabase';
+import { supabaseAdmin } from './supabase';
 import { ApifyCredentials } from './apify-service';
-import { sendDebugIngest } from './debug-ingest';
 
 export interface StoredApifyCredentials extends ApifyCredentials {
   id: string;
@@ -52,36 +51,6 @@ export async function storeApifyCredentials(
       (encryptedData as any).x_username = existing.x_username;
     }
 
-    // #region agent log
-    {
-      const jwtRole = getSupabaseServiceRoleJwtRole()
-      let hasClientSession = false
-      try {
-        const { data: sess } = await supabaseAdmin.auth.getSession()
-        hasClientSession = !!sess?.session
-      } catch {
-        hasClientSession = false
-      }
-      const userIdLooksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        userId
-      )
-      await sendDebugIngest({
-        sessionId: '62a58b',
-        runId: 'pre-fix',
-        hypothesisId: 'H1_H2_H3',
-        location: 'lib/apify-storage.ts:storeApifyCredentials:preUpsert',
-        message: 'context before user_credentials upsert (apify)',
-        data: {
-          jwtRole: jwtRole ?? 'missing_or_undecodable',
-          hasClientSession,
-          userIdLen: userId.length,
-          userIdLooksUuid,
-        },
-        timestamp: Date.now(),
-      })
-    }
-    // #endregion
-
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
       .upsert(encryptedData, {
@@ -91,24 +60,6 @@ export async function storeApifyCredentials(
       .single();
 
     if (error) {
-      // #region agent log
-      await sendDebugIngest({
-        sessionId: '62a58b',
-        runId: 'pre-fix',
-        hypothesisId: 'H4_H5',
-        location: 'lib/apify-storage.ts:storeApifyCredentials:upsertError',
-        message: 'user_credentials upsert failed (apify)',
-        data: {
-          code: error.code,
-          hint: error.hint,
-          rlsLikely:
-            (error.message || '').toLowerCase().includes('row-level security') ||
-            (error.message || '').toLowerCase().includes('rls'),
-          messageSnippet: (error.message || '').slice(0, 220),
-        },
-        timestamp: Date.now(),
-      })
-      // #endregion
       console.error('❌ Failed to store Apify credentials:', error);
       return {
         success: false,

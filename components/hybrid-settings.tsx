@@ -375,7 +375,8 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
       } else {
         setXApiMessage({ type: 'error', text: data.error || 'Failed to disconnect' });
       }
-    } catch {
+    } catch (err) {
+      console.error('Failed to disconnect', err);
       setXApiMessage({ type: 'error', text: 'Failed to disconnect. Please try again.' });
     } finally {
       setIsXApiLoading(false);

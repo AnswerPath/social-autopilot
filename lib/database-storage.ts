@@ -1,9 +1,8 @@
 "use server"
 
-import { getSupabaseServiceRoleJwtRole, supabaseAdmin, DatabaseCredential } from './supabase'
+import { supabaseAdmin, DatabaseCredential } from './supabase'
 import { encrypt, decrypt, testEncryption } from './encryption'
 import { deleteXApiCredentials, getXApiCredentials } from './x-api-storage'
-import { sendDebugIngest } from './debug-ingest'
 import type { CredentialErrorCode } from './credential-error-codes'
 
 export interface TwitterCredentials {
@@ -155,36 +154,6 @@ export async function storeTwitterCredentials(
     
     console.log('💾 Storing encrypted data in database...')
 
-    // #region agent log
-    {
-      const jwtRole = getSupabaseServiceRoleJwtRole()
-      let hasClientSession = false
-      try {
-        const { data: sess } = await supabaseAdmin.auth.getSession()
-        hasClientSession = !!sess?.session
-      } catch {
-        hasClientSession = false
-      }
-      const userIdLooksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        userId
-      )
-      await sendDebugIngest({
-        sessionId: '62a58b',
-        runId: 'pre-fix',
-        hypothesisId: 'H1_H2_H3',
-        location: 'lib/database-storage.ts:storeTwitterCredentials:preUpsert',
-        message: 'context before user_credentials upsert (twitter)',
-        data: {
-          jwtRole: jwtRole ?? 'missing_or_undecodable',
-          hasClientSession,
-          userIdLen: userId.length,
-          userIdLooksUuid,
-        },
-        timestamp: Date.now(),
-      })
-    }
-    // #endregion
-    
     // Use upsert to handle both insert and update cases
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
@@ -195,24 +164,6 @@ export async function storeTwitterCredentials(
       .single()
     
     if (error) {
-      // #region agent log
-      await sendDebugIngest({
-        sessionId: '62a58b',
-        runId: 'pre-fix',
-        hypothesisId: 'H4_H5',
-        location: 'lib/database-storage.ts:storeTwitterCredentials:upsertError',
-        message: 'user_credentials upsert failed (twitter)',
-        data: {
-          code: error.code,
-          hint: error.hint,
-          rlsLikely:
-            (error.message || '').toLowerCase().includes('row-level security') ||
-            (error.message || '').toLowerCase().includes('rls'),
-          messageSnippet: (error.message || '').slice(0, 220),
-        },
-        timestamp: Date.now(),
-      })
-      // #endregion
       console.error('❌ Database error storing credentials:', error)
       return { 
         success: false, 

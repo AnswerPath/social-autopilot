@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+      return NextResponse.redirect(new URL('/auth/error?error=session_required', request.url))
     }
 
     const consumer = await getXApiConsumerKeysForOAuth(user.id)

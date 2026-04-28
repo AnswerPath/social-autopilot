@@ -1,7 +1,6 @@
 import { encrypt, decrypt } from './encryption';
-import { getSupabaseServiceRoleJwtRole, supabaseAdmin } from './supabase';
+import { supabaseAdmin } from './supabase';
 import { XApiCredentials } from './x-api-service';
-import { sendDebugIngest } from './debug-ingest';
 import type { CredentialErrorCode } from './credential-error-codes';
 
 /**
@@ -399,36 +398,6 @@ export async function storeXApiCredentials(
       is_valid: false, // Will be validated separately
     };
 
-    // #region agent log
-    {
-      const jwtRole = getSupabaseServiceRoleJwtRole()
-      let hasClientSession = false
-      try {
-        const { data: sess } = await supabaseAdmin.auth.getSession()
-        hasClientSession = !!sess?.session
-      } catch {
-        hasClientSession = false
-      }
-      const userIdLooksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        userId
-      )
-      await sendDebugIngest({
-        sessionId: '62a58b',
-        runId: 'pre-fix',
-        hypothesisId: 'H1_H2_H3',
-        location: 'lib/x-api-storage.ts:storeXApiCredentials:preUpsert',
-        message: 'context before user_credentials upsert',
-        data: {
-          jwtRole: jwtRole ?? 'missing_or_undecodable',
-          hasClientSession,
-          userIdLen: userId.length,
-          userIdLooksUuid,
-        },
-        timestamp: Date.now(),
-      })
-    }
-    // #endregion
-
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
       .upsert(encryptedData, {
@@ -438,24 +407,6 @@ export async function storeXApiCredentials(
       .single();
 
     if (error) {
-      // #region agent log
-      await sendDebugIngest({
-        sessionId: '62a58b',
-        runId: 'pre-fix',
-        hypothesisId: 'H4_H5',
-        location: 'lib/x-api-storage.ts:storeXApiCredentials:upsertError',
-        message: 'user_credentials upsert failed',
-        data: {
-          code: error.code,
-          hint: error.hint,
-          rlsLikely:
-            (error.message || '').toLowerCase().includes('row-level security') ||
-            (error.message || '').toLowerCase().includes('rls'),
-          messageSnippet: (error.message || '').slice(0, 220),
-        },
-        timestamp: Date.now(),
-      })
-      // #endregion
       console.error('❌ Failed to store X API credentials:', error);
       return {
         success: false,
