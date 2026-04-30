@@ -1,7 +1,7 @@
 import { createApifyService, ApifyCredentials } from './apify-service';
 import { createXApiService, XApiCredentials } from './x-api-service';
 import { getApifyCredentials } from './apify-storage';
-import { getXApiCredentials } from './x-api-storage';
+import { getUnifiedCredentials } from './unified-credentials';
 import { createTokenManagementService } from './token-management';
 
 export interface HybridPostResult {
@@ -62,8 +62,7 @@ export class HybridService {
         hasApify = true;
       }
 
-      // Get X API credentials
-      const xApiResult = await getXApiCredentials(this.userId);
+      const xApiResult = await getUnifiedCredentials(this.userId);
       if (xApiResult.success && xApiResult.credentials) {
         this.xApiService = createXApiService(xApiResult.credentials);
         hasXApi = true;

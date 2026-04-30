@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listUserCredentials } from '@/lib/database-storage'
-import { getXApiCredentials } from '@/lib/x-api-storage'
+import { getXApiCredentialsMetadata } from '@/lib/x-api-storage'
 import { requireSessionUserId } from '@/lib/require-session-user'
 
 export async function GET(request: NextRequest) {
@@ -16,9 +16,12 @@ export async function GET(request: NextRequest) {
       // Filter to only show X API credentials, or migrate Twitter to X API
       const credentials = result.credentials || []
       
-      // Check if user has X API credentials
-      const xApiResult = await getXApiCredentials(userId)
-      const hasXApi = xApiResult.success && !!xApiResult.credentials
+      const xMeta = await getXApiCredentialsMetadata(userId)
+      const hasXApi = xMeta.success && !!xMeta.metadata?.hasRow
+      const m = xMeta.metadata
+      const has_xapi_row = !!(m?.hasRow)
+      const is_xapi_valid = !!(m?.hasRow && m.isValid)
+      const pending_oauth = !!(m?.hasRow && m.hasConsumerKeys && !m.hasAccessTokens)
       
       // Filter out Twitter credentials if X API credentials exist
       // If no X API credentials, show Twitter credentials (they'll be migrated on next use)
@@ -38,7 +41,10 @@ export async function GET(request: NextRequest) {
       
       return NextResponse.json({
         success: true,
-        credentials: filteredCredentials
+        credentials: filteredCredentials,
+        has_xapi_row,
+        is_xapi_valid,
+        pending_oauth,
       })
     } else {
       return NextResponse.json(

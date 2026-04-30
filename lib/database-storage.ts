@@ -2,6 +2,8 @@
 
 import { supabaseAdmin, DatabaseCredential } from './supabase'
 import { encrypt, decrypt, testEncryption } from './encryption'
+import { deleteXApiCredentials, getXApiCredentials } from './x-api-storage'
+import type { CredentialErrorCode } from './credential-error-codes'
 
 export interface TwitterCredentials {
   apiKey: string
@@ -151,7 +153,7 @@ export async function storeTwitterCredentials(
     }
     
     console.log('💾 Storing encrypted data in database...')
-    
+
     // Use upsert to handle both insert and update cases
     const { data, error } = await supabaseAdmin
       .from('user_credentials')
@@ -263,14 +265,19 @@ export async function storeTwitterCredentials(
 
 export async function getTwitterCredentials(
   userId: string
-): Promise<{ success: boolean; credentials?: StoredCredentials; error?: string }> {
+): Promise<{
+  success: boolean
+  credentials?: StoredCredentials
+  error?: string
+  errorCode?: CredentialErrorCode
+}> {
   try {
     console.log('🔍 Retrieving Twitter credentials for user:', userId)
     
     // Test database connection first
     const connectionTest = await testDatabaseConnection()
     if (!connectionTest.success) {
-      return { success: false, error: connectionTest.error }
+      return { success: false, error: connectionTest.error, errorCode: 'database_error' }
     }
 
     const { data, error } = await supabaseAdmin
@@ -283,12 +290,13 @@ export async function getTwitterCredentials(
     if (error) {
       if (error.code === 'PGRST116') {
         // No rows returned
-        return { success: false, error: 'No credentials found' }
+        return { success: false, error: 'No credentials found', errorCode: 'not_found' }
       }
       console.error('❌ Database error retrieving credentials:', error)
       return { 
         success: false, 
-        error: `Failed to retrieve credentials: ${error.message}` 
+        error: `Failed to retrieve credentials: ${error.message}`,
+        errorCode: 'database_error',
       }
     }
     
@@ -297,7 +305,8 @@ export async function getTwitterCredentials(
       console.error('❌ Invalid encrypted data detected for user:', userId)
       return { 
         success: false, 
-        error: 'Invalid encrypted credentials found. Please re-add your Twitter API keys.' 
+        error: 'Invalid encrypted credentials found. Please re-add your Twitter API keys.',
+        errorCode: 'invalid_encrypted',
       }
     }
     
@@ -327,14 +336,17 @@ export async function getTwitterCredentials(
       // If decryption fails, the data might be corrupted or use old encryption
       return { 
         success: false, 
-        error: 'Failed to decrypt credentials. The data may be corrupted. Please re-add your Twitter API keys in Settings.' 
+        error: 'Failed to decrypt credentials. The data may be corrupted. Please re-add your Twitter API keys in Settings.',
+        errorCode: 'decryption_failed',
       }
     }
-  } catch (error: any) {
-    console.error('❌ Error retrieving credentials:', error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('❌ Error retrieving credentials:', errorMessage)
     return { 
       success: false, 
-      error: `Database error: ${error.message}` 
+      error: `Database error: ${errorMessage}`,
+      errorCode: 'database_error',
     }
   }
 }
@@ -791,10 +803,18 @@ export async function cleanupInvalidCredentials(userId: string): Promise<{ succe
 
     // Try to get credentials - if decryption fails, delete them
     const result = await getTwitterCredentials(userId)
-    if (!result.success && result.error?.includes('decrypt')) {
-      console.log('🧹 Cleaning up invalid credentials for user:', userId)
+    if (!result.success && result.errorCode === 'decryption_failed') {
+      console.log('🧹 Cleaning up invalid Twitter credentials for user:', userId)
       await deleteTwitterCredentials(userId)
-      return { success: true }
+    }
+
+    const xResult = await getXApiCredentials(userId)
+    if (
+      !xResult.success &&
+      (xResult.errorCode === 'decryption_failed' || xResult.errorCode === 'invalid_encrypted')
+    ) {
+      console.log('🧹 Cleaning up invalid X API credentials for user:', userId)
+      await deleteXApiCredentials(userId)
     }
 
     return { success: true }

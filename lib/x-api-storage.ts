@@ -1,6 +1,7 @@
 import { encrypt, decrypt } from './encryption';
 import { supabaseAdmin } from './supabase';
 import { XApiCredentials } from './x-api-service';
+import type { CredentialErrorCode } from './credential-error-codes';
 
 /**
  * Clean up demo mentions when switching to real credentials
@@ -125,6 +126,248 @@ export interface StoredXApiCredentials extends XApiCredentials {
   credential_type: string;
 }
 
+/** Non-secret status for settings UI and OAuth gating */
+export interface XApiCredentialsMetadata {
+  hasRow: boolean;
+  hasConsumerKeys: boolean;
+  hasAccessTokens: boolean;
+  /** From OAuth callback (X screen name); distinct from optional manual x_username in settings */
+  connectedXUsername: string | null;
+  isValid: boolean;
+}
+
+/**
+ * Read credential row flags without decrypting secrets (for GET settings / UI).
+ */
+export async function getXApiCredentialsMetadata(
+  userId: string
+): Promise<{ success: boolean; metadata?: XApiCredentialsMetadata; error?: string }> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .select(
+        'encrypted_api_key, encrypted_api_secret, encrypted_access_token, encrypted_access_secret, x_username, is_valid'
+      )
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .maybeSingle();
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    if (!data) {
+      return {
+        success: true,
+        metadata: {
+          hasRow: false,
+          hasConsumerKeys: false,
+          hasAccessTokens: false,
+          connectedXUsername: null,
+          isValid: false,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      metadata: {
+        hasRow: true,
+        hasConsumerKeys: !!(data.encrypted_api_key && data.encrypted_api_secret),
+        hasAccessTokens: !!(data.encrypted_access_token && data.encrypted_access_secret),
+        connectedXUsername: data.x_username ?? null,
+        isValid: !!data.is_valid,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Decrypt consumer key/secret for OAuth 1.0a initiate/callback (server-only).
+ */
+export async function getXApiConsumerKeysForOAuth(
+  userId: string
+): Promise<{ success: boolean; apiKey?: string; apiKeySecret?: string; error?: string }> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .select('encrypted_api_key, encrypted_api_secret')
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .maybeSingle();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (!data?.encrypted_api_key || !data?.encrypted_api_secret) {
+      return {
+        success: false,
+        error: 'Save your X API Key and API Key Secret in Settings before connecting.',
+      };
+    }
+
+    const apiKey = await decrypt(data.encrypted_api_key);
+    const apiKeySecret = await decrypt(data.encrypted_api_secret);
+    return { success: true, apiKey, apiKeySecret };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : 'Failed to read consumer keys',
+    };
+  }
+}
+
+/**
+ * Store only consumer credentials; clears access tokens so the user must complete OAuth.
+ */
+export async function storeXApiConsumerCredentials(
+  userId: string,
+  params: { apiKey: string; apiKeySecret: string; bearerToken?: string }
+): Promise<{ success: boolean; error?: string; id?: string }> {
+  try {
+    const encryptedApiKey = await encrypt(params.apiKey.trim());
+    const encryptedApiKeySecret = await encrypt(params.apiKeySecret.trim());
+
+    const row: Record<string, unknown> = {
+      user_id: userId,
+      credential_type: 'x-api' as const,
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: encryptedApiKeySecret,
+      encrypted_access_token: null as string | null,
+      encrypted_access_secret: null as string | null,
+      x_username: null as string | null,
+      encryption_version: 1,
+      is_valid: false,
+    };
+
+    if (params.bearerToken !== undefined) {
+      row.encrypted_bearer_token = params.bearerToken.trim()
+        ? await encrypt(params.bearerToken.trim())
+        : null;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('user_credentials')
+      .upsert(row, { onConflict: 'user_id,credential_type' })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('❌ Failed to upsert X API consumer credentials:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ X API consumer credentials stored (OAuth pending)');
+    return { success: true, id: data.id };
+  } catch (error) {
+    console.error('❌ Error storing X API consumer credentials:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * After OAuth 1.0a callback: persist user access token/secret and X username.
+ */
+export async function completeXApiOAuth(
+  userId: string,
+  tokens: { accessToken: string; accessSecret: string; xUsername: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const encryptedAccessToken = await encrypt(tokens.accessToken);
+    const encryptedAccessSecret = await encrypt(tokens.accessSecret);
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('user_credentials')
+      .update({
+        encrypted_access_token: encryptedAccessToken,
+        encrypted_access_secret: encryptedAccessSecret,
+        x_username: tokens.xUsername,
+        is_valid: true,
+        last_validated: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ completeXApiOAuth update failed:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (!updated?.id) {
+      return {
+        success: false,
+        error:
+          'No X API credential row was updated. Save your API Key and API Key Secret in Settings → Integrations, then try Connect with X again.',
+      };
+    }
+
+    const isRealCredentials =
+      !tokens.accessToken.includes('demo_') && !tokens.accessSecret.includes('demo_');
+    if (isRealCredentials) {
+      await cleanupDemoMentions(userId);
+    }
+
+    console.log('✅ X API OAuth completed for user:', userId);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ completeXApiOAuth error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+/**
+ * Remove user access token/secret only (keep consumer keys and optional bearer).
+ */
+export async function clearXApiAccessTokens(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: updated, error } = await supabaseAdmin
+      .from('user_credentials')
+      .update({
+        encrypted_access_token: null,
+        encrypted_access_secret: null,
+        x_username: null,
+        is_valid: false,
+        last_validated: null,
+      })
+      .eq('user_id', userId)
+      .eq('credential_type', 'x-api')
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (!updated?.id) {
+      return {
+        success: false,
+        error: 'No X API credential row was updated. Nothing to clear.',
+      };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
 /**
  * Store X API credentials securely in the database
  */
@@ -140,6 +383,10 @@ export async function storeXApiCredentials(
     const encryptedApiKeySecret = await encrypt(credentials.apiKeySecret);
     const encryptedAccessToken = await encrypt(credentials.accessToken);
     const encryptedAccessTokenSecret = await encrypt(credentials.accessTokenSecret);
+    const encryptedBearer =
+      credentials.bearerToken?.trim()
+        ? await encrypt(credentials.bearerToken.trim())
+        : null;
 
     const encryptedData = {
       user_id: userId,
@@ -148,7 +395,7 @@ export async function storeXApiCredentials(
       encrypted_api_secret: encryptedApiKeySecret,
       encrypted_access_token: encryptedAccessToken,
       encrypted_access_secret: encryptedAccessTokenSecret,
-      encrypted_bearer_token: null, // X API doesn't use bearer token
+      encrypted_bearer_token: encryptedBearer,
       encryption_version: 1,
       is_valid: false, // Will be validated separately
     };
@@ -200,7 +447,12 @@ export async function storeXApiCredentials(
  */
 export async function getXApiCredentials(
   userId: string
-): Promise<{ success: boolean; credentials?: XApiCredentials; error?: string }> {
+): Promise<{
+  success: boolean
+  credentials?: XApiCredentials
+  error?: string
+  errorCode?: CredentialErrorCode
+}> {
   try {
     console.log('🔍 Retrieving X API credentials for user:', userId);
 
@@ -217,20 +469,29 @@ export async function getXApiCredentials(
         return {
           success: false,
           error: 'No X API credentials found for this user',
+          errorCode: 'not_found',
         };
       }
       console.error('❌ Database error retrieving X API credentials:', error);
       return {
         success: false,
         error: `Database error: ${error.message}`,
+        errorCode: 'database_error',
       };
     }
 
-    if (!data.encrypted_api_key || !data.encrypted_api_secret || 
-        !data.encrypted_access_token || !data.encrypted_access_secret) {
+    if (!data.encrypted_api_key || !data.encrypted_api_secret) {
       return {
         success: false,
         error: 'Invalid encrypted credentials found. Please re-add your X API credentials.',
+        errorCode: 'invalid_encrypted',
+      };
+    }
+    if (!data.encrypted_access_token || !data.encrypted_access_secret) {
+      return {
+        success: false,
+        error: 'X authorization is not complete. Connect with X to finish OAuth setup.',
+        errorCode: 'oauth_pending',
       };
     }
 
@@ -240,12 +501,22 @@ export async function getXApiCredentials(
       const decryptedAccessToken = await decrypt(data.encrypted_access_token);
       const decryptedAccessTokenSecret = await decrypt(data.encrypted_access_secret);
 
+      let bearerToken: string | undefined;
+      if (data.encrypted_bearer_token) {
+        try {
+          bearerToken = await decrypt(data.encrypted_bearer_token);
+        } catch {
+          bearerToken = undefined;
+        }
+      }
+
       const credentials: XApiCredentials = {
         apiKey: decryptedApiKey,
         apiKeySecret: decryptedApiKeySecret,
         accessToken: decryptedAccessToken,
         accessTokenSecret: decryptedAccessTokenSecret,
         userId: userId,
+        ...(bearerToken ? { bearerToken } : {}),
       };
 
       console.log('✅ X API credentials retrieved successfully');
@@ -258,6 +529,7 @@ export async function getXApiCredentials(
       return {
         success: false,
         error: 'Failed to decrypt credentials. The data may be corrupted. Please re-add your X API credentials in Settings.',
+        errorCode: 'decryption_failed',
       };
     }
   } catch (error) {
@@ -265,6 +537,7 @@ export async function getXApiCredentials(
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
+      errorCode: 'database_error',
     };
   }
 }
@@ -320,17 +593,28 @@ export async function updateXApiCredentials(
     const encryptedApiKeySecret = await encrypt(credentials.apiKeySecret);
     const encryptedAccessToken = await encrypt(credentials.accessToken);
     const encryptedAccessTokenSecret = await encrypt(credentials.accessTokenSecret);
+    const encryptedBearerUpdate =
+      credentials.bearerToken !== undefined
+        ? credentials.bearerToken.trim()
+          ? await encrypt(credentials.bearerToken.trim())
+          : null
+        : undefined;
+
+    const updatePayload: Record<string, unknown> = {
+      encrypted_api_key: encryptedApiKey,
+      encrypted_api_secret: encryptedApiKeySecret,
+      encrypted_access_token: encryptedAccessToken,
+      encrypted_access_secret: encryptedAccessTokenSecret,
+      encryption_version: 1,
+      is_valid: false, // Will be validated separately
+    };
+    if (encryptedBearerUpdate !== undefined) {
+      updatePayload.encrypted_bearer_token = encryptedBearerUpdate;
+    }
 
     const { error } = await supabaseAdmin
       .from('user_credentials')
-      .update({
-        encrypted_api_key: encryptedApiKey,
-        encrypted_api_secret: encryptedApiKeySecret,
-        encrypted_access_token: encryptedAccessToken,
-        encrypted_access_secret: encryptedAccessTokenSecret,
-        encryption_version: 1,
-        is_valid: false, // Will be validated separately
-      })
+      .update(updatePayload)
       .eq('user_id', userId)
       .eq('credential_type', 'x-api');
 

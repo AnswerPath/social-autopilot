@@ -90,9 +90,9 @@ NODE_ENV=development
 RESEND_API_KEY=re_your_resend_api_key
 # RESEND_FROM=Social Autopilot <notifications@yourdomain.com>
 
-# Optional: Third-party Integrations
-TWITTER_CLIENT_ID=your-twitter-client-id
-TWITTER_CLIENT_SECRET=your-twitter-client-secret
+# X posting: per-user OAuth 1.0a — users add consumer keys in Settings → Integrations, then "Connect with X".
+# Callback URL registered in the X app must be: {NEXT_PUBLIC_APP_URL or NEXTAUTH_URL}/api/auth/twitter/callback
+# (NEXT_PUBLIC_APP_URL wins when both are set; see lib/x-oauth-config.ts).
 ```
 
 4. **Set up the database**
@@ -118,6 +118,7 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Yes |
 | `NEXT_PUBLIC_APP_URL` | Your application URL | Yes |
+| `NEXTAUTH_URL` | Alternate public base URL (e.g. prod canonical URL). Used for X OAuth callback when `NEXT_PUBLIC_APP_URL` is unset. | No |
 | `NODE_ENV` | Environment (development/production) | Yes |
 | `RESEND_API_KEY` | Resend API key for email notifications | No (email notifications disabled if missing) |
 | `RESEND_FROM` | Sender address (e.g. `App <notifications@yourdomain.com>`). Defaults to Resend onboarding domain for testing. | No |

@@ -5,30 +5,29 @@ import { XApiCredentials } from '@/lib/x-api-service';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { apiKey, apiKeySecret, accessToken, accessTokenSecret } = body;
+    const { apiKey, apiKeySecret, accessToken, accessTokenSecret, bearerToken } = body;
 
-    if (!apiKey || !apiKeySecret || !accessToken || !accessTokenSecret) {
+    const ak = typeof apiKey === 'string' ? apiKey.trim() : '';
+    const aks = typeof apiKeySecret === 'string' ? apiKeySecret.trim() : '';
+    const at = typeof accessToken === 'string' ? accessToken.trim() : '';
+    const ats = typeof accessTokenSecret === 'string' ? accessTokenSecret.trim() : '';
+    const bt =
+      typeof bearerToken === 'string' && bearerToken.trim() ? bearerToken.trim() : undefined;
+
+    if (!ak || !aks || !at || !ats) {
       return NextResponse.json(
         { error: 'Missing required fields: apiKey, apiKeySecret, accessToken, accessTokenSecret' },
         { status: 400 }
       );
     }
 
-    // Basic validation
-    if (typeof apiKey !== 'string' || apiKey.length < 10) {
-      return NextResponse.json(
-        { error: 'Invalid API key format' },
-        { status: 400 }
-      );
-    }
-
-    // Create temporary credentials for testing
     const testCredentials: XApiCredentials = {
-      apiKey,
-      apiKeySecret,
-      accessToken,
-      accessTokenSecret,
+      apiKey: ak,
+      apiKeySecret: aks,
+      accessToken: at,
+      accessTokenSecret: ats,
       userId: 'test-user',
+      ...(bt ? { bearerToken: bt } : {}),
     };
 
     try {

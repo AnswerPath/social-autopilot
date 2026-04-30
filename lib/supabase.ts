@@ -6,7 +6,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 
 /** Decode `role` claim from a Supabase API JWT (anon / authenticated / service_role). */
-function decodeSupabaseJwtRole(jwt: string): string | undefined {
+export function decodeSupabaseJwtRole(jwt: string): string | undefined {
   try {
     const parts = jwt.split('.')
     if (parts.length !== 3) return undefined
@@ -47,6 +47,13 @@ export function getSupabaseServiceKeyMisconfigurationMessage(): string | null {
     )
   }
   return null
+}
+
+/** Safe debug: JWT `role` claim of SUPABASE_SERVICE_ROLE_KEY only (no secrets). */
+export function getSupabaseServiceRoleJwtRole(): string | undefined {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!key || key === 'placeholder-service-key') return undefined
+  return decodeSupabaseJwtRole(key)
 }
 
 function warnIfServiceRoleKeyWrongForServer(): void {

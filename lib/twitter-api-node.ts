@@ -1,7 +1,8 @@
 "use server"
 
 import { TwitterApi } from 'twitter-api-v2'
-import { getTwitterCredentials, cleanupInvalidCredentials } from './database-storage'
+import { cleanupInvalidCredentials } from './database-storage'
+import { getUnifiedCredentials } from './unified-credentials'
 
 export interface TwitterPost {
   id: string
@@ -43,37 +44,44 @@ export interface TwitterUser {
   }
 }
 
-// Get stored credentials and create Twitter client
+// Get stored credentials and create Twitter client (x-api row or legacy twitter, auto-migrated)
 async function getTwitterClient(userId: string = 'demo-user') {
-  const result = await getTwitterCredentials(userId)
+  const result = await getUnifiedCredentials(userId)
   if (!result.success || !result.credentials) {
-    // If credentials are corrupted, try to clean them up
-    if (result.error?.includes('decrypt')) {
+    if (result.errorCode === 'oauth_pending') {
+      throw new Error('X authorization is pending. Save your consumer keys and complete Connect with X in Settings → Integrations.')
+    }
+
+    if (
+      result.errorCode === 'decryption_failed' ||
+      result.errorCode === 'invalid_encrypted' ||
+      result.error?.includes('decrypt')
+    ) {
       console.log('Attempting to cleanup corrupted credentials for user:', userId)
       await cleanupInvalidCredentials(userId)
     }
-    
-    // Provide more helpful error message
+
     const errorMsg = result.error || 'Unknown error'
     if (errorMsg.includes('table') || errorMsg.includes('does not exist')) {
       throw new Error('Database not set up. Please run the setup script.')
     }
     if (errorMsg.includes('decrypt') || errorMsg.includes('corrupted')) {
-      throw new Error('Invalid credentials found. Please re-add your Twitter API keys in Settings.')
+      throw new Error('Invalid credentials found. Please re-add your X API keys in Settings → Integrations.')
     }
-    throw new Error(`No Twitter credentials found for user ${userId}. Please configure your API keys in Settings. Error: ${errorMsg}`)
+    throw new Error(
+      `No X API credentials found for user ${userId}. Configure them in Settings → Integrations. Error: ${errorMsg}`
+    )
   }
-  
+
   const credentials = result.credentials
-  
-  // Create Twitter client with OAuth 1.0a credentials
+
   const client = new TwitterApi({
     appKey: credentials.apiKey,
-    appSecret: credentials.apiSecret,
+    appSecret: credentials.apiKeySecret,
     accessToken: credentials.accessToken,
-    accessSecret: credentials.accessSecret,
+    accessSecret: credentials.accessTokenSecret,
   })
-  
+
   return { client: client.v2, credentials }
 }
 
@@ -107,7 +115,10 @@ export async function postTweet(
       ? { media: { media_ids: mediaIds } }
       : undefined
     
-    const tweet = await client.tweet(text, mediaOptions)
+    const tweet =
+      mediaOptions !== undefined
+        ? await client.tweet(text, mediaOptions)
+        : await client.tweet(text)
     
     console.log('✅ Tweet posted successfully:', tweet.data.id)
     
@@ -263,16 +274,17 @@ export async function getUserProfile(
       'user.fields': ['profile_image_url', 'public_metrics', 'description']
     })
     
+    const pm = user.data.public_metrics
     const userData: TwitterUser = {
       id: user.data.id,
       username: user.data.username,
       name: user.data.name,
       profile_image_url: user.data.profile_image_url || '/placeholder.svg?height=100&width=100',
-      public_metrics: user.data.public_metrics || {
-        followers_count: 0,
-        following_count: 0,
-        tweet_count: 0
-      }
+      public_metrics: {
+        followers_count: pm?.followers_count ?? 0,
+        following_count: pm?.following_count ?? 0,
+        tweet_count: pm?.tweet_count ?? 0,
+      },
     }
     
     console.log('✅ User profile fetched:', userData.username)
@@ -356,9 +368,9 @@ export async function uploadMedia(
     // Note: Media upload uses v1.1 API
     const twitterV1 = new TwitterApi({
       appKey: credentials.apiKey,
-      appSecret: credentials.apiSecret,
+      appSecret: credentials.apiKeySecret,
       accessToken: credentials.accessToken,
-      accessSecret: credentials.accessSecret,
+      accessSecret: credentials.accessTokenSecret,
     }).v1
     
     const mediaId = await twitterV1.uploadMedia(mediaBuffer, { type: mediaType })

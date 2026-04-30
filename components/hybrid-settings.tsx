@@ -33,12 +33,14 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   const [hasXUsername, setHasXUsername] = useState(false);
   const [isXUsernameLoading, setIsXUsernameLoading] = useState(false);
 
-  // X API state
+  // X API state (consumer keys + optional bearer; access tokens via OAuth 1.0a redirect)
   const [xApiKey, setXApiKey] = useState('');
   const [xApiKeySecret, setXApiKeySecret] = useState('');
-  const [xAccessToken, setXAccessToken] = useState('');
-  const [xAccessTokenSecret, setXAccessTokenSecret] = useState('');
+  const [xBearerToken, setXBearerToken] = useState('');
   const [hasXApiCredentials, setHasXApiCredentials] = useState(false);
+  const [hasXConsumerKeys, setHasXConsumerKeys] = useState(false);
+  const [hasXAccessTokens, setHasXAccessTokens] = useState(false);
+  const [connectedXHandle, setConnectedXHandle] = useState<string | null>(null);
   const [xApiMessage, setXApiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isXApiTesting, setIsXApiTesting] = useState(false);
   const [xApiTestResult, setXApiTestResult] = useState<{ success: boolean; message: string; user?: any } | null>(null);
@@ -49,6 +51,39 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     checkExistingCredentials();
   }, [userId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const u = new URL(window.location.href);
+    const connected = u.searchParams.get('x_connected');
+    const err = u.searchParams.get('x_error');
+    if (connected === '1') {
+      setXApiMessage({ type: 'success', text: 'X account authorized. Access tokens saved securely.' });
+      void checkExistingCredentials();
+    } else if (err) {
+      const human =
+        err === 'denied'
+          ? 'Authorization was cancelled on X.'
+          : err === 'missing_oauth_params'
+            ? 'OAuth session expired. Try Connect with X again.'
+            : err === 'oauth_token_mismatch'
+              ? 'OAuth security check failed. Try Connect with X again.'
+              : err === 'no_consumer_keys'
+                ? 'Save your API Key and Secret before connecting.'
+                : `X connection failed: ${err}`;
+      setXApiMessage({ type: 'error', text: human });
+      void checkExistingCredentials();
+    }
+    if (connected === '1' || err) {
+      const params = new URLSearchParams(u.searchParams);
+      params.delete('x_connected');
+      params.delete('x_error');
+      const newUrl = `${u.pathname}${params.toString() ? `?${params.toString()}` : ''}${u.hash}`;
+      window.history.replaceState({}, '', newUrl);
+    }
+    // Intentionally once on mount for OAuth redirect query params
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh credential banner after redirect
+  }, []);
+
   const checkExistingCredentials = async () => {
     try {
       // Check Apify credentials
@@ -58,11 +93,15 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
         setHasApifyCredentials(apifyData.hasCredentials);
       }
 
-      // Check X API credentials
       const xApiResponse = await fetch('/api/settings/x-api-credentials');
       if (xApiResponse.ok) {
         const xApiData = await xApiResponse.json();
-        setHasXApiCredentials(xApiData.hasCredentials);
+        setHasXApiCredentials(!!xApiData.hasCredentials);
+        setHasXConsumerKeys(!!xApiData.hasConsumerKeys);
+        setHasXAccessTokens(!!xApiData.hasAccessTokens);
+        setConnectedXHandle(
+          typeof xApiData.connectedXUsername === 'string' ? xApiData.connectedXUsername : null
+        );
       }
       
       // Check stored X username
@@ -236,30 +275,18 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     setXApiMessage(null);
 
     try {
-      let response;
-      
-      // If form fields are filled, test with those
-      if (xApiKey.trim() && xApiKeySecret.trim() && xAccessToken.trim() && xAccessTokenSecret.trim()) {
-        response = await fetch('/api/settings/test-x-api-connection', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            apiKey: xApiKey.trim(),
-            apiKeySecret: xApiKeySecret.trim(),
-            accessToken: xAccessToken.trim(),
-            accessTokenSecret: xAccessTokenSecret.trim(),
-          }),
+      if (!hasXAccessTokens) {
+        setXApiMessage({
+          type: 'error',
+          text: 'Save your API Key and Secret, then use Connect with X to authorize before testing.',
         });
-      } else if (hasXApiCredentials) {
-        // If credentials are saved, test with saved credentials
-        response = await fetch(`/api/settings/test-x-api-connection-saved?userId=${userId}`, {
-          method: 'POST',
-        });
-      } else {
-        setXApiMessage({ type: 'error', text: 'Please enter X API credentials or save them first' });
         setIsXApiTesting(false);
         return;
       }
+
+      const response = await fetch(`/api/settings/test-x-api-connection-saved?userId=${userId}`, {
+        method: 'POST',
+      });
 
       const data = await response.json();
 
@@ -289,8 +316,8 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
   };
 
   const saveXApiCredentials = async () => {
-    if (!xApiKey.trim() || !xApiKeySecret.trim() || !xAccessToken.trim() || !xAccessTokenSecret.trim()) {
-      setXApiMessage({ type: 'error', text: 'Please enter all X API credentials' });
+    if (!xApiKey.trim() || !xApiKeySecret.trim()) {
+      setXApiMessage({ type: 'error', text: 'Please enter your X API Key and API Key Secret' });
       return;
     }
 
@@ -298,32 +325,68 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     setXApiMessage(null);
 
     try {
+      const body: Record<string, string> = {
+        apiKey: xApiKey.trim(),
+        apiKeySecret: xApiKeySecret.trim(),
+      };
+      if (xBearerToken.trim()) {
+        body.bearerToken = xBearerToken.trim();
+      }
+
       const response = await fetch('/api/settings/x-api-credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: xApiKey.trim(),
-          apiKeySecret: xApiKeySecret.trim(),
-          accessToken: xAccessToken.trim(),
-          accessTokenSecret: xAccessTokenSecret.trim(),
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setXApiMessage({ type: 'success', text: 'X API credentials saved successfully!' });
-        setHasXApiCredentials(true);
-        setXApiKey(''); // Clear inputs for security
+        setXApiMessage({
+          type: 'success',
+          text:
+            data.needsOAuth === true
+              ? 'Consumer keys saved. Click “Connect with X” to authorize and obtain access tokens.'
+              : 'X API credentials saved successfully!',
+        });
+        void checkExistingCredentials().catch(error => {
+          console.error('Failed to refresh X API credential status after save:', error);
+        });
+        setXApiKey('');
         setXApiKeySecret('');
-        setXAccessToken('');
-        setXAccessTokenSecret('');
+        setXBearerToken('');
         setXApiTestResult(null);
       } else {
         setXApiMessage({ type: 'error', text: data.error });
       }
     } catch (error) {
       setXApiMessage({ type: 'error', text: 'Failed to save credentials. Please try again.' });
+    } finally {
+      setIsXApiLoading(false);
+    }
+  };
+
+  const disconnectXAccessOnly = async () => {
+    if (!confirm('Remove X access tokens? You can reconnect with “Connect with X” without re-entering consumer keys.')) {
+      return;
+    }
+    setIsXApiLoading(true);
+    setXApiMessage(null);
+    try {
+      const response = await fetch('/api/settings/x-api-credentials?scope=access', { method: 'DELETE' });
+      const data = await response.json();
+      if (response.ok) {
+        setXApiMessage({ type: 'success', text: data.message || 'Disconnected from X.' });
+        void checkExistingCredentials().catch(error => {
+          console.error('Failed to refresh X API credential status after disconnect:', error);
+        });
+        setXApiTestResult(null);
+      } else {
+        setXApiMessage({ type: 'error', text: data.error || 'Failed to disconnect' });
+      }
+    } catch (err) {
+      console.error('Failed to disconnect', err);
+      setXApiMessage({ type: 'error', text: 'Failed to disconnect. Please try again.' });
     } finally {
       setIsXApiLoading(false);
     }
@@ -347,6 +410,9 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
       if (response.ok) {
         setXApiMessage({ type: 'success', text: 'X API credentials deleted successfully!' });
         setHasXApiCredentials(false);
+        setHasXConsumerKeys(false);
+        setHasXAccessTokens(false);
+        setConnectedXHandle(null);
         setXApiTestResult(null);
       } else {
         setXApiMessage({ type: 'error', text: data.error });
@@ -508,7 +574,13 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
             X API Integration (Posting)
           </CardTitle>
           <CardDescription>
-            Configure your X API credentials for posting content and managing your X account.
+            Enter your app&apos;s <strong>API Key</strong> and <strong>API Key Secret</strong> from the{' '}
+            <a href="https://developer.twitter.com/" target="_blank" rel="noopener noreferrer" className="underline">
+              X developer portal
+            </a>
+            . Set the callback URL to <code className="text-xs bg-muted px-1 rounded">…/api/auth/twitter/callback</code>{' '}
+            (same origin as this app). Then use <strong>Connect with X</strong> to complete OAuth 1.0a — access tokens are
+            stored encrypted; you do not paste them manually. Optional <strong>Bearer token</strong> helps some read-only checks.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -539,7 +611,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="x-api-key">API Key</Label>
+              <Label htmlFor="x-api-key">API Key (consumer)</Label>
               <Input
                 id="x-api-key"
                 type="password"
@@ -550,7 +622,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="x-api-key-secret">API Key Secret</Label>
+              <Label htmlFor="x-api-key-secret">API Key Secret (consumer)</Label>
               <Input
                 id="x-api-key-secret"
                 type="password"
@@ -560,34 +632,23 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
                 disabled={isXApiLoading}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="x-access-token">Access Token</Label>
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="x-bearer-token">Bearer token (optional)</Label>
               <Input
-                id="x-access-token"
+                id="x-bearer-token"
                 type="password"
-                placeholder="Enter your X access token"
-                value={xAccessToken}
-                onChange={(e) => setXAccessToken(e.target.value)}
-                disabled={isXApiLoading}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="x-access-token-secret">Access Token Secret</Label>
-              <Input
-                id="x-access-token-secret"
-                type="password"
-                placeholder="Enter your X access token secret"
-                value={xAccessTokenSecret}
-                onChange={(e) => setXAccessTokenSecret(e.target.value)}
+                placeholder="App-only Bearer token from the developer portal, if you use it"
+                value={xBearerToken}
+                onChange={(e) => setXBearerToken(e.target.value)}
                 disabled={isXApiLoading}
               />
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               onClick={testXApiConnection}
-              disabled={isXApiLoading || isXApiTesting || (!hasXApiCredentials && (!xApiKey.trim() || !xApiKeySecret.trim() || !xAccessToken.trim() || !xAccessTokenSecret.trim()))}
+              disabled={isXApiLoading || isXApiTesting || !hasXAccessTokens}
               variant="outline"
             >
               {isXApiTesting ? (
@@ -597,30 +658,66 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               )}
               Test X API Connection
             </Button>
+            <Button
+              type="button"
+              variant="default"
+              disabled={isXApiLoading || !hasXConsumerKeys}
+              onClick={() => {
+                window.location.href = '/api/auth/twitter?returnTo=/account-settings';
+              }}
+            >
+              <Twitter className="h-4 w-4 mr-2 inline" />
+              Connect with X
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Save your consumer keys first, then use Connect with X (requires a saved row in the database).
+          </p>
 
-          <div className="flex gap-2">
-            {!hasXApiCredentials ? (
-              <Button onClick={saveXApiCredentials} disabled={isXApiLoading || !xApiKey.trim() || !xApiKeySecret.trim() || !xAccessToken.trim() || !xAccessTokenSecret.trim()}>
-                {isXApiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                Save X API Credentials
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={saveXApiCredentials} disabled={isXApiLoading || !xApiKey.trim() || !xApiKeySecret.trim()}>
+              {isXApiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              Save consumer keys
+            </Button>
+            {hasXAccessTokens && (
+              <Button onClick={disconnectXAccessOnly} disabled={isXApiLoading} variant="outline">
+                Disconnect X account
               </Button>
-            ) : (
+            )}
+            {hasXApiCredentials && (
               <Button onClick={deleteXApiCredentials} disabled={isXApiLoading} variant="destructive">
                 {isXApiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                Delete X API Credentials
+                Remove all X API data
               </Button>
             )}
           </div>
 
-          {hasXApiCredentials && (
+          {hasXConsumerKeys && !hasXAccessTokens && (
+            <div className="rounded-md bg-amber-50 p-3 border border-amber-200">
+              <div className="flex items-center gap-2 text-amber-900">
+                <Twitter className="h-4 w-4" />
+                <span className="text-sm font-medium">OAuth pending</span>
+              </div>
+              <p className="mt-1 text-sm text-amber-800">
+                Consumer keys are saved. Use <strong>Connect with X</strong> to authorize posting for your account.
+              </p>
+            </div>
+          )}
+
+          {hasXAccessTokens && (
             <div className="rounded-md bg-green-50 p-3">
               <div className="flex items-center gap-2 text-green-800">
                 <CheckCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">X API credentials configured</span>
+                <span className="text-sm font-medium">X API ready for posting</span>
               </div>
               <p className="mt-1 text-sm text-green-700">
-                Your X API integration is ready for posting content and managing your account.
+                {connectedXHandle ? (
+                  <>
+                    Connected as <Badge variant="secondary">@{connectedXHandle}</Badge>
+                  </>
+                ) : (
+                  <>Access tokens stored. You can post and use timeline features.</>
+                )}
               </p>
             </div>
           )}
@@ -628,7 +725,7 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
       </Card>
 
       {/* Integration Status */}
-      {(hasApifyCredentials || hasXApiCredentials) && (
+      {(hasApifyCredentials || hasXConsumerKeys || hasXAccessTokens) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -648,12 +745,12 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               <div className="flex items-center gap-2">
                 <Twitter className="h-4 w-4" />
                 <span>X API (Posting):</span>
-                <Badge variant={hasXApiCredentials ? 'default' : 'secondary'}>
-                  {hasXApiCredentials ? 'Configured' : 'Not Configured'}
+                <Badge variant={hasXAccessTokens ? 'default' : 'secondary'}>
+                  {hasXAccessTokens ? 'Connected' : hasXConsumerKeys ? 'OAuth pending' : 'Not configured'}
                 </Badge>
               </div>
             </div>
-            {hasApifyCredentials && hasXApiCredentials && (
+            {hasApifyCredentials && hasXAccessTokens && (
               <div className="mt-4 rounded-md bg-blue-50 p-3">
                 <p className="text-sm text-blue-800">
                   🎉 Your hybrid integration is fully configured! You can now scrape data with Apify and post content with the X API.

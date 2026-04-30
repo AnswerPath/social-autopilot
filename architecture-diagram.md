@@ -41,12 +41,14 @@ graph TB
         end
         
         subgraph "Authentication"
-            AUTH_TW["/api/auth/twitter"]
+            AUTH_TW["/api/auth/twitter<br/>→ /auth/error if no consumer keys"]
             AUTH_CB["/api/auth/twitter/callback"]
         end
         
         subgraph "Settings & Management"
-            SET_CRED["/api/settings/twitter-credentials"]
+            SET_XAPI["/api/settings/x-api-credentials"]
+            SET_CRED_LIST["/api/settings/credentials-list<br/>(x-api flags)"]
+            SET_CRED["/api/settings/twitter-credentials<br/>(deprecated shim → x-api)"]
             SET_CONN["/api/settings/test-connection"]
             SET_HEALTH["/api/settings/database-health"]
             SET_CLEAN["/api/settings/cleanup-credentials"]
@@ -98,6 +100,8 @@ graph TB
     HOOKS --> TW_TWEETS
     HOOKS --> TW_MENT
     FORM_COMP --> SET_CRED
+    FORM_COMP --> SET_XAPI
+    FORM_COMP --> SET_CRED_LIST
     FORM_COMP --> SET_CONN
     
     %% Twitter API Integration
@@ -118,6 +122,8 @@ graph TB
     TW_API --> DB_STOR
     DB_STOR --> CRED_TBL
     SET_CRED --> API_STOR
+    SET_XAPI --> API_STOR
+    SET_CRED_LIST --> DB_STOR
     API_STOR --> CRED_TBL
     SCH_POST --> POSTS_TBL
     SCH_DISP --> POSTS_TBL
@@ -144,7 +150,7 @@ graph TB
     classDef external fill:#ffebee
     
     class HOME,DASH,SETT,AUTH,UI,DASH_COMP,FORM_COMP,HOOKS frontend
-    class TW_PROF,TW_POST,TW_TWEETS,TW_MENT,TW_REPLY,TW_UPLOAD,AUTH_TW,AUTH_CB,SET_CRED,SET_CONN,SET_HEALTH,SET_CLEAN,SCH_POST,SCH_DISP,DB_SETUP api
+    class TW_PROF,TW_POST,TW_TWEETS,TW_MENT,TW_REPLY,TW_UPLOAD,AUTH_TW,AUTH_CB,SET_XAPI,SET_CRED_LIST,SET_CRED,SET_CONN,SET_HEALTH,SET_CLEAN,SCH_POST,SCH_DISP,DB_SETUP api
     class TW_API,TW_VAL,DB_STOR,API_STOR,ENC,UTILS service
     class CRED_TBL,USERS_TBL,POSTS_TBL database
     class TW,SB,VZ external

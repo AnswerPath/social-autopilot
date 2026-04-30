@@ -1,48 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  storeTwitterCredentials, 
-  getTwitterCredentials, 
-  deleteTwitterCredentials, 
-  updateCredentialValidation,
-  getCredentialMetadata 
+import {
+  deleteTwitterCredentials,
+  getCredentialMetadata,
 } from '@/lib/database-storage'
-import { validateTwitterCredentials } from '@/lib/twitter-validation'
+import { deleteXApiCredentials, getXApiCredentials, validateXApiCredentials } from '@/lib/x-api-storage'
+import { hasUnifiedCredentials, storeUnifiedCredentials } from '@/lib/unified-credentials'
+import { XApiCredentials } from '@/lib/x-api-service'
 import { requireSessionUserId } from '@/lib/require-session-user'
 
-// Get current credentials metadata
+/**
+ * Legacy route: Settings → Twitter API tab was removed.
+ * GET/POST/DELETE remain as a thin compatibility layer mapping to X API (`x-api`) storage.
+ */
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireSessionUserId(request)
     if (!auth.ok) return auth.response
     const userId = auth.userId
-    
-    const result = await getCredentialMetadata(userId)
-    
-    if (result.success && result.metadata) {
-      // Return safe metadata without actual credentials
-      return NextResponse.json({
-        hasCredentials: true,
-        encryptedAt: result.metadata.encryptedAt,
-        lastValidated: result.metadata.lastValidated,
-        isValid: result.metadata.isValid,
-        encryptionVersion: result.metadata.encryptionVersion,
-        // Return masked versions for display
-        apiKey: '••••••••',
-        accessToken: '••••••••'
-      })
-    } else {
+
+    const unified = await hasUnifiedCredentials(userId)
+    if (!unified.hasCredentials) {
       return NextResponse.json({ hasCredentials: false })
     }
-  } catch (error: any) {
+
+    const legacyMeta = await getCredentialMetadata(userId)
+    if (legacyMeta.success && legacyMeta.metadata) {
+      return NextResponse.json({
+        hasCredentials: true,
+        encryptedAt: legacyMeta.metadata.encryptedAt,
+        lastValidated: legacyMeta.metadata.lastValidated,
+        isValid: legacyMeta.metadata.isValid,
+        encryptionVersion: legacyMeta.metadata.encryptionVersion,
+        apiKey: '••••••••',
+        accessToken: '••••••••',
+        note: 'Configure X in Settings → Integrations. This endpoint is deprecated.',
+      })
+    }
+
+    const x = await getXApiCredentials(userId)
+    if (x.success) {
+      return NextResponse.json({
+        hasCredentials: true,
+        apiKey: '••••••••',
+        accessToken: '••••••••',
+        note: 'Configure X in Settings → Integrations. This endpoint is deprecated.',
+      })
+    }
+
+    return NextResponse.json({ hasCredentials: false })
+  } catch (error: unknown) {
     console.error('API Error:', error)
-    return NextResponse.json(
-      { error: 'Failed to retrieve credentials' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to retrieve credentials' }, { status: 500 })
   }
 }
 
-// Store new credentials
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireSessionUserId(request)
@@ -51,87 +63,89 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { apiKey, apiSecret, accessToken, accessSecret, bearerToken } = body
-    
-    // Validate required fields
-    if (!apiKey || !apiSecret || !accessToken || !accessSecret) {
+
+    const ak = typeof apiKey === 'string' ? apiKey.trim() : ''
+    const aks = typeof apiSecret === 'string' ? apiSecret.trim() : ''
+    const at = typeof accessToken === 'string' ? accessToken.trim() : ''
+    const ats = typeof accessSecret === 'string' ? accessSecret.trim() : ''
+    const bt =
+      typeof bearerToken === 'string' && bearerToken.trim() ? bearerToken.trim() : undefined
+
+    if (!ak || !aks || !at || !ats) {
       return NextResponse.json(
-        { error: 'All required fields must be provided' },
+        { error: 'All required fields must be provided (maps to Settings → Integrations X API).' },
         { status: 400 }
       )
     }
-    
-    const credentials = {
-      apiKey: apiKey.trim(),
-      apiSecret: apiSecret.trim(),
-      accessToken: accessToken.trim(),
-      accessSecret: accessSecret.trim(),
-      bearerToken: bearerToken?.trim()
+
+    const credentials: XApiCredentials = {
+      apiKey: ak,
+      apiKeySecret: aks,
+      accessToken: at,
+      accessTokenSecret: ats,
+      userId,
+      ...(bt ? { bearerToken: bt } : {}),
     }
-    
-    // Validate credentials with Twitter API
-    const validation = await validateTwitterCredentials(credentials)
-    
-    if (!validation.isValid) {
+
+    const validation = await validateXApiCredentials(credentials)
+    if (!validation.success) {
       return NextResponse.json(
         { error: validation.error || 'Invalid credentials' },
         { status: 400 }
       )
     }
-    
-    // Store encrypted credentials in database
-    const storeResult = await storeTwitterCredentials(userId, credentials)
-    
+
+    const storeResult = await storeUnifiedCredentials(userId, credentials)
     if (!storeResult.success) {
       return NextResponse.json(
         { error: storeResult.error || 'Failed to store credentials' },
         { status: 500 }
       )
     }
-    
-    // Update validation status
-    await updateCredentialValidation(userId, true)
-    
+
     return NextResponse.json({
       success: true,
-      message: 'Credentials stored and validated successfully',
+      message:
+        'Credentials stored as X API (Settings → Integrations). Legacy /twitter-credentials is deprecated.',
       id: storeResult.id,
-      userInfo: validation.userInfo,
-      permissions: validation.permissions
+      userInfo: validation.user
+        ? {
+            id: validation.user.id,
+            username: validation.user.username,
+            name: validation.user.name,
+            verified: validation.user.verified,
+            followers_count: validation.user.public_metrics?.followers_count ?? 0,
+          }
+        : undefined,
+      permissions: { canRead: true, canWrite: true, canUploadMedia: true },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// Delete credentials
 export async function DELETE(request: NextRequest) {
   try {
     const auth = await requireSessionUserId(request)
     if (!auth.ok) return auth.response
     const userId = auth.userId
-    
-    const result = await deleteTwitterCredentials(userId)
-    
-    if (result.success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Credentials deleted successfully' 
+
+    await deleteTwitterCredentials(userId)
+    const xDel = await deleteXApiCredentials(userId)
+
+    if (xDel.success) {
+      return NextResponse.json({
+        success: true,
+        message: 'X / Twitter credentials removed (x-api and legacy twitter rows).',
       })
-    } else {
-      return NextResponse.json(
-        { error: result.error || 'Failed to delete credentials' },
-        { status: 400 }
-      )
     }
-  } catch (error: any) {
-    console.error('API Error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: xDel.error || 'Failed to delete credentials' },
+      { status: 400 }
     )
+  } catch (error: unknown) {
+    console.error('API Error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

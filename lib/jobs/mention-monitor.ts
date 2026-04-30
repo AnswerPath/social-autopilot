@@ -1,6 +1,5 @@
 import { createMentionMonitoringService, Mention } from '../mention-monitoring';
-import { getTwitterCredentials } from '../database-storage';
-import { decrypt } from '../encryption';
+import { getUnifiedCredentials } from '../unified-credentials';
 
 export interface MentionMonitorJobConfig {
   userId: string;
@@ -35,27 +34,20 @@ export class MentionMonitorJob {
     }
 
     try {
-      // Get user credentials
-      const credentialsResult = await getTwitterCredentials(this.userId);
+      const credentialsResult = await getUnifiedCredentials(this.userId);
       if (!credentialsResult.success || !credentialsResult.credentials) {
-        throw new Error(`Twitter credentials not found for user ${this.userId}`);
+        throw new Error(`X API credentials not found for user ${this.userId}`);
       }
 
       const creds = credentialsResult.credentials;
-      
-      // Decrypt credentials
-      const apiKey = await decrypt(creds.encrypted_api_key);
-      const apiSecret = await decrypt(creds.encrypted_api_secret);
-      const accessToken = await decrypt(creds.encrypted_access_token);
-      const accessSecret = await decrypt(creds.encrypted_access_secret);
 
       // Create monitoring service
       this.monitor = createMentionMonitoringService({
         credentials: {
-          apiKey,
-          apiKeySecret: apiSecret,
-          accessToken,
-          accessTokenSecret: accessSecret,
+          apiKey: creds.apiKey,
+          apiKeySecret: creds.apiKeySecret,
+          accessToken: creds.accessToken,
+          accessTokenSecret: creds.accessTokenSecret,
           userId: this.userId,
         },
         userId: this.userId,

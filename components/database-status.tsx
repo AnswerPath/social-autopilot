@@ -18,6 +18,11 @@ interface DatabaseHealth {
 
 export function DatabaseStatus() {
   const [credentials, setCredentials] = useState<any[]>([])
+  const [xApiRowStatus, setXApiRowStatus] = useState<{
+    has_xapi_row: boolean
+    is_xapi_valid: boolean
+    pending_oauth: boolean
+  } | null>(null)
   const [health, setHealth] = useState<DatabaseHealth | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +45,11 @@ export function DatabaseStatus() {
       
       if (credentialsResponse.ok) {
         setCredentials(credentialsData.credentials || [])
+        setXApiRowStatus({
+          has_xapi_row: !!credentialsData.has_xapi_row,
+          is_xapi_valid: !!credentialsData.is_xapi_valid,
+          pending_oauth: !!credentialsData.pending_oauth,
+        })
       } else {
         setError(credentialsData.error || 'Failed to fetch credentials')
       }
@@ -248,10 +258,21 @@ export function DatabaseStatus() {
             <Badge variant="secondary">{credentials.length}</Badge>
           </div>
           
-          {credentials.map((cred, index) => (
+          {credentials.map((cred, index) => {
+            const dotClass =
+              cred.credential_type === 'x-api' && xApiRowStatus?.has_xapi_row
+                ? xApiRowStatus.is_xapi_valid
+                  ? 'bg-green-500'
+                  : xApiRowStatus.pending_oauth
+                    ? 'bg-amber-500'
+                    : 'bg-muted-foreground'
+                : cred.is_valid
+                  ? 'bg-green-500'
+                  : 'bg-muted-foreground'
+            return (
             <div key={cred.id} className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <div className={`w-2 h-2 rounded-full ${dotClass}`} />
                 <div>
                   <p className="text-sm font-medium capitalize">{cred.credential_type}</p>
                   <p className="text-xs text-muted-foreground">
@@ -270,7 +291,8 @@ export function DatabaseStatus() {
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
           
           {credentials.length === 0 && !isLoading && !error && (
             <div className="text-center py-4 text-muted-foreground">

@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, CheckCircle, XCircle, TestTube, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle, XCircle, TestTube, ExternalLink, Twitter } from 'lucide-react'
 
 interface StepConnectXProps {
   onSkip: () => void
@@ -21,29 +21,64 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
   const [apifyApiKey, setApifyApiKey] = useState('')
   const [xApiKey, setXApiKey] = useState('')
   const [xApiKeySecret, setXApiKeySecret] = useState('')
-  const [xAccessToken, setXAccessToken] = useState('')
-  const [xAccessTokenSecret, setXAccessTokenSecret] = useState('')
+  const [xBearerToken, setXBearerToken] = useState('')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
+  const [hasXConsumerKeys, setHasXConsumerKeys] = useState(false)
+
+  const refreshXStatus = useCallback(async (): Promise<Record<string, unknown> | null> => {
+    const r = await fetch('/api/settings/x-api-credentials')
+    if (!r.ok) return null
+    const d = (await r.json()) as Record<string, unknown>
+    setHasXConsumerKeys(!!d.hasConsumerKeys)
+    return d
+  }, [])
+
+  useEffect(() => {
+    void refreshXStatus()
+  }, [refreshXStatus])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const u = new URL(window.location.href)
+    if (u.searchParams.get('x_connected') === '1') {
+      setMessage({ type: 'success', text: 'X account connected. You can continue onboarding.' })
+      void refreshXStatus()
+      window.history.replaceState({}, '', u.pathname)
+    }
+    const err = u.searchParams.get('x_error')
+    if (err) {
+      setMessage({
+        type: 'error',
+        text:
+          err === 'denied'
+            ? 'Authorization was cancelled on X.'
+            : `Could not complete X connection (${decodeURIComponent(err)}).`,
+      })
+      window.history.replaceState({}, '', u.pathname)
+    }
+  }, [refreshXStatus])
 
   const saveAndTest = async () => {
     setMessage(null)
     const hasApify = apifyApiKey.trim().length > 0
-    const hasX = [xApiKey, xApiKeySecret, xAccessToken, xAccessTokenSecret].every((s) => s.trim().length > 0)
+    const hasXConsumer = xApiKey.trim().length > 0 && xApiKeySecret.trim().length > 0
 
-    if (!hasApify && !hasX) {
-      setMessage({ type: 'error', text: 'Enter at least Apify API key or X API credentials.' })
+    if (!hasApify && !hasXConsumer) {
+      setMessage({ type: 'error', text: 'Enter at least Apify API key or X API consumer key + secret.' })
       return
     }
 
-    if ((hasApify || hasX) && !userId) {
+    if ((hasApify || hasXConsumer) && !userId) {
       setMessage({ type: 'error', text: 'Session expired. Please log in again to save credentials.' })
       return
     }
 
     setIsSaving(true)
     try {
+      let credJson: Record<string, unknown> = {}
+
       if (hasApify) {
         const r = await fetch('/api/settings/apify-credentials', {
           method: 'POST',
@@ -57,16 +92,16 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           return
         }
       }
-      if (hasX) {
+      if (hasXConsumer) {
+        const body: Record<string, string> = {
+          apiKey: xApiKey.trim(),
+          apiKeySecret: xApiKeySecret.trim(),
+        }
+        if (xBearerToken.trim()) body.bearerToken = xBearerToken.trim()
         const r = await fetch('/api/settings/x-api-credentials', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            apiKey: xApiKey.trim(),
-            apiKeySecret: xApiKeySecret.trim(),
-            accessToken: xAccessToken.trim(),
-            accessTokenSecret: xAccessTokenSecret.trim(),
-          }),
+          body: JSON.stringify(body),
         })
         if (!r.ok) {
           const d = await r.json()
@@ -74,27 +109,16 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           setIsSaving(false)
           return
         }
+        credJson = (await refreshXStatus()) ?? {}
+        if (Object.keys(credJson).length === 0) {
+          const credRes = await fetch('/api/settings/x-api-credentials')
+          credJson = credRes.ok ? ((await credRes.json()) as Record<string, unknown>) : {}
+        }
       }
-      setMessage({ type: 'success', text: 'Credentials saved. Testing connection…' })
+
       setIsTesting(true)
-      if (hasX) {
-        const testRes = await fetch('/api/settings/test-x-api-connection', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            apiKey: xApiKey.trim(),
-            apiKeySecret: xApiKeySecret.trim(),
-            accessToken: xAccessToken.trim(),
-            accessTokenSecret: xAccessTokenSecret.trim(),
-          }),
-        })
-        const testData = await testRes.json()
-        setMessage(
-          testRes.ok
-            ? { type: 'success', text: testData.message || 'X connection successful!' }
-            : { type: 'error', text: testData.error || 'X connection test failed' }
-        )
-      } else if (hasApify) {
+
+      if (hasApify) {
         const testRes = await fetch('/api/settings/test-apify-connection', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -107,7 +131,24 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
             : { type: 'error', text: testData.error || 'Apify connection test failed' }
         )
       }
-    } catch (e) {
+
+      if (hasXConsumer && credJson.hasAccessTokens && userId) {
+        const testRes = await fetch(`/api/settings/test-x-api-connection-saved?userId=${encodeURIComponent(userId)}`, {
+          method: 'POST',
+        })
+        const testData = await testRes.json()
+        setMessage(
+          testRes.ok
+            ? { type: 'success', text: testData.message || 'X connection successful!' }
+            : { type: 'error', text: testData.error || 'X connection test failed' }
+        )
+      } else if (hasXConsumer && !credJson.hasAccessTokens) {
+        setMessage({
+          type: 'success',
+          text: 'X consumer keys saved. Use “Connect with X”, then “Save & test” again.',
+        })
+      }
+    } catch {
       setMessage({ type: 'error', text: 'Network error. Please try again.' })
     } finally {
       setIsSaving(false)
@@ -115,10 +156,15 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
     }
   }
 
+  const connectReturnTo =
+    typeof window !== 'undefined'
+      ? encodeURIComponent(window.location.pathname || '/onboarding')
+      : encodeURIComponent('/onboarding')
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Connecting X lets you post, see mentions, and view analytics. You need an{' '}
+        Connecting X lets you post, see mentions, and view analytics. Add an{' '}
         <a
           href="https://console.apify.com/account/integrations"
           target="_blank"
@@ -128,17 +174,17 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           Apify API key
           <ExternalLink className="h-3 w-3" />
         </a>{' '}
-        and{' '}
+        for scraping, and your{' '}
         <a
           href="https://developer.twitter.com/"
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-600 hover:underline inline-flex items-center gap-1"
         >
-          X API credentials
+          X developer app
           <ExternalLink className="h-3 w-3" />
-        </a>
-        . You can also do this later in Settings → Integrations.
+        </a>{' '}
+        consumer key + secret. Use <strong>Connect with X</strong> for OAuth 1.0a (no manual access tokens). You can also finish this in Settings → Integrations.
       </p>
 
       <div className="space-y-4">
@@ -154,7 +200,7 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="onboarding-x-key">X API Key</Label>
+          <Label htmlFor="onboarding-x-key">X API Key (consumer)</Label>
           <Input
             id="onboarding-x-key"
             type="password"
@@ -165,7 +211,7 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="onboarding-x-secret">X API Key Secret</Label>
+          <Label htmlFor="onboarding-x-secret">X API Key Secret (consumer)</Label>
           <Input
             id="onboarding-x-secret"
             type="password"
@@ -176,27 +222,30 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="onboarding-x-access">Access Token</Label>
+          <Label htmlFor="onboarding-x-bearer">Bearer token (optional)</Label>
           <Input
-            id="onboarding-x-access"
+            id="onboarding-x-bearer"
             type="password"
-            placeholder="Access Token"
-            value={xAccessToken}
-            onChange={(e) => setXAccessToken(e.target.value)}
+            placeholder="App-only Bearer token"
+            value={xBearerToken}
+            onChange={(e) => setXBearerToken(e.target.value)}
             disabled={isSaving}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="onboarding-x-access-secret">Access Token Secret</Label>
-          <Input
-            id="onboarding-x-access-secret"
-            type="password"
-            placeholder="Access Token Secret"
-            value={xAccessTokenSecret}
-            onChange={(e) => setXAccessTokenSecret(e.target.value)}
-            disabled={isSaving}
-          />
-        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="default"
+          disabled={isSaving || !hasXConsumerKeys}
+          onClick={() => {
+            window.location.href = `/api/auth/twitter?returnTo=${connectReturnTo}`
+          }}
+        >
+          <Twitter className="h-4 w-4 mr-2" />
+          Connect with X
+        </Button>
       </div>
 
       {message && (
@@ -227,7 +276,7 @@ export function StepConnectX({ onSkip, onContinue, loading }: StepConnectXProps)
           ) : (
             <TestTube className="h-4 w-4" />
           )}
-          Test connection
+          Save &amp; test
         </Button>
         <Button className="flex-1" onClick={onContinue} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continue'}

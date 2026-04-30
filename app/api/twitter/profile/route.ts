@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTwitterCredentials } from '@/lib/database-storage'
+import { getUnifiedCredentials } from '@/lib/unified-credentials'
 import { TwitterApi } from 'twitter-api-v2'
 import { getCurrentUser } from '@/lib/auth-utils'
 
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const result = await getTwitterCredentials(user.id)
+    const result = await getUnifiedCredentials(user.id)
 
     if (!result.success || !result.credentials) {
       console.log('❌ No credentials found')
@@ -35,12 +35,13 @@ export async function GET(request: NextRequest) {
     }
 
     const credentials = result.credentials
+    const bearer = credentials.bearerToken?.trim()
 
     // Prefer Bearer token (usually higher limits), else OAuth 1.0a
-    if (credentials.bearerToken && !credentials.bearerToken.includes('demo_')) {
+    if (bearer && !bearer.includes('demo_')) {
       try {
         const resp = await fetch('https://api.twitter.com/2/users/me?user.fields=description,public_metrics,profile_image_url', {
-          headers: { Authorization: `Bearer ${credentials.bearerToken}` }
+          headers: { Authorization: `Bearer ${bearer}` }
         })
         if (resp.ok) {
           const data = await resp.json()
@@ -74,9 +75,9 @@ export async function GET(request: NextRequest) {
     try {
       const client = new TwitterApi({
         appKey: credentials.apiKey,
-        appSecret: credentials.apiSecret,
+        appSecret: credentials.apiKeySecret,
         accessToken: credentials.accessToken,
-        accessSecret: credentials.accessSecret,
+        accessSecret: credentials.accessTokenSecret,
       })
 
       const twUser = await client.v2.me({

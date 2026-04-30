@@ -2,10 +2,14 @@
  * Unified credential management - consolidates Twitter and X API credentials
  * This module provides a single interface for credential management, using X API credentials
  * and automatically migrating from legacy Twitter credentials when needed.
+ *
+ * Posting requires OAuth 1.0a user context (four secrets) or OAuth 2.0 user tokens (future).
  */
 
-import { getXApiCredentials, storeXApiCredentials, XApiCredentials } from './x-api-storage';
+import { getXApiCredentials, storeXApiCredentials } from './x-api-storage';
+import type { XApiCredentials } from './x-api-service';
 import { getTwitterCredentials, storeTwitterCredentials, deleteTwitterCredentials, TwitterCredentials } from './database-storage';
+import type { CredentialErrorCode } from './credential-error-codes';
 
 export interface UnifiedCredentials extends XApiCredentials {}
 
@@ -14,7 +18,13 @@ export interface UnifiedCredentials extends XApiCredentials {}
  */
 export async function getUnifiedCredentials(
   userId: string
-): Promise<{ success: boolean; credentials?: UnifiedCredentials; error?: string; migrated?: boolean }> {
+): Promise<{
+  success: boolean
+  credentials?: UnifiedCredentials
+  error?: string
+  migrated?: boolean
+  errorCode?: CredentialErrorCode
+}> {
   try {
     // First, try to get X API credentials
     const xApiResult = await getXApiCredentials(userId);
@@ -38,7 +48,8 @@ export async function getUnifiedCredentials(
       if (!apiKey || !apiSecret || !accessToken || !accessSecret) {
         return {
           success: false,
-          error: 'No valid credentials found'
+          error: 'No valid credentials found',
+          errorCode: 'invalid_encrypted',
         };
       }
 
@@ -48,17 +59,20 @@ export async function getUnifiedCredentials(
         // Don't migrate demo credentials
         return {
           success: false,
-          error: 'No valid credentials found'
+          error: 'No valid credentials found',
+          errorCode: 'invalid_encrypted',
         };
       }
 
-      // Migrate to X API credentials
+      // Migrate to X API credentials (preserve optional app Bearer for read paths)
+      const bearer = twitterResult.credentials.bearerToken?.trim();
       const xApiCredentials: XApiCredentials = {
         apiKey,
         apiKeySecret: apiSecret,
         accessToken,
         accessTokenSecret: accessSecret,
-        userId
+        userId,
+        ...(bearer ? { bearerToken: bearer } : {}),
       };
 
       const storeResult = await storeXApiCredentials(userId, xApiCredentials);
@@ -76,7 +90,8 @@ export async function getUnifiedCredentials(
         console.error('❌ Failed to migrate credentials:', storeResult.error);
         return {
           success: false,
-          error: `Migration failed: ${storeResult.error}`
+          error: `Migration failed: ${storeResult.error}`,
+          errorCode: 'database_error',
         };
       }
     }
@@ -84,13 +99,15 @@ export async function getUnifiedCredentials(
     // No credentials found
     return {
       success: false,
-      error: 'No credentials found'
+      error: 'No credentials found',
+      errorCode: xApiResult.errorCode ?? twitterResult.errorCode,
     };
   } catch (error: any) {
     console.error('❌ Error getting unified credentials:', error);
     return {
       success: false,
-      error: error.message || 'Failed to get credentials'
+      error: error.message || 'Failed to get credentials',
+      errorCode: 'database_error',
     };
   }
 }
