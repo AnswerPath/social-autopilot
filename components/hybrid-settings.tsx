@@ -59,7 +59,6 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
     if (connected === '1') {
       setXApiMessage({ type: 'success', text: 'X account authorized. Access tokens saved securely.' });
       void checkExistingCredentials();
-      window.history.replaceState({}, '', u.pathname);
     } else if (err) {
       const human =
         err === 'denied'
@@ -70,10 +69,16 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               ? 'OAuth security check failed. Try Connect with X again.'
               : err === 'no_consumer_keys'
                 ? 'Save your API Key and Secret before connecting.'
-                : `X connection failed: ${decodeURIComponent(err)}`;
+                : `X connection failed: ${err}`;
       setXApiMessage({ type: 'error', text: human });
       void checkExistingCredentials();
-      window.history.replaceState({}, '', u.pathname);
+    }
+    if (connected === '1' || err) {
+      const params = new URLSearchParams(u.searchParams);
+      params.delete('x_connected');
+      params.delete('x_error');
+      const newUrl = `${u.pathname}${params.toString() ? `?${params.toString()}` : ''}${u.hash}`;
+      window.history.replaceState({}, '', newUrl);
     }
     // Intentionally once on mount for OAuth redirect query params
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh credential banner after redirect
@@ -344,7 +349,9 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
               ? 'Consumer keys saved. Click “Connect with X” to authorize and obtain access tokens.'
               : 'X API credentials saved successfully!',
         });
-        await checkExistingCredentials();
+        void checkExistingCredentials().catch(error => {
+          console.error('Failed to refresh X API credential status after save:', error);
+        });
         setXApiKey('');
         setXApiKeySecret('');
         setXBearerToken('');
@@ -370,7 +377,9 @@ export function HybridSettings({ userId }: HybridSettingsProps) {
       const data = await response.json();
       if (response.ok) {
         setXApiMessage({ type: 'success', text: data.message || 'Disconnected from X.' });
-        await checkExistingCredentials();
+        void checkExistingCredentials().catch(error => {
+          console.error('Failed to refresh X API credential status after disconnect:', error);
+        });
         setXApiTestResult(null);
       } else {
         setXApiMessage({ type: 'error', text: data.error || 'Failed to disconnect' });

@@ -2,5 +2,6 @@
 export type CredentialErrorCode =
   | 'not_found'
   | 'database_error'
+  | 'oauth_pending'
   | 'invalid_encrypted'
   | 'decryption_failed'

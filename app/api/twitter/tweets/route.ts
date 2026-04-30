@@ -20,6 +20,12 @@ type CachedTweet = {
 }
 
 type CachedTweetsEntry = { ts: number; data: CachedTweet[] }
+type TimelineTweet = {
+  id: string
+  text: string
+  created_at?: string
+  public_metrics?: Partial<TweetPublicMetrics>
+}
 
 const CACHE_TTL_MS = 15 * 60 * 1000
 const MAX_TWEETS_CACHE_ENTRIES = 500
@@ -68,6 +74,7 @@ export async function GET(request: NextRequest) {
   const maxResults = Number.isFinite(parsedMax)
     ? Math.min(100, Math.max(1, parsedMax))
     : 100
+  let lastTweetsError: unknown
 
   try {
     console.log('🔍 Fetching recent tweets...')
@@ -118,15 +125,15 @@ export async function GET(request: NextRequest) {
           if (tlResp.ok) {
             const tl = await tlResp.json()
             const items: CachedTweet[] = (tl.data || [])
-              .map((tweet: any): CachedTweet => ({
+              .map((tweet: TimelineTweet): CachedTweet => ({
                 id: tweet.id,
                 text: tweet.text,
                 created_at: tweet.created_at,
-                public_metrics: tweet.public_metrics || {
-                  retweet_count: 0,
-                  like_count: 0,
-                  reply_count: 0,
-                  impression_count: 0,
+                public_metrics: {
+                  retweet_count: tweet.public_metrics?.retweet_count ?? 0,
+                  like_count: tweet.public_metrics?.like_count ?? 0,
+                  reply_count: tweet.public_metrics?.reply_count ?? 0,
+                  impression_count: tweet.public_metrics?.impression_count ?? 0,
                 },
               }))
               .slice(0, maxResults)
@@ -137,18 +144,18 @@ export async function GET(request: NextRequest) {
             const err = await tlResp.json().catch(() => ({}))
             const errorInfo = { status: tlResp.status, error: err }
             console.log('⚠️ Bearer tweets fetch failed, trying OAuth 1.0a:', errorInfo)
-            ;(globalThis as any).__last_tweets_error = errorInfo
+            lastTweetsError = errorInfo
           }
         } else {
           const err = await meResp.json().catch(() => ({}))
           const errorInfo = { status: meResp.status, error: err }
           console.log('⚠️ Bearer me fetch failed, trying OAuth 1.0a:', errorInfo)
-          ;(globalThis as any).__last_tweets_error = errorInfo
+          lastTweetsError = errorInfo
         }
-      } catch (e: any) {
-        const errorInfo = { message: e?.message || 'Unknown bearer error' }
+      } catch (e: unknown) {
+        const errorInfo = { message: e instanceof Error ? e.message : 'Unknown bearer error' }
         console.log('⚠️ Bearer tweets error, trying OAuth 1.0a:', errorInfo)
-        ;(globalThis as any).__last_tweets_error = errorInfo
+        lastTweetsError = errorInfo
       }
     }
 
@@ -192,10 +199,16 @@ export async function GET(request: NextRequest) {
         .slice(0, maxResults)
       setTweetsCacheEntry(cacheKey, filtered, Date.now())
       return NextResponse.json({ success: true, mock: false, tweets: filtered })
-    } catch (apiError: any) {
-      const errorInfo = (() => { try { return JSON.parse(JSON.stringify(apiError)) } catch { return { message: apiError?.message || 'Unknown error' } } })()
+    } catch (apiError: unknown) {
+      const errorInfo = (() => {
+        try {
+          return JSON.parse(JSON.stringify(apiError))
+        } catch {
+          return { message: apiError instanceof Error ? apiError.message : 'Unknown error' }
+        }
+      })()
       console.log('⚠️ Twitter API error:', errorInfo)
-      ;(globalThis as any).__last_tweets_error = errorInfo
+      lastTweetsError = errorInfo
     }
 
     // Try cached tweets (rate limit/backoff)
@@ -207,13 +220,14 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('❌ Twitter API unavailable; returning empty tweets')
+    const debugEnabled = process.env.DEBUG_TWEETS_ERRORS === 'true'
     return NextResponse.json({
       success: false,
       mock: false,
       tweets: [],
       error: 'Twitter API call failed',
       note: 'Could not load tweets from X. Try again or check credentials.',
-      details: (globalThis as any).__last_tweets_error,
+      ...(debugEnabled ? { details: lastTweetsError } : {}),
     }, { status: 502 })
 
   } catch (error) {

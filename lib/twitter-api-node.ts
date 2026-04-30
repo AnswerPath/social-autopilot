@@ -48,6 +48,10 @@ export interface TwitterUser {
 async function getTwitterClient(userId: string = 'demo-user') {
   const result = await getUnifiedCredentials(userId)
   if (!result.success || !result.credentials) {
+    if (result.errorCode === 'oauth_pending') {
+      throw new Error('X authorization is pending. Save your consumer keys and complete Connect with X in Settings → Integrations.')
+    }
+
     if (
       result.errorCode === 'decryption_failed' ||
       result.errorCode === 'invalid_encrypted' ||

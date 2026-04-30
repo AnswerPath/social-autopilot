@@ -233,8 +233,8 @@ export async function storeXApiConsumerCredentials(
   params: { apiKey: string; apiKeySecret: string; bearerToken?: string }
 ): Promise<{ success: boolean; error?: string; id?: string }> {
   try {
-    const encryptedApiKey = await encrypt(params.apiKey);
-    const encryptedApiKeySecret = await encrypt(params.apiKeySecret);
+    const encryptedApiKey = await encrypt(params.apiKey.trim());
+    const encryptedApiKeySecret = await encrypt(params.apiKeySecret.trim());
 
     const row: Record<string, unknown> = {
       user_id: userId,
@@ -478,12 +478,18 @@ export async function getXApiCredentials(
       };
     }
 
-    if (!data.encrypted_api_key || !data.encrypted_api_secret || 
-        !data.encrypted_access_token || !data.encrypted_access_secret) {
+    if (!data.encrypted_api_key || !data.encrypted_api_secret) {
       return {
         success: false,
         error: 'Invalid encrypted credentials found. Please re-add your X API credentials.',
         errorCode: 'invalid_encrypted',
+      };
+    }
+    if (!data.encrypted_access_token || !data.encrypted_access_secret) {
+      return {
+        success: false,
+        error: 'X authorization is not complete. Connect with X to finish OAuth setup.',
+        errorCode: 'oauth_pending',
       };
     }
 

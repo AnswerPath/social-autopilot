@@ -340,11 +340,12 @@ export async function getTwitterCredentials(
         errorCode: 'decryption_failed',
       }
     }
-  } catch (error: any) {
-    console.error('❌ Error retrieving credentials:', error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error('❌ Error retrieving credentials:', errorMessage)
     return { 
       success: false, 
-      error: `Database error: ${error.message}`,
+      error: `Database error: ${errorMessage}`,
       errorCode: 'database_error',
     }
   }
