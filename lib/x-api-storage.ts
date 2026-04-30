@@ -243,6 +243,7 @@ export async function storeXApiConsumerCredentials(
       encrypted_api_secret: encryptedApiKeySecret,
       encrypted_access_token: null as string | null,
       encrypted_access_secret: null as string | null,
+      x_username: null as string | null,
       encryption_version: 1,
       is_valid: false,
     };
@@ -340,6 +341,7 @@ export async function clearXApiAccessTokens(userId: string): Promise<{ success: 
       .update({
         encrypted_access_token: null,
         encrypted_access_secret: null,
+        x_username: null,
         is_valid: false,
         last_validated: null,
       })
