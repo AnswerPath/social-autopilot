@@ -38,24 +38,30 @@ describe('XApiSetupWizard', () => {
 
   it('walks users through X developer setup and callback URL without deployment variable copy', async () => {
     const user = userEvent.setup()
-    ;(global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          appOrigin: 'https://app.example.com',
-          callbackUrl: 'https://app.example.com/api/auth/twitter/callback',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          hasCredentials: false,
-          hasConsumerKeys: false,
-          hasAccessTokens: false,
-          needsOAuth: false,
-        }),
-      })
+    ;(global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/auth/twitter/callback-url') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            appOrigin: 'https://app.example.com',
+            callbackUrl: 'https://app.example.com/api/auth/twitter/callback',
+          }),
+        })
+      }
+      if (url === '/api/settings/x-api-credentials' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            hasCredentials: false,
+            hasConsumerKeys: false,
+            hasAccessTokens: false,
+            needsOAuth: false,
+          }),
+        })
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url} ${init?.method ?? ''}`))
+    })
 
     render(<XApiSetupWizard mode="settings" userId="user-1" />)
 
@@ -73,42 +79,54 @@ describe('XApiSetupWizard', () => {
 
   it('saves consumer keys from Advanced and enables Connect with X after the saved status refreshes', async () => {
     const user = userEvent.setup()
-    ;(global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          appOrigin: 'http://localhost',
-          callbackUrl: 'http://localhost/api/auth/twitter/callback',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          hasCredentials: false,
-          hasConsumerKeys: false,
-          hasAccessTokens: false,
-          needsOAuth: false,
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: 'Consumer keys saved. Use Connect with X to authorize.',
-          needsOAuth: true,
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          hasCredentials: true,
-          hasConsumerKeys: true,
-          hasAccessTokens: false,
-          needsOAuth: true,
-        }),
-      })
+    let credentialsGetCount = 0
+    ;(global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/auth/twitter/callback-url') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            appOrigin: 'http://localhost',
+            callbackUrl: 'http://localhost/api/auth/twitter/callback',
+          }),
+        })
+      }
+      if (url === '/api/settings/x-api-credentials' && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            message: 'Consumer keys saved. Use Connect with X to authorize.',
+            needsOAuth: true,
+          }),
+        })
+      }
+      if (url === '/api/settings/x-api-credentials' && (!init?.method || init.method === 'GET')) {
+        credentialsGetCount += 1
+        if (credentialsGetCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              hasCredentials: false,
+              hasConsumerKeys: false,
+              hasAccessTokens: false,
+              needsOAuth: false,
+            }),
+          })
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            hasCredentials: true,
+            hasConsumerKeys: true,
+            hasAccessTokens: false,
+            needsOAuth: true,
+          }),
+        })
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url} ${init?.method ?? ''}`))
+    })
 
     render(<XApiSetupWizard mode="settings" userId="user-1" />)
 
@@ -136,33 +154,44 @@ describe('XApiSetupWizard', () => {
 
   it('tests the saved X connection when access tokens are present', async () => {
     const user = userEvent.setup()
-    ;(global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          appOrigin: 'http://localhost',
-          callbackUrl: 'http://localhost/api/auth/twitter/callback',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          hasCredentials: true,
-          hasConsumerKeys: true,
-          hasAccessTokens: true,
-          needsOAuth: false,
-          connectedXUsername: 'socialpilot',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: 'X connection successful',
-          user: { username: 'socialpilot' },
-        }),
-      })
+    ;(global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/auth/twitter/callback-url') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            appOrigin: 'http://localhost',
+            callbackUrl: 'http://localhost/api/auth/twitter/callback',
+          }),
+        })
+      }
+      if (url === '/api/settings/x-api-credentials' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            hasCredentials: true,
+            hasConsumerKeys: true,
+            hasAccessTokens: true,
+            needsOAuth: false,
+            connectedXUsername: 'socialpilot',
+          }),
+        })
+      }
+      if (
+        url === '/api/settings/test-x-api-connection-saved?userId=user-1' &&
+        init?.method === 'POST'
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            message: 'X connection successful',
+            user: { username: 'socialpilot' },
+          }),
+        })
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url} ${init?.method ?? ''}`))
+    })
 
     render(<XApiSetupWizard mode="settings" userId="user-1" />)
 
@@ -184,42 +213,56 @@ describe('XApiSetupWizard', () => {
 
   it('opens disconnect confirmation instead of window.confirm', async () => {
     const user = userEvent.setup()
-    ;(global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          appOrigin: 'http://localhost',
-          callbackUrl: 'http://localhost/api/auth/twitter/callback',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          hasCredentials: true,
-          hasConsumerKeys: true,
-          hasAccessTokens: true,
-          needsOAuth: false,
-          connectedXUsername: 'socialpilot',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: 'Disconnected',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          success: true,
-          hasCredentials: true,
-          hasConsumerKeys: true,
-          hasAccessTokens: false,
-          needsOAuth: true,
-        }),
-      })
+    const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => true)
+
+    let credentialsGetCount = 0
+    ;(global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/auth/twitter/callback-url') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            appOrigin: 'http://localhost',
+            callbackUrl: 'http://localhost/api/auth/twitter/callback',
+          }),
+        })
+      }
+      if (url === '/api/settings/x-api-credentials?scope=access' && init?.method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            message: 'Disconnected',
+          }),
+        })
+      }
+      if (url === '/api/settings/x-api-credentials' && (!init?.method || init.method === 'GET')) {
+        credentialsGetCount += 1
+        if (credentialsGetCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              hasCredentials: true,
+              hasConsumerKeys: true,
+              hasAccessTokens: true,
+              needsOAuth: false,
+              connectedXUsername: 'socialpilot',
+            }),
+          })
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            hasCredentials: true,
+            hasConsumerKeys: true,
+            hasAccessTokens: false,
+            needsOAuth: true,
+          }),
+        })
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url} ${init?.method ?? ''}`))
+    })
 
     render(<XApiSetupWizard mode="settings" userId="user-1" />)
 
@@ -235,5 +278,8 @@ describe('XApiSetupWizard', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/settings/x-api-credentials?scope=access', { method: 'DELETE' })
     })
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 })

@@ -5,6 +5,7 @@ import { completeXApiOAuth, getXApiConsumerKeysForOAuth } from '@/lib/x-api-stor
 import {
   appendXOAuthError,
   resolveXOAuthAppOrigin,
+  sanitizeXOAuthReturnTo,
   X_OAUTH_COOKIE_NAMES,
   xOAuthCookieOptions,
 } from '@/lib/x-oauth-config'
@@ -34,8 +35,9 @@ export async function GET(request: NextRequest) {
     const oauth_token = searchParams.get('oauth_token')
     const oauth_verifier = searchParams.get('oauth_verifier')
     const denied = searchParams.get('denied')
-    const returnTo =
-      request.cookies.get(X_OAUTH_COOKIE_NAMES.returnTo)?.value || '/account-settings'
+    const returnTo = sanitizeXOAuthReturnTo(
+      request.cookies.get(X_OAUTH_COOKIE_NAMES.returnTo)?.value ?? null
+    )
 
     if (denied) {
       const r = absoluteRedirect(request, appendXOAuthError(returnTo, 'denied'))
@@ -98,8 +100,9 @@ export async function GET(request: NextRequest) {
     return response
   } catch (error: unknown) {
     console.error('Twitter OAuth callback error:', error)
-    const returnTo =
-      request.cookies.get(X_OAUTH_COOKIE_NAMES.returnTo)?.value || '/account-settings'
+    const returnTo = sanitizeXOAuthReturnTo(
+      request.cookies.get(X_OAUTH_COOKIE_NAMES.returnTo)?.value ?? null
+    )
     const r = absoluteRedirect(request, appendXOAuthError(returnTo, 'callback_failed'))
     clearOAuthCookies(r)
     return r
