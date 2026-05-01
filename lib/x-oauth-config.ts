@@ -58,6 +58,11 @@ export function sanitizeXOAuthReturnTo(raw: string | null): string {
   return isAllowed ? trimmed : fallback;
 }
 
+export function appendXOAuthError(returnTo: string, error: string): string {
+  const separator = returnTo.includes('?') ? '&' : '?';
+  return `${returnTo}${separator}x_error=${encodeURIComponent(error)}`;
+}
+
 export const X_OAUTH_COOKIE_NAMES = {
   tokenSecret: 'x_oauth_token_secret',
   token: 'x_oauth_token',
