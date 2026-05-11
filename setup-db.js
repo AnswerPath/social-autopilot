@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 
-const supabaseUrl = 'https://hdjjydmlsunzicnyvvyj.supabase.co'
-const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhkamp5ZG1sc3Vuemljbnl2dnlqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjY3NDQzNCwiZXhwIjoyMDcyMjUwNDM0fQ.yweWDN3dJSGjVwGZTx7TwLwSVvCP-bE2zXw4paOSzwo'
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
+}
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
