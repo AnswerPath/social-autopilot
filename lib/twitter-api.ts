@@ -1,6 +1,6 @@
 "use server"
 
-import { getTwitterCredentials, cleanupInvalidCredentials } from './database-storage'
+import { getTwitterCredentials, cleanupInvalidCredentials } from './database-storage' // gitleaks:allow - import name is not a Twitter API key.
 
 export interface TwitterPost {
   id: string

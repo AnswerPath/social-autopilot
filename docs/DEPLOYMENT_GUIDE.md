@@ -757,7 +757,7 @@ tail -f /var/log/mail.log
 
 # Verify SendGrid API key
 curl -X POST https://api.sendgrid.com/v3/mail/send \
-  -H "Authorization: Bearer YOUR_API_KEY"
+  -H "Authorization: Bearer <sendgrid-api-key>"
 ```
 
 ## Rollback Procedures
